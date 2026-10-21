@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-The app includes demo content, so it can be explored locally without connecting a live church account.
+The app includes demo content, so it can be explored locally without connecting a live church account. From the demo account menu, members can sign in using the same email and password they use for SheepCount.
 
 ## Deploying to Cloudflare
 
