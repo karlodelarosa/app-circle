@@ -34,6 +34,7 @@ const escapeHtml = (value: unknown) =>
     .replaceAll(">", "&gt;");
 
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
+const gatheringImageRoute = "/__share/gathering-image";
 
 function routeParts(pathname: string) {
   const match = pathname.match(gatheringRoute);
@@ -53,12 +54,17 @@ function injectMetadata(
   request: Request,
   space: PublicSpaceResponse,
   gathering: PublicGathering,
+  parts: { organization: string; gathering: string },
 ) {
   const canonical = new URL(request.url);
   canonical.search = "";
   canonical.hash = "";
-  const fallbackImage = new URL("/assets/devotional-table.webp", canonical);
-  const image = new URL(gathering.coverUrl || fallbackImage.href, canonical);
+  const socialUrl = new URL(canonical);
+  if (new URL(request.url).searchParams.has("share"))
+    socialUrl.searchParams.set("share", "1");
+  const image = new URL(gatheringImageRoute, canonical);
+  image.searchParams.set("organization", parts.organization);
+  image.searchParams.set("gathering", parts.gathering);
   const title = `${gathering.title || "Gathering"} | ${space.organization?.name || "Circles"}`;
   const description = String(
     gathering.summary ||
@@ -73,9 +79,12 @@ function injectMetadata(
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:image" content="${escapeHtml(image.href)}" />
+    <meta property="og:image:secure_url" content="${escapeHtml(image.href)}" />
+    <meta property="og:image:type" content="image/webp" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:url" content="${escapeHtml(canonical.href)}" />
+    <meta property="og:image:alt" content="${escapeHtml(`${gathering.title || "Gathering"} invitation cover`)}" />
+    <meta property="og:url" content="${escapeHtml(socialUrl.href)}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
@@ -87,10 +96,11 @@ function injectMetadata(
     .replace("</head>", `${metadata}\n  </head>`);
 }
 
-async function gatheringHtml(request: Request, env: WorkerEnv) {
-  const parts = routeParts(new URL(request.url).pathname);
-  if (!parts || !env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
-
+async function loadPublicGathering(
+  parts: { organization: string; gathering: string },
+  env: WorkerEnv,
+) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
   const endpoint = new URL("/rest/v1/rpc/get_circle_public_space", env.SUPABASE_URL);
   const response = await fetch(endpoint, {
     method: "POST",
@@ -102,12 +112,19 @@ async function gatheringHtml(request: Request, env: WorkerEnv) {
     body: JSON.stringify({ p_org_slug: parts.organization }),
   });
   if (!response.ok) return null;
-
   const space = (await response.json()) as PublicSpaceResponse | null;
   const gathering = space?.gatherings?.find(
     (item) => item.slug === parts.gathering,
   );
-  if (!space || !gathering) return null;
+  return space && gathering ? { space, gathering } : null;
+}
+
+async function gatheringHtml(request: Request, env: WorkerEnv) {
+  const parts = routeParts(new URL(request.url).pathname);
+  if (!parts) return null;
+  const result = await loadPublicGathering(parts, env);
+  if (!result) return null;
+  const { space, gathering } = result;
 
   const indexRequest = new Request(new URL("/index.html", request.url), {
     method: "GET",
@@ -115,7 +132,13 @@ async function gatheringHtml(request: Request, env: WorkerEnv) {
   });
   const shell = await env.ASSETS.fetch(indexRequest);
   if (!shell.ok) return null;
-  const html = injectMetadata(await shell.text(), request, space, gathering);
+  const html = injectMetadata(
+    await shell.text(),
+    request,
+    space,
+    gathering,
+    parts,
+  );
   const headers = new Headers(shell.headers);
   headers.set("content-type", "text/html; charset=UTF-8");
   headers.set("cache-control", "public, max-age=0, s-maxage=300");
@@ -124,12 +147,41 @@ async function gatheringHtml(request: Request, env: WorkerEnv) {
   return new Response(html, { status: 200, headers });
 }
 
+async function gatheringImage(request: Request, env: WorkerEnv) {
+  const url = new URL(request.url);
+  const organization = url.searchParams.get("organization")?.trim();
+  const gathering = url.searchParams.get("gathering")?.trim();
+  if (!organization || !gathering) return null;
+  const result = await loadPublicGathering({ organization, gathering }, env);
+  if (!result) return null;
+
+  const source = result.gathering.coverUrl
+    ? await fetch(result.gathering.coverUrl)
+    : await env.ASSETS.fetch(
+        new Request(new URL("/assets/devotional-table.webp", request.url)),
+      );
+  if (!source.ok || !source.body) return null;
+  const headers = new Headers(source.headers);
+  headers.set("content-type", source.headers.get("content-type") || "image/webp");
+  headers.set("cache-control", "public, max-age=86400, s-maxage=86400");
+  headers.set("access-control-allow-origin", "*");
+  headers.delete("content-length");
+  headers.delete("x-robots-tag");
+  headers.delete("set-cookie");
+  return new Response(source.body, { status: 200, headers });
+}
+
 export async function handleRequest(
   request: Request,
   env: WorkerEnv,
   context?: WorkerContext,
 ) {
-  if (request.method !== "GET" || !routeParts(new URL(request.url).pathname))
+  const requestUrl = new URL(request.url);
+  const isImage = requestUrl.pathname === gatheringImageRoute;
+  if (
+    request.method !== "GET" ||
+    (!isImage && !routeParts(requestUrl.pathname))
+  )
     return env.ASSETS.fetch(request);
 
   const edgeCache = (
@@ -141,7 +193,9 @@ export async function handleRequest(
   if (cached) return cached;
 
   try {
-    const response = await gatheringHtml(request, env);
+    const response = isImage
+      ? await gatheringImage(request, env)
+      : await gatheringHtml(request, env);
     if (response) {
       if (edgeCache && context)
         context.waitUntil(edgeCache.put(request, response.clone()));

@@ -15,5 +15,5 @@ export function canonicalGatheringUrl(orgSlug: string, gatheringSlug: string) {
 }
 
 export function gatheringShareUrl(orgSlug: string, gatheringSlug: string) {
-  return canonicalGatheringUrl(orgSlug, gatheringSlug);
+  return `${canonicalGatheringUrl(orgSlug, gatheringSlug)}?share=1`;
 }
