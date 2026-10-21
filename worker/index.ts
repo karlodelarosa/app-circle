@@ -35,6 +35,7 @@ const escapeHtml = (value: unknown) =>
 
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
+const socialPreviewVersion = "2";
 
 function routeParts(pathname: string) {
   const match = pathname.match(gatheringRoute);
@@ -61,10 +62,11 @@ function injectMetadata(
   canonical.hash = "";
   const socialUrl = new URL(canonical);
   if (new URL(request.url).searchParams.has("share"))
-    socialUrl.searchParams.set("share", "1");
+    socialUrl.searchParams.set("share", socialPreviewVersion);
   const image = new URL(gatheringImageRoute, canonical);
   image.searchParams.set("organization", parts.organization);
   image.searchParams.set("gathering", parts.gathering);
+  image.searchParams.set("v", socialPreviewVersion);
   const title = `${gathering.title || "Gathering"} | ${space.organization?.name || "Circles"}`;
   const description = String(
     gathering.summary ||

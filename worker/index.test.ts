@@ -42,7 +42,7 @@ describe("Circles Cloudflare Worker", () => {
     );
 
     const response = await handleRequest(
-      new Request("https://circles.example/elgc/gatherings/lunch?share=1"),
+      new Request("https://circles.example/elgc/gatherings/lunch?share=2"),
       env,
     );
     const html = await response.text();
@@ -51,11 +51,11 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.headers.get("cache-control")).toContain("s-maxage=300");
     expect(html).toContain("Lunch &lt;Together&gt; | ELGC &amp; Friends");
     expect(html).toContain(
-      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch"',
+      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch&amp;v=2"',
     );
     expect(html).toContain('property="og:image:type" content="image/jpeg"');
     expect(html).toContain(
-      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=1"',
+      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=2"',
     );
     expect(html).not.toContain('content="Default"');
   });
