@@ -44,37 +44,70 @@ export function CirclePage() {
             <p>Choose a Circle to see its people, place, and gatherings.</p>
           </div>
         </div>
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
-          {data.groups.map((group) => (
-            <Link
-              key={group.id}
-              to={`/circles/${group.id}`}
-              className="group paper-panel flex min-h-56 flex-col p-6 transition-colors hover:border-sage focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive sm:p-7"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <span className="quick-icon">
-                  <UsersRound />
-                </span>
-                <span className="role-label capitalize">{group.role}</span>
-              </div>
-              <h2 className="mt-6 font-display text-3xl leading-tight">
-                {group.name}
-              </h2>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">
-                {group.description || "A place to gather and grow together."}
-              </p>
-              <span className="mt-auto flex items-center gap-2 pt-6 text-sm text-olive">
-                <MapPin size={15} />
-                <span className="truncate">
-                  {group.location || "Location shared with members"}
-                </span>
-                <ChevronRight
-                  size={17}
-                  className="ml-auto transition-transform group-hover:translate-x-0.5"
-                />
-              </span>
-            </Link>
-          ))}
+        <div className="mt-8 grid gap-5 md:grid-cols-2">
+          {data.groups.map((group, index) => {
+            const monogram = group.name
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((word) => word.match(/[\p{L}\p{N}]/u)?.[0] || "")
+              .filter(Boolean)
+              .slice(0, 2)
+              .join("")
+              .toUpperCase();
+            return (
+              <Link
+                key={group.id}
+                to={`/circles/${group.id}`}
+                className="group grid min-h-72 overflow-hidden rounded-[1.75rem] border border-line bg-paper shadow-[0_1px_0_rgba(41,43,36,0.03)] transition-[border-color,box-shadow] hover:border-olive/40 hover:shadow-[0_18px_50px_rgba(41,43,36,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive sm:grid-cols-[10.5rem_1fr]"
+              >
+                <div
+                  className={`relative flex min-h-40 flex-col justify-between overflow-hidden p-5 text-paper sm:min-h-full ${index % 2 === 0 ? "bg-olive" : "bg-[#3F4637]"}`}
+                >
+                  <div className="relative z-10 flex items-center justify-between gap-3 sm:items-start">
+                    <span className="grid h-9 w-9 place-items-center rounded-full border border-paper/25 bg-paper/10">
+                      <UsersRound size={17} />
+                    </span>
+                    <span className="rounded-full border border-paper/20 bg-paper/10 px-3 py-1 text-[10px] font-medium capitalize text-paper/85 backdrop-blur-sm">
+                      {group.role}
+                    </span>
+                  </div>
+                  <span
+                    aria-hidden="true"
+                    className="absolute -bottom-5 -left-1 font-display text-[8rem] leading-none text-paper/[0.10] sm:-bottom-3 sm:text-[7.5rem]"
+                  >
+                    {monogram}
+                  </span>
+                  <p className="relative z-10 hidden max-w-24 text-xs leading-5 text-paper/65 sm:block">
+                    A Circle of {data.organization.name}
+                  </p>
+                </div>
+                <div className="flex min-w-0 flex-col p-6 sm:p-7">
+                  <h2 className="font-display text-[2rem] leading-[1.05] sm:text-4xl">
+                    {group.name}
+                  </h2>
+                  <p className="mt-4 line-clamp-3 text-sm leading-6 text-muted">
+                    {group.description ||
+                      "A place to gather, belong, and grow together."}
+                  </p>
+                  <div className="mt-auto border-t border-line pt-5">
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <MapPin size={15} className="shrink-0 text-olive" />
+                      <span className="truncate">
+                        {group.location || "Location shared with members"}
+                      </span>
+                    </div>
+                    <span className="mt-4 flex items-center text-sm font-medium text-olive">
+                      Open Circle
+                      <ChevronRight
+                        size={17}
+                        className="ml-auto transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
+                      />
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
