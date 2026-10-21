@@ -1,0 +1,7 @@
+project_id = "qrmpogczieanpahxxxkc"
+
+[db]
+major_version = 17
+
+[functions.circle-gathering-share]
+verify_jwt = false

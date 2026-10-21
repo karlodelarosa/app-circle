@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { color-scheme: light; background: #F3EFE5; }
+  body { margin: 0; min-width: 320px; min-height: 100vh; background: #F3EFE5; font-family: 'Instrument Sans', ui-sans-serif, system-ui; color: #292B24; text-rendering: optimizeLegibility; }
+  button, input, textarea, select { font: inherit; }
+  button { -webkit-tap-highlight-color: transparent; }
+  ::selection { color: #FCFAF5; background: #596047; }
+  :focus-visible { outline: 3px solid rgba(89, 96, 71, .34); outline-offset: 3px; }
+}
+
+@layer components {
+  .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted transition-colors; }
+  .nav-link:hover { @apply bg-parchment text-ink; }
+  .nav-link-active { @apply bg-olive text-paper shadow-sm; }
+  .nav-link-active:hover { @apply bg-olive text-paper; }
+  .mobile-nav-link { @apply flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium; }
+
+  .icon-button { @apply grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-parchment hover:text-ink; }
+  .primary-button { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-olive px-5 py-2.5 text-sm font-medium text-paper transition-[transform,background-color] hover:bg-[#484F39] active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60; }
+  .secondary-button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-line bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-sage hover:bg-parchment; }
+  .text-link { @apply inline-flex items-center gap-1 text-xs font-medium text-olive hover:underline; }
+
+  .page-heading { @apply flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-end; }
+  .page-heading h1 { @apply mt-1 font-display text-5xl leading-none sm:text-6xl; }
+  .page-heading > div > p:last-child { @apply mt-3 max-w-xl text-sm leading-6 text-muted; }
+  .page-kicker { @apply text-sm text-olive; }
+  .subheading { @apply font-display text-3xl; }
+  .section-heading { @apply mb-5 flex items-end justify-between gap-5; }
+  .section-heading h2 { @apply font-display text-3xl; }
+  .section-heading p { @apply mt-1 text-sm text-muted; }
+
+  .paper-panel { @apply rounded-3xl border border-line bg-paper; }
+  .quick-action { @apply flex w-full items-center gap-3 rounded-2xl border border-line bg-paper p-4 text-left transition-colors hover:border-sage; }
+  .quick-action strong { @apply block text-sm font-medium; }
+  .quick-action small { @apply mt-0.5 block text-xs text-muted; }
+  .quick-icon { @apply grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#E4E5D8] text-olive; }
+  .quick-icon svg { @apply h-[18px] w-[18px]; }
+
+  .rsvp-button { @apply min-h-10 rounded-full border border-line bg-paper px-4 py-2 text-xs font-medium text-muted transition-colors hover:border-sage hover:text-ink; }
+  .rsvp-button-active { @apply border-olive bg-olive text-paper hover:text-paper; }
+  .prayer-preview { @apply min-h-52 border-t-2 border-sage bg-paper px-5 py-6; }
+  .prayer-preview > span { @apply text-xs text-olive; }
+  .prayer-preview h3 { @apply mt-3 font-display text-2xl leading-tight; }
+  .prayer-preview p { @apply mt-2 line-clamp-3 text-sm leading-6 text-muted; }
+  .prayer-preview > div { @apply mt-5 text-xs text-muted; }
+
+  .field-label { @apply block text-xs font-medium text-ink; }
+  .field { @apply mt-2 block min-h-12 w-full rounded-xl border border-line bg-[#FFFDF8] px-4 py-3 text-sm text-ink placeholder:text-[#9A978F] focus:border-olive focus:outline-none focus:ring-2 focus:ring-olive/10; }
+  .choice-chip { @apply rounded-full border border-line px-3 py-2 text-xs text-muted transition-colors; }
+  .choice-chip-active { @apply border-olive bg-olive text-paper; }
+  .form-error { @apply rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800; }
+
+  .gathering-card { @apply flex gap-4 rounded-3xl border border-line bg-paper p-5 sm:gap-6 sm:p-7; }
+  .gathering-card h3 { @apply font-display text-2xl leading-tight sm:text-3xl; }
+  .gathering-card .date-block { @apply flex h-[72px] w-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#EEE8DA] text-center sm:h-20 sm:w-16; }
+  .date-block span { @apply text-[10px] uppercase tracking-wider text-muted; }
+  .date-block strong { @apply font-display text-3xl font-medium leading-none; }
+  .gathering-card > div:last-child > div:nth-child(2) span { @apply inline-flex items-center gap-1.5; }
+  .status-badge { @apply rounded-full bg-[#EAD5CF] px-2.5 py-1 text-[10px] text-[#7B4138]; }
+  .action-menu { @apply absolute right-0 top-10 z-20 min-w-44 overflow-hidden rounded-xl border border-line bg-paper py-1 shadow-quiet; }
+  .action-menu button { @apply block w-full px-4 py-2.5 text-left text-xs hover:bg-parchment; }
+  .study-row { @apply flex items-center justify-between gap-4 px-1 py-5 transition-colors hover:bg-paper sm:px-4; }
+  .study-row h3 { @apply mt-1 font-display text-2xl; }
+  .study-row p { @apply mt-1 text-sm text-olive; }
+
+  .tab-button { @apply relative px-4 pb-3 text-sm text-muted; }
+  .tab-button-active { @apply font-medium text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-olive; }
+  .prayer-card { @apply rounded-3xl border border-line bg-paper p-5 sm:p-6; }
+  .prayer-card h2 { @apply mt-4 font-display text-3xl leading-tight; }
+  .prayer-card > p { @apply mt-3 text-sm leading-6 text-muted; }
+  .category-label { @apply text-xs text-olive; }
+  .prayed-button { @apply inline-flex min-h-10 items-center gap-2 rounded-full border border-line px-4 py-2 text-xs font-medium text-muted transition-colors hover:border-olive; }
+  .prayed-button-active { @apply border-olive bg-[#E4E5D8] text-olive; }
+  .praise-note { @apply mt-5 flex gap-3 border-l-2 border-sage bg-[#F1EEE4] p-4 text-olive; }
+  .praise-note strong { @apply text-xs; }
+  .praise-note p { @apply mt-1 text-sm leading-5 text-muted; }
+
+  .circle-intro .botanical-mark { @apply pointer-events-none absolute -bottom-20 -right-3 font-display text-[16rem] leading-none text-paper/[.07]; transform: rotate(-15deg); }
+  .invite-code { @apply flex min-h-14 w-full items-center justify-between rounded-xl border border-dashed border-sage bg-parchment px-5 font-mono text-lg tracking-[0.22em] text-olive; }
+  .member-row { @apply flex min-h-[76px] items-center gap-3 px-5 py-3 sm:px-7; }
+  .role-label { @apply rounded-full bg-parchment px-3 py-1 text-[10px] capitalize text-muted; }
+  .role-label-leader { @apply bg-[#E4E5D8] text-olive; }
+
+  .empty-state { @apply flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center text-muted; }
+  .empty-state > svg { @apply mb-4 h-8 w-8 text-sage; }
+  .empty-state h2 { @apply font-display text-2xl text-ink; }
+  .empty-state p { @apply mt-2 max-w-sm text-sm leading-6; }
+  .empty-state button, .empty-state a { @apply mt-5; }
+  .public-section { @apply mx-auto max-w-7xl px-5 py-16 sm:py-24 lg:px-10; }
+  .public-hero { @apply relative overflow-hidden border-b border-line; }
+  .public-hero > img { @apply absolute inset-0 h-full w-full object-cover object-right; }
+  .public-hero-wash { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(243,239,229,.99) 0%, rgba(243,239,229,.92) 42%, rgba(243,239,229,.1) 76%); }
+  .public-hero h1 { @apply mt-4 max-w-2xl font-display text-6xl leading-[.96] sm:text-8xl; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
+@media (max-width: 639px) {
+  .hero-cover img { object-position: 66% center; }
+  .public-hero > img { object-position: 65% center; opacity: .48; }
+  .public-hero-wash { background: linear-gradient(0deg, rgba(243,239,229,.98), rgba(243,239,229,.68)); }
+}

@@ -1,0 +1,639 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  AppData,
+  Group,
+  Meeting,
+  MeetingInput,
+  Member,
+  PrayerInput,
+  PrayerRequest,
+  Role,
+  RsvpStatus,
+  PersonSearchResult,
+  GuestConnection,
+  ContactPreference,
+} from "../types";
+import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
+
+const one = (value: any) => (Array.isArray(value) ? value[0] : value);
+const fullName = (person: any) =>
+  [person?.first_name, person?.last_name].filter(Boolean).join(" ") ||
+  "Circle member";
+
+export async function loadAppData(
+  client: SupabaseClient,
+  userId: string,
+  preferredGroupId?: string,
+): Promise<AppData> {
+  const { data: rawContext, error: contextError } = await client.rpc(
+    "get_my_circle_context",
+  );
+  if (contextError) throw contextError;
+  const context = rawContext as any;
+  if (!context?.organization)
+    throw new Error("No Circles organization is linked to this account.");
+
+  const groups: Group[] = (context.groups ?? []).map((row: any) => ({
+    id: row.id,
+    organizationId: context.organization.id,
+    name: row.name,
+    description: row.description ?? "",
+    regularSchedule: "",
+    location: row.location ?? "",
+    leaderId: row.leaderPersonId ?? undefined,
+    role: row.role as Role,
+  }));
+  const group =
+    groups.find((item) => item.id === preferredGroupId) ?? groups[0] ?? null;
+  const profile = context.profile ?? {};
+  const currentUser = {
+    id: userId,
+    personId: context.personId ?? undefined,
+    fullName:
+      [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
+      "Circle member",
+    email: "",
+    avatarUrl: profile.avatarUrl ?? undefined,
+    role: (context.isAdmin ? "admin" : (group?.role ?? "member")) as Role,
+  };
+
+  const base: AppData = {
+    organization: {
+      id: context.organization.id,
+      name: context.organization.name,
+      imageUrl: context.organization.image ?? undefined,
+      subscriptionStatus: context.organization.status ?? "inactive",
+      circlesEnabled: true,
+      slug: context.organization.slug ?? context.organization.id,
+    },
+    groups,
+    group,
+    members: [],
+    meetings: [],
+    prayers: [],
+    announcements: [],
+    testimonies: [],
+    currentUser,
+    connectionAttentionCount: 0,
+  };
+  const attentionResult = await client.rpc(
+    "get_circle_connection_attention_count",
+  );
+  if (!attentionResult.error)
+    base.connectionAttentionCount = Number(attentionResult.data ?? 0);
+  if (!group) return base;
+
+  const [membersResult, gatheringsResult, prayersResult] = await Promise.all([
+    client
+      .from("cell_group_members")
+      .select(
+        "id, person_id, role, people!cell_group_members_person_id_fkey(id, first_name, last_name, email)",
+      )
+      .eq("cell_group_id", group.id),
+    client
+      .from("circle_gatherings")
+      .select("*")
+      .eq("cell_group_id", group.id)
+      .order("starts_at"),
+    client
+      .from("circle_prayer_requests")
+      .select(
+        "*, people!circle_prayer_requests_person_id_fkey(first_name, last_name)",
+      )
+      .eq("cell_group_id", group.id)
+      .order("created_at", { ascending: false }),
+  ]);
+  for (const result of [membersResult, gatheringsResult, prayersResult])
+    if (result.error) throw result.error;
+
+  const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
+  const prayerIds = (prayersResult.data ?? []).map((row: any) => row.id);
+  const [rsvpsResult, clicksResult] = await Promise.all([
+    gatheringIds.length
+      ? client
+          .from("circle_gathering_rsvps")
+          .select("gathering_id, person_id, status")
+          .in("gathering_id", gatheringIds)
+      : Promise.resolve({ data: [], error: null }),
+    prayerIds.length
+      ? client
+          .from("circle_prayer_clicks")
+          .select("prayer_id, person_id")
+          .in("prayer_id", prayerIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (rsvpsResult.error) throw rsvpsResult.error;
+  if (clicksResult.error) throw clicksResult.error;
+
+  const members: Member[] = (membersResult.data ?? []).map((row: any) => {
+    const person = one(row.people);
+    return {
+      id: row.person_id,
+      personId: row.person_id,
+      membershipId: row.id,
+      role: row.role === "Leader" ? "leader" : "member",
+      fullName: fullName(person),
+      email: person?.email ?? "",
+      avatarUrl: undefined,
+    };
+  });
+  const rsvps = rsvpsResult.data ?? [];
+  const meetings: Meeting[] = (gatheringsResult.data ?? []).map((row: any) => ({
+    id: row.id,
+    groupId: row.cell_group_id,
+    title: row.title,
+    meetingDate: row.starts_at,
+    location: row.location ?? "",
+    studyTopic: row.study_topic ?? "",
+    notes: row.notes ?? "",
+    status: row.status === "cancelled" ? "cancelled" : "scheduled",
+    createdBy: row.created_by,
+    assignedLeaderId: row.leader_person_id ?? undefined,
+    checkinCode: row.checkin_code ?? undefined,
+    checkinClosesAt: row.checkin_closes_at ?? undefined,
+    rsvps: Object.fromEntries(
+      rsvps
+        .filter((r: any) => r.gathering_id === row.id)
+        .map((r: any) => [r.person_id, r.status]),
+    ),
+    organizationId: row.organization_id,
+    slug: row.public_slug ?? undefined,
+    summary: row.summary ?? "",
+    coverUrl: row.cover_url ?? undefined,
+    visibility: row.visibility ?? "private",
+    publishedAt: row.published_at ?? undefined,
+    guestRsvpEnabled: Boolean(row.guest_rsvp_enabled),
+  }));
+  const clicks = clicksResult.data ?? [];
+  const prayers: PrayerRequest[] = (prayersResult.data ?? []).map(
+    (row: any) => {
+      const prayerClicks = clicks.filter(
+        (click: any) => click.prayer_id === row.id,
+      );
+      return {
+        id: row.id,
+        groupId: row.cell_group_id,
+        userId: row.person_id,
+        authorName: fullName(one(row.people)),
+        title: row.title,
+        description: row.description ?? "",
+        category: row.category,
+        isAnswered: row.is_answered,
+        answeredNotes: row.answered_notes ?? undefined,
+        createdAt: row.created_at,
+        prayerCount: prayerClicks.length,
+        prayedByMe: Boolean(
+          context.personId &&
+          prayerClicks.some(
+            (click: any) => click.person_id === context.personId,
+          ),
+        ),
+      };
+    },
+  );
+  const [announcementsResult, testimoniesResult] = await Promise.all([
+    client
+      .from("circle_announcements")
+      .select("*")
+      .eq("organization_id", context.organization.id)
+      .or(`cell_group_id.is.null,cell_group_id.eq.${group.id}`)
+      .order("published_at", { ascending: false })
+      .limit(12),
+    client
+      .from("circle_testimonies")
+      .select("*")
+      .eq("organization_id", context.organization.id)
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .limit(6),
+  ]);
+  const announcements = (announcementsResult.data ?? []).map((row: any) => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    groupId: row.cell_group_id ?? undefined,
+    title: row.title,
+    body: row.body,
+    publishedAt: row.published_at,
+    expiresAt: row.expires_at ?? undefined,
+  }));
+  const testimonies = (testimoniesResult.data ?? []).map((row: any) => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    groupId: row.cell_group_id ?? undefined,
+    slug: row.public_slug,
+    title: row.title,
+    body: row.body,
+    authorName: row.author_display_name,
+    imageUrl: row.image_url ?? undefined,
+    publishedAt: row.published_at,
+  }));
+  return { ...base, members, meetings, prayers, announcements, testimonies };
+}
+
+export async function acceptAccess(client: SupabaseClient) {
+  const { error } = await client.rpc("accept_circle_access");
+  if (error && !error.message.toLowerCase().includes("no approved"))
+    throw error;
+}
+
+export async function saveRsvp(
+  client: SupabaseClient,
+  organizationId: string,
+  gatheringId: string,
+  personId: string,
+  status: RsvpStatus,
+) {
+  const { error } = await client
+    .from("circle_gathering_rsvps")
+    .upsert(
+      {
+        organization_id: organizationId,
+        gathering_id: gatheringId,
+        person_id: personId,
+        status,
+      },
+      { onConflict: "gathering_id,person_id" },
+    );
+  if (error) throw error;
+}
+
+export async function createPrayer(
+  client: SupabaseClient,
+  organizationId: string,
+  groupId: string,
+  personId: string,
+  input: PrayerInput,
+) {
+  const { error } = await client.from("circle_prayer_requests").insert({
+    organization_id: organizationId,
+    cell_group_id: groupId,
+    person_id: personId,
+    title: input.title,
+    description: input.description,
+    category: input.category,
+  });
+  if (error) throw error;
+}
+
+export async function setPrayerClick(
+  client: SupabaseClient,
+  organizationId: string,
+  prayerId: string,
+  personId: string,
+  prayed: boolean,
+) {
+  const query = prayed
+    ? client
+        .from("circle_prayer_clicks")
+        .upsert(
+          {
+            organization_id: organizationId,
+            prayer_id: prayerId,
+            person_id: personId,
+          },
+          { onConflict: "prayer_id,person_id" },
+        )
+    : client
+        .from("circle_prayer_clicks")
+        .delete()
+        .eq("prayer_id", prayerId)
+        .eq("person_id", personId);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function answerPrayer(
+  client: SupabaseClient,
+  prayerId: string,
+  answeredNotes: string,
+) {
+  const { error } = await client
+    .from("circle_prayer_requests")
+    .update({ is_answered: true, answered_notes: answeredNotes })
+    .eq("id", prayerId);
+  if (error) throw error;
+}
+
+export async function saveMeeting(
+  client: SupabaseClient,
+  organizationId: string,
+  groupId: string,
+  userId: string,
+  leaderPersonId: string | undefined,
+  input: MeetingInput,
+  id?: string,
+) {
+  const meetingId = id ?? crypto.randomUUID();
+  let uploadedPath: string | null = null;
+  let nextCoverUrl = input.removeCover ? null : input.coverUrl;
+  if (input.coverFile) {
+    const cover = await optimizeGatheringCover(input.coverFile);
+    uploadedPath = `${organizationId}/gatherings/${meetingId}/cover-${crypto.randomUUID()}.webp`;
+    const upload = await client.storage
+      .from("circle-public-media")
+      .upload(uploadedPath, cover, { contentType: "image/webp" });
+    if (upload.error) throw upload.error;
+    nextCoverUrl = client.storage
+      .from("circle-public-media")
+      .getPublicUrl(uploadedPath).data.publicUrl;
+  }
+  const payload = {
+    organization_id: organizationId,
+    cell_group_id: groupId,
+    leader_person_id: leaderPersonId ?? null,
+    title: input.title,
+    starts_at: input.meetingDate,
+    location: input.location,
+    study_topic: input.studyTopic,
+    notes: input.notes,
+    summary: input.summary ?? "",
+    visibility: input.visibility ?? "private",
+    guest_rsvp_enabled: Boolean(input.guestRsvpEnabled),
+    published_at:
+      input.visibility === "public" ? new Date().toISOString() : null,
+    ...(nextCoverUrl !== undefined ? { cover_url: nextCoverUrl } : {}),
+  };
+  const query = id
+    ? client.from("circle_gatherings").update(payload).eq("id", id)
+    : client.from("circle_gatherings").insert({
+        id: meetingId,
+        ...payload,
+        created_by: userId,
+        public_slug: `${
+          input.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "gathering"
+        }-${meetingId.slice(0, 8)}`,
+      });
+  const { error } = await query;
+  if (error) {
+    if (uploadedPath)
+      await client.storage.from("circle-public-media").remove([uploadedPath]);
+    throw error;
+  }
+  if ((input.coverFile || input.removeCover) && input.coverUrl) {
+    const oldPath = publicStoragePath(input.coverUrl);
+    if (oldPath?.startsWith(`${organizationId}/gatherings/`))
+      await client.storage.from("circle-public-media").remove([oldPath]);
+  }
+  return meetingId;
+}
+
+export async function cancelMeeting(client: SupabaseClient, id: string) {
+  const { error } = await client
+    .from("circle_gatherings")
+    .update({ status: "cancelled" })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function createGroup(
+  client: SupabaseClient,
+  input: {
+    name: string;
+    description: string;
+    location: string;
+    leaderPersonId?: string;
+  },
+) {
+  const { data, error } = await client.rpc("create_circle_group", {
+    p_name: input.name,
+    p_description: input.description,
+    p_location: input.location,
+    p_leader_person_id: input.leaderPersonId ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function requestMemberAccess(
+  client: SupabaseClient,
+  groupId: string,
+  personId: string,
+) {
+  const { error } = await client.rpc("request_circle_access", {
+    p_cell_group_id: groupId,
+    p_person_id: personId,
+  });
+  if (error) throw error;
+}
+
+export async function removeMember(
+  client: SupabaseClient,
+  membershipId: string,
+) {
+  const { error } = await client
+    .from("cell_group_members")
+    .delete()
+    .eq("id", membershipId);
+  if (error) throw error;
+}
+
+export async function openCheckin(client: SupabaseClient, gatheringId: string) {
+  const { data, error } = await client.rpc("open_circle_checkin", {
+    p_gathering_id: gatheringId,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function closeCheckin(
+  client: SupabaseClient,
+  gatheringId: string,
+) {
+  const { error } = await client.rpc("close_circle_checkin", {
+    p_gathering_id: gatheringId,
+  });
+  if (error) throw error;
+}
+
+export async function getCheckinContext(client: SupabaseClient, code: string) {
+  const { data, error } = await client.rpc("get_circle_checkin_context", {
+    p_code: code,
+  });
+  if (error) throw error;
+  if (!data) throw new Error("This check-in code is invalid or has expired.");
+  return data as {
+    organizationName: string;
+    organizationImage?: string;
+    groupName: string;
+    gatheringTitle: string;
+    startsAt: string;
+  };
+}
+
+export async function guestCheckin(
+  client: SupabaseClient,
+  input: {
+    code: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    socialContact: string;
+  },
+) {
+  const { data, error } = await client.rpc("guest_circle_checkin", {
+    p_code: input.code,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
+    p_phone: input.phone,
+    p_social_contact: input.socialContact,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; alreadyRecorded: boolean };
+}
+
+export async function searchPeople(
+  client: SupabaseClient,
+  organizationId: string,
+  groupId: string,
+  query: string,
+): Promise<PersonSearchResult[]> {
+  const { data, error } = await client.rpc("search_circle_people", {
+    p_organization_id: organizationId,
+    p_cell_group_id: groupId,
+    p_query: query,
+  });
+  if (error) throw error;
+  return (data ?? []) as PersonSearchResult[];
+}
+
+export async function addPersonToGroup(
+  client: SupabaseClient,
+  groupId: string,
+  personId: string,
+) {
+  const { error } = await client.rpc("add_person_to_cell_group", {
+    p_cell_group_id: groupId,
+    p_person_id: personId,
+  });
+  if (error) throw error;
+}
+
+export async function registerVisitor(
+  client: SupabaseClient,
+  groupId: string,
+  input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    guestRsvpId?: string;
+  },
+) {
+  const { data, error } = await client.rpc("register_circle_visitor", {
+    p_cell_group_id: groupId,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
+    p_email: input.email,
+    p_phone: input.phone,
+    p_guest_rsvp_id: input.guestRsvpId ?? null,
+  });
+  if (error) throw error;
+  return data as { personId: string; matchedExisting: boolean };
+}
+
+export async function recordAttendance(
+  client: SupabaseClient,
+  gatheringId: string,
+  personIds: string[],
+  guestRsvpIds: string[],
+) {
+  const { data, error } = await client.rpc("record_circle_attendance", {
+    p_gathering_id: gatheringId,
+    p_person_ids: personIds,
+    p_guest_rsvp_ids: guestRsvpIds,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function loadGuestConnections(
+  client: SupabaseClient,
+  groupId?: string,
+  filter = "active",
+): Promise<GuestConnection[]> {
+  const { data, error } = await client.rpc("get_circle_connections", {
+    p_cell_group_id: groupId ?? null,
+    p_filter: filter,
+  });
+  if (error) throw error;
+  return (data ?? []) as GuestConnection[];
+}
+
+export async function loadGuestConnection(
+  client: SupabaseClient,
+  connectionId: string,
+): Promise<GuestConnection> {
+  const { data, error } = await client.rpc("get_circle_connection", {
+    p_connection_id: connectionId,
+  });
+  if (error) throw error;
+  return data as GuestConnection;
+}
+
+export async function updateGuestConnection(
+  client: SupabaseClient,
+  connectionId: string,
+  action: "claim" | "unclaim" | "contacted" | "close" | "reopen" | "note",
+  note = "",
+) {
+  const { data, error } = await client.rpc("update_circle_connection", {
+    p_connection_id: connectionId,
+    p_action: action,
+    p_note: note,
+  });
+  if (error) throw error;
+  return data as GuestConnection;
+}
+
+export async function stageWalkIn(
+  client: SupabaseClient,
+  gatheringId: string,
+  input: {
+    name: string;
+    email: string;
+    phone: string;
+    preferredContact: ContactPreference;
+    consent: boolean;
+  },
+) {
+  const { data, error } = await client.rpc("stage_circle_walk_in", {
+    p_gathering_id: gatheringId,
+    p_name: input.name,
+    p_email: input.email,
+    p_phone: input.phone,
+    p_preferred_contact: input.preferredContact,
+    p_consent: input.consent,
+  });
+  if (error) throw error;
+  return data as { ok: boolean; guestRsvpId: string; connectionId: string };
+}
+
+export async function resolveGuestConnection(
+  client: SupabaseClient,
+  connectionId: string,
+  input: {
+    personId?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+  },
+) {
+  const { data, error } = await client.rpc("resolve_circle_connection", {
+    p_connection_id: connectionId,
+    p_person_id: input.personId ?? null,
+    p_first_name: input.firstName ?? "",
+    p_last_name: input.lastName ?? "",
+    p_email: input.email ?? "",
+    p_phone: input.phone ?? "",
+  });
+  if (error) throw error;
+  return data as {
+    personId: string;
+    created: boolean;
+    alreadyConnected: boolean;
+  };
+}
