@@ -1,5 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { LAST_PUBLIC_ORG_KEY } from "./lib/publicLinks";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useCircles } from "./AppContext";
 import { AppShell } from "./components/AppShell";
 import { CirclePage } from "./pages/CirclePage";
@@ -58,41 +57,14 @@ function ErrorScreen({
   );
 }
 function RootEntry() {
-  const { data, session, loading, error, demoMode, refresh, signOut } =
-    useCircles();
+  const { session, loading } = useCircles();
   if (loading) return <LoadingScreen />;
-  if (error && !data && session)
-    return (
-      <ErrorScreen
-        message={error}
-        retry={() => void refresh()}
-        signInAgain={() => void signOut()}
-      />
-    );
-  if (data && (demoMode || session)) return <Navigate to="/" replace />;
+  if (session) return <Navigate to="/" replace />;
   return <SignInPage />;
 }
 function ProtectedApp() {
-  const { data, session, loading, error, demoMode, refresh, signOut } =
-    useCircles();
-  const location = useLocation();
+  const { data, session, loading, error, refresh, signOut } = useCircles();
   if (loading) return <LoadingScreen />;
-  if (!demoMode && !session) {
-    const rememberedOrganization = localStorage.getItem(LAST_PUBLIC_ORG_KEY);
-    if (
-      location.pathname === "/" &&
-      new URLSearchParams(location.search).get("source") === "pwa" &&
-      rememberedOrganization &&
-      /^[a-z0-9-]+$/.test(rememberedOrganization)
-    )
-      return <Navigate to={`/${rememberedOrganization}?browse=1`} replace />;
-    return (
-      <Navigate
-        to={`/sign-in?next=${encodeURIComponent(location.pathname)}`}
-        replace
-      />
-    );
-  }
   if (error && !data)
     return (
       <ErrorScreen

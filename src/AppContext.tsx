@@ -46,9 +46,7 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData | null>(
-    isSupabaseConfigured ? null : structuredClone(demoData),
-  );
+  const [data, setData] = useState<AppData | null>(structuredClone(demoData));
   const [session, setSession] = useState<Session | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
   const [loading, setLoading] = useState(isSupabaseConfigured);
@@ -94,8 +92,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
         setSession(nextSession);
-        if (!nextSession) {
+        if (nextSession) {
           setData(null);
+          setLoading(true);
+        } else {
+          setData(structuredClone(demoData));
+          setSelectedGroupId(undefined);
+          setError(null);
           setLoading(false);
         }
       },
@@ -117,12 +120,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    if (!supabase) return;
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    if (!supabase)
+      throw new Error(
+        "Live sign-in is not configured for this deployment. Add the Supabase build variables in Cloudflare and redeploy.",
+      );
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (authError) throw authError;
+    setSession(authData.session);
+    setData(null);
+    setLoading(true);
     notify("Signed in.");
   };
 
@@ -132,7 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const selectGroup = async (groupId: string) => {
     setSelectedGroupId(groupId);
-    if (!supabase && data) {
+    if (!session && data) {
       const group =
         data.groups.find((item) => item.id === groupId) ?? data.group;
       setData({ ...data, group });
@@ -146,7 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     leaderPersonId?: string;
   }) => {
     if (!data) return;
-    if (supabase) {
+    if (supabase && session) {
       const id = await api.createGroup(supabase, input);
       if (!session?.user) return;
       const next = await api.loadAppData(supabase, session.user.id, id);
@@ -180,7 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ),
     });
     try {
-      if (supabase)
+      if (supabase && session)
         await api.saveRsvp(
           supabase,
           data.organization.id,
@@ -204,7 +213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addPrayer = async (input: PrayerInput) => {
     if (!data?.group) return;
     const personId = requirePerson();
-    if (supabase) {
+    if (supabase && session) {
       await api.createPrayer(
         supabase,
         data.organization.id,
@@ -255,7 +264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ),
     });
     try {
-      if (supabase)
+      if (supabase && session)
         await api.setPrayerClick(
           supabase,
           data.organization.id,
@@ -272,7 +281,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const markAnswered = async (prayerId: string, notes: string) => {
     if (!data) return;
-    if (supabase) await api.answerPrayer(supabase, prayerId, notes);
+    if (supabase && session) await api.answerPrayer(supabase, prayerId, notes);
     setData({
       ...data,
       prayers: data.prayers.map((item) =>
@@ -286,7 +295,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const saveMeeting = async (input: MeetingInput, id?: string) => {
     if (!data?.group) return;
-    if (supabase) {
+    if (supabase && session) {
       await api.saveMeeting(
         supabase,
         data.organization.id,
@@ -336,7 +345,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const cancelMeeting = async (id: string) => {
     if (!data) return;
-    if (supabase) await api.cancelMeeting(supabase, id);
+    if (supabase && session) await api.cancelMeeting(supabase, id);
     setData({
       ...data,
       meetings: data.meetings.map((meeting) =>
@@ -348,14 +357,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const requestMemberAccess = async (personId: string) => {
     if (!data?.group) return;
-    if (supabase)
+    if (supabase && session)
       await api.requestMemberAccess(supabase, data.group.id, personId);
     notify("Access request sent to an organization admin.");
   };
 
   const removeMember = async (membershipId: string) => {
     if (!data) return;
-    if (supabase) await api.removeMember(supabase, membershipId);
+    if (supabase && session) await api.removeMember(supabase, membershipId);
     setData({
       ...data,
       members: data.members.filter(
@@ -366,7 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const openCheckin = async (meetingId: string) => {
-    const code = supabase
+    const code = supabase && session
       ? await api.openCheckin(supabase, meetingId)
       : Math.random().toString(36).slice(2, 8).toUpperCase();
     if (data)
@@ -383,7 +392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const closeCheckin = async (meetingId: string) => {
-    if (supabase) await api.closeCheckin(supabase, meetingId);
+    if (supabase && session) await api.closeCheckin(supabase, meetingId);
     if (data)
       setData({
         ...data,
@@ -402,7 +411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       session,
       loading,
       error,
-      demoMode: !isSupabaseConfigured,
+      demoMode: !session,
       toast,
       refresh,
       signIn,

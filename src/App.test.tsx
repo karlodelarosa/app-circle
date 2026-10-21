@@ -77,6 +77,19 @@ describe("Circles MVP", () => {
     await waitFor(() => expect(maybe).toHaveAttribute("aria-pressed", "true"));
     expect(going).toHaveAttribute("aria-pressed", "false");
   });
+  it("lets a demo visitor open the SheepCount sign-in screen", async () => {
+    renderApp("/");
+    fireEvent.click(screen.getByRole("button", { name: /Karlo de la Rosa/i }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Sign in with SheepCount" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Return to your circle." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Continue in demo mode" }),
+    ).toHaveAttribute("href", "/");
+  });
   it("shows leader gathering controls and no prayer navigation", () => {
     renderApp("/gatherings");
     expect(

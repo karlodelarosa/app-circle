@@ -5,6 +5,7 @@ import {
   FileText,
   Home,
   HeartHandshake,
+  LogIn,
   LogOut,
   WifiOff,
 } from "lucide-react";
@@ -94,7 +95,18 @@ function AccountMenu({
             </p>
           </div>
           {demoMode ? (
-            <p className="px-3 py-2 text-sm text-muted">Demo session</p>
+            <>
+              <p className="px-3 py-2 text-xs text-muted">Demo session</p>
+              <Link
+                to="/sign-in?next=/"
+                role="menuitem"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive"
+                onClick={() => setOpen(false)}
+              >
+                <LogIn size={16} />
+                Sign in with SheepCount
+              </Link>
+            </>
           ) : (
             <button
               type="button"
