@@ -80,7 +80,7 @@ function injectMetadata(
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:image" content="${escapeHtml(image.href)}" />
     <meta property="og:image:secure_url" content="${escapeHtml(image.href)}" />
-    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${escapeHtml(`${gathering.title || "Gathering"} invitation cover`)}" />
@@ -155,14 +155,38 @@ async function gatheringImage(request: Request, env: WorkerEnv) {
   const result = await loadPublicGathering({ organization, gathering }, env);
   if (!result) return null;
 
+  const hasCover = Boolean(result.gathering.coverUrl);
   const source = result.gathering.coverUrl
-    ? await fetch(result.gathering.coverUrl)
+    ? await fetch(result.gathering.coverUrl, {
+        cf: {
+          image: {
+            fit: "cover",
+            width: 1200,
+            height: 630,
+            format: "jpeg",
+            quality: 85,
+          },
+        },
+      } as RequestInit & {
+        cf: {
+          image: {
+            fit: string;
+            width: number;
+            height: number;
+            format: string;
+            quality: number;
+          };
+        };
+      })
     : await env.ASSETS.fetch(
         new Request(new URL("/assets/devotional-table.webp", request.url)),
       );
   if (!source.ok || !source.body) return null;
   const headers = new Headers(source.headers);
-  headers.set("content-type", source.headers.get("content-type") || "image/webp");
+  headers.set(
+    "content-type",
+    hasCover ? "image/jpeg" : source.headers.get("content-type") || "image/webp",
+  );
   headers.set("cache-control", "public, max-age=86400, s-maxage=86400");
   headers.set("access-control-allow-origin", "*");
   headers.delete("content-length");

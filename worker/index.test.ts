@@ -53,7 +53,7 @@ describe("Circles Cloudflare Worker", () => {
     expect(html).toContain(
       'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch"',
     );
-    expect(html).toContain('property="og:image:type" content="image/webp"');
+    expect(html).toContain('property="og:image:type" content="image/jpeg"');
     expect(html).toContain(
       'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=1"',
     );
@@ -98,7 +98,7 @@ describe("Circles Cloudflare Worker", () => {
       env,
     );
 
-    expect(response.headers.get("content-type")).toBe("image/webp");
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
     expect(response.headers.get("cache-control")).toContain("max-age=86400");
     expect(response.headers.get("x-robots-tag")).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
