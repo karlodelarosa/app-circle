@@ -51,3 +51,27 @@ npm run deploy
 ```
 
 The first deployment may ask you to sign in to Cloudflare. The Supabase URL and publishable key are included when the app is built, so make sure they are available in `.env.local` before deploying.
+
+### Cloudflare dashboard setup
+
+In **Workers & Pages**, create or connect a Worker to the `karlodelarosa/app-circle` GitHub repository. Use these settings:
+
+| Setting | Value |
+| --- | --- |
+| Worker name | `app-circle` |
+| Production branch | `main` |
+| Root directory | `/` (repository root) |
+| Build command | `npm run build:cf` |
+| Deploy command | `npx wrangler deploy` |
+| Version command | `npx wrangler versions upload` |
+
+Add these as build variables before deploying:
+
+| Variable | Value |
+| --- | --- |
+| `VITE_SUPABASE_URL` | The Supabase project URL used by SheepCount |
+| `VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY` | The Supabase publishable or anon key used by SheepCount |
+
+These are build-time values. Add them under the Worker's build settings rather than as runtime-only Worker variables.
+
+After saving the settings, Cloudflare will build and deploy every new commit pushed to `main`. Other branches can use the version command to create a version without replacing the production deployment.
