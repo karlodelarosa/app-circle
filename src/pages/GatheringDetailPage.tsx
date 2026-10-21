@@ -25,7 +25,7 @@ const rsvpOptions: { value: RsvpStatus; label: string }[] = [
 
 export function GatheringDetailPage() {
   const { id } = useParams();
-  const { data, setRsvp } = useCircles();
+  const { data, demoMode, setRsvp } = useCircles();
   const [guests, setGuests] = useState<
     {
       id: string;
@@ -69,13 +69,13 @@ export function GatheringDetailPage() {
         .filter(([, status]) => status === "attending")
         .map(([personId]) => personId),
     );
-    if (supabase && canLead)
+    if (!demoMode && supabase && canLead)
       void supabase
         .from("circle_guest_rsvps")
         .select("id,guest_name,status,email,phone,converted_person_id")
         .eq("gathering_id", meeting.id)
         .then(({ data: rows }) => setGuests(rows ?? []));
-  }, [meeting, canLead]);
+  }, [meeting, canLead, demoMode]);
   if (!data) return null;
   const base = "";
   if (!meeting)
@@ -89,7 +89,7 @@ export function GatheringDetailPage() {
       </div>
     );
   const saveAttendance = async () => {
-    if (supabase)
+    if (!demoMode && supabase)
       await recordAttendance(supabase, meeting.id, selected, guestSelected);
     setSaved(true);
   };
@@ -99,7 +99,7 @@ export function GatheringDetailPage() {
     setWalkInBusy(true);
     setWalkInError("");
     try {
-      const result = supabase
+      const result = !demoMode && supabase
         ? await stageWalkIn(supabase, meeting.id, {
             name: `${walkInForm.firstName} ${walkInForm.lastName}`.trim(),
             email: walkInForm.email,

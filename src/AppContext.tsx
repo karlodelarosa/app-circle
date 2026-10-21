@@ -85,10 +85,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data: result }) => {
-      setSession(result.session);
-      if (!result.session) setLoading(false);
-    });
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
         setSession(nextSession);
@@ -129,10 +125,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
       password,
     });
     if (authError) throw authError;
-    setSession(authData.session);
-    setData(null);
+    if (!authData.session)
+      throw new Error("SheepCount signed in without starting a session.");
     setLoading(true);
-    notify("Signed in.");
+    setError(null);
+    try {
+      const next = await api.loadAppData(
+        supabase,
+        authData.session.user.id,
+        selectedGroupId,
+      );
+      next.currentUser.email = authData.session.user.email ?? "";
+      setSession(authData.session);
+      setData(next);
+      setSelectedGroupId(next.group?.id);
+      notify("Signed in with SheepCount.");
+    } catch (cause) {
+      await supabase.auth.signOut({ scope: "local" });
+      setSession(null);
+      setData(structuredClone(demoData));
+      setSelectedGroupId(undefined);
+      setError(null);
+      throw cause;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const signOut = async () => {
@@ -340,7 +357,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     }
-    notify(id ? "Gathering updated." : "Gathering created.");
+    notify(
+      session
+        ? id
+          ? "Gathering updated."
+          : "Gathering created."
+        : id
+          ? "Demo gathering updated for this session."
+          : "Gathering added to this demo session only.",
+    );
   };
 
   const cancelMeeting = async (id: string) => {

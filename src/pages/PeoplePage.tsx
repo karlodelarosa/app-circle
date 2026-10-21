@@ -74,7 +74,7 @@ export function PeoplePage({ compact = false }: { compact?: boolean }) {
     }
   };
   const add = async (person: PersonSearchResult) => {
-    if (!supabase) {
+    if (demoMode || !supabase) {
       setMessage(`${person.fullName} is already in this demo Circle.`);
       return;
     }
@@ -95,13 +95,16 @@ export function PeoplePage({ compact = false }: { compact?: boolean }) {
     e.preventDefault();
     setBusy(true);
     try {
-      if (supabase) await registerVisitor(supabase, group.id, form);
+      if (!demoMode && supabase)
+        await registerVisitor(supabase, group.id, form);
       setMessage(
-        `${form.firstName} was registered as a visitor and added to ${group.name}.`,
+        demoMode
+          ? `${form.firstName} was added to this demo session only.`
+          : `${form.firstName} was registered as a visitor and added to ${group.name}.`,
       );
       setVisitor(false);
       setForm({ firstName: "", lastName: "", email: "", phone: "" });
-      await refresh();
+      if (!demoMode) await refresh();
     } catch (c) {
       setMessage(getErrorMessage(c, "Visitor could not be registered."));
     } finally {

@@ -113,7 +113,7 @@ export function ConnectionsPage() {
     setLoading(true);
     setError("");
     try {
-      if (!supabase) {
+      if (demoMode || !supabase) {
         const visible = demoConnections.filter(
           (item) =>
             (!groupId || item.groupId === groupId) &&
@@ -138,7 +138,7 @@ export function ConnectionsPage() {
 
   useEffect(() => {
     void loadQueue();
-  }, [filter, groupId, canLead]);
+  }, [filter, groupId, canLead, demoMode]);
 
   useEffect(() => {
     if (!connectionId || !canLead) {
@@ -147,7 +147,7 @@ export function ConnectionsPage() {
     }
     setLoading(true);
     setError("");
-    const detail = !supabase
+    const detail = demoMode || !supabase
       ? Promise.resolve(demoConnections.find((item) => item.id === connectionId))
       : loadGuestConnection(supabase, connectionId);
     void detail
@@ -156,7 +156,7 @@ export function ConnectionsPage() {
         setError(getErrorMessage(cause, "This connection could not be loaded.")),
       )
       .finally(() => setLoading(false));
-  }, [connectionId, canLead]);
+  }, [connectionId, canLead, demoMode]);
 
   if (!data) return null;
   if (!canLead) return <Navigate to="/" replace />;
@@ -297,7 +297,7 @@ function ConnectionDetail({
     setActionError("");
     try {
       let next: GuestConnection;
-      if (!supabase) {
+      if (demoMode || !supabase) {
         const status =
           action === "contacted"
             ? "contacted"
@@ -458,7 +458,7 @@ function ConnectionDetail({
           demoMode={demoMode}
           onClose={() => setConvertOpen(false)}
           onConverted={async () => {
-            const next = !supabase
+            const next = demoMode || !supabase
               ? { ...connection, status: "connected" as const, convertedPersonId: "demo-person" }
               : await loadGuestConnection(supabase, connection.id);
             setConvertOpen(false);
@@ -487,7 +487,7 @@ function ConvertConnectionModal({ connection, organizationId, demoMode, onClose,
     event?.preventDefault();
     setBusy(true); setError("");
     try {
-      setResults(!supabase ? [] : await searchPeople(supabase, organizationId, connection.groupId, query));
+      setResults(demoMode || !supabase ? [] : await searchPeople(supabase, organizationId, connection.groupId, query));
     } catch (cause) { setError(getErrorMessage(cause, "People search failed.")); }
     finally { setBusy(false); }
   };

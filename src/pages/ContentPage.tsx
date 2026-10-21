@@ -29,7 +29,7 @@ export function ContentPage() {
   }, [composer]);
   if (!data) return null;
   const publishSpace = async () => {
-    if (!supabase) {
+    if (demoMode || !supabase) {
       setMessage("Public community page is published in demo mode.");
       return;
     }
