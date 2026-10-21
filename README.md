@@ -29,3 +29,25 @@ npm run dev
 ```
 
 The app includes demo content, so it can be explored locally without connecting a live church account.
+
+## Deploying to Cloudflare
+
+Build the Cloudflare version:
+
+```bash
+npm run build:cf
+```
+
+Preview it locally with Wrangler:
+
+```bash
+npm run preview
+```
+
+Deploy it to Cloudflare Workers:
+
+```bash
+npm run deploy
+```
+
+The first deployment may ask you to sign in to Cloudflare. The Supabase URL and publishable key are included when the app is built, so make sure they are available in `.env.local` before deploying.
