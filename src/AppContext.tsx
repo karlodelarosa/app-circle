@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -52,27 +53,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const authenticatedUserRef = useRef<string>();
 
   const notify = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 2800);
   }, []);
 
+  const sessionUserId = session?.user.id;
+  const sessionEmail = session?.user.email ?? "";
   const refresh = useCallback(async () => {
-    if (!supabase || !session?.user) return;
-    setLoading(true);
+    if (!supabase || !sessionUserId) return;
     setError(null);
     try {
       const next = await api.loadAppData(
         supabase,
-        session.user.id,
+        sessionUserId,
         selectedGroupId,
       );
-      next.currentUser.email = session.user.email ?? "";
+      next.currentUser.email = sessionEmail;
       setData(next);
       setSelectedGroupId(next.group?.id);
     } catch (cause) {
-      setData(null);
       setError(
         !navigator.onLine
           ? "You’re offline. The Circles shell is available, but private group data needs a connection. Reconnect and try again."
@@ -81,16 +83,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [session, selectedGroupId]);
+  }, [sessionUserId, sessionEmail, selectedGroupId]);
 
   useEffect(() => {
     if (!supabase) return;
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, nextSession) => {
+        const nextUserId = nextSession?.user.id;
+        const identityChanged = authenticatedUserRef.current !== nextUserId;
+        authenticatedUserRef.current = nextUserId;
         setSession(nextSession);
         if (nextSession) {
-          setData(null);
-          setLoading(true);
+          if (identityChanged) {
+            setData(null);
+            setSelectedGroupId(undefined);
+            setError(null);
+            setLoading(true);
+          }
         } else {
           setData(structuredClone(demoData));
           setSelectedGroupId(undefined);
@@ -103,8 +112,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (session) void refresh();
-  }, [session, refresh]);
+    if (sessionUserId) void refresh();
+    // A refreshed token creates a new Session object. Reload only when the
+    // authenticated identity changes, not when the tab regains focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUserId]);
 
   const requirePerson = () => {
     const personId = data?.currentUser.personId;
@@ -154,11 +166,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     if (supabase) await supabase.auth.signOut({ scope: "local" });
+    authenticatedUserRef.current = undefined;
   };
 
   const selectGroup = async (groupId: string) => {
     setSelectedGroupId(groupId);
-    if (!session && data) {
+    if (supabase && session?.user) {
+      setError(null);
+      try {
+        const next = await api.loadAppData(supabase, session.user.id, groupId);
+        next.currentUser.email = session.user.email ?? "";
+        setData(next);
+        setSelectedGroupId(next.group?.id);
+      } catch (cause) {
+        setError(getErrorMessage(cause, "Circles could not load that group."));
+      }
+    } else if (data) {
       const group =
         data.groups.find((item) => item.id === groupId) ?? data.group;
       setData({ ...data, group });

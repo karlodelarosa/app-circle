@@ -15,12 +15,5 @@ export function canonicalGatheringUrl(orgSlug: string, gatheringSlug: string) {
 }
 
 export function gatheringShareUrl(orgSlug: string, gatheringSlug: string) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  if (!supabaseUrl) return canonicalGatheringUrl(orgSlug, gatheringSlug);
-  const query = new URLSearchParams({
-    organization: orgSlug,
-    gathering: gatheringSlug,
-    origin: window.location.origin,
-  });
-  return `${supabaseUrl}/functions/v1/circle-gathering-share?${query}`;
+  return canonicalGatheringUrl(orgSlug, gatheringSlug);
 }

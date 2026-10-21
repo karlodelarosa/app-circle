@@ -33,6 +33,7 @@ import {
   publicCommunityUrl,
   withBrowseMode,
 } from "../lib/publicLinks";
+import { copyText, shareLink } from "../lib/share";
 import { supabase } from "../lib/supabase";
 import {
   galleryBySlug,
@@ -498,16 +499,20 @@ export function PublicGatheringPage() {
     );
   const communityUrl = publicCommunityUrl(space.organization.slug);
   const saveCommunityLink = async () => {
-    await navigator.clipboard?.writeText(communityUrl);
-    setReturnStatus("Community link copied.");
+    try {
+      await copyText(communityUrl);
+      setReturnStatus("Community link copied.");
+    } catch {
+      setReturnStatus("The community link could not be copied.");
+    }
   };
   const shareCommunity = async () => {
-    if (navigator.share)
-      await navigator.share({
-        title: space.organization.name,
-        url: communityUrl,
-      });
-    else await saveCommunityLink();
+    try {
+      const result = await shareLink(space.organization.name, communityUrl);
+      if (result === "copied") setReturnStatus("Community link copied.");
+    } catch {
+      setReturnStatus("The community link could not be shared.");
+    }
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -552,8 +557,12 @@ export function PublicGatheringPage() {
   };
   const shareInvitation = async () => {
     const url = gatheringShareUrl(space.organization.slug, item.slug || "");
-    if (navigator.share) await navigator.share({ title: item.title, url });
-    else await navigator.clipboard?.writeText(url);
+    try {
+      const result = await shareLink(item.title, url);
+      if (result === "copied") setReturnStatus("RSVP link copied.");
+    } catch {
+      setReturnStatus("The invitation could not be shared.");
+    }
   };
   return (
     <main>
@@ -596,6 +605,11 @@ export function PublicGatheringPage() {
               >
                 <Share2 size={16} /> Share invitation
               </button>
+              {returnStatus && !done && (
+                <p role="status" className="mt-3 text-sm text-olive">
+                  {returnStatus}
+                </p>
+              )}
             </div>
             <div className="border-t border-line pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
               {done ? (

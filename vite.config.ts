@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: "autoUpdate",
+        registerType: "prompt",
         includeAssets: [
           "assets/devotional-table.webp",
           "circles-icon-192.png",

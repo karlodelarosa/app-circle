@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChevronRight,
   CircleUserRound,
+  ExternalLink,
   Megaphone,
   Quote,
 } from "lucide-react";
@@ -50,10 +51,30 @@ export function HomePage() {
         <section>
           {next ? (
             <article className="paper-panel overflow-hidden">
-              <div className="border-b border-line bg-[#EFEBDF] p-6 sm:p-8">
-                <p className="text-xs text-olive">Our next gathering</p>
-                <h2 className="mt-2 font-display text-4xl">{next.title}</h2>
-                <p className="mt-3 text-sm text-muted">
+              <div
+                className={`relative flex min-h-56 flex-col justify-end overflow-hidden border-b border-line p-6 sm:min-h-64 sm:p-8 ${next.coverUrl ? "text-paper" : "bg-[#EFEBDF]"}`}
+              >
+                {next.coverUrl && (
+                  <>
+                    <img
+                      src={next.coverUrl}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/45 to-ink/10" />
+                  </>
+                )}
+                <p
+                  className={`relative text-xs ${next.coverUrl ? "text-paper/80" : "text-olive"}`}
+                >
+                  Our next gathering
+                </p>
+                <h2 className="relative mt-2 font-display text-4xl">
+                  {next.title}
+                </h2>
+                <p
+                  className={`relative mt-3 text-sm ${next.coverUrl ? "text-paper/85" : "text-muted"}`}
+                >
                   {formatDate(next.meetingDate)} at{" "}
                   {formatTime(next.meetingDate)} · {next.location}
                 </p>
@@ -110,6 +131,23 @@ export function HomePage() {
             </span>
             <ChevronRight className="ml-auto text-muted" size={18} />
           </Link>
+          {data.currentUser.role === "admin" && (
+            <a
+              href={`/${encodeURIComponent(data.organization.slug)}?browse=1`}
+              target="_blank"
+              rel="noreferrer"
+              className="quick-action"
+            >
+              <span className="quick-icon">
+                <ExternalLink />
+              </span>
+              <span>
+                <strong>View public page</strong>
+                <small>Preview gatherings and community stories</small>
+              </span>
+              <ChevronRight className="ml-auto text-muted" size={18} />
+            </a>
+          )}
           {data.announcements.slice(0, 2).map((a) => (
             <article key={a.id} className="paper-panel p-5">
               <Megaphone size={17} className="text-olive" />

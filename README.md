@@ -72,6 +72,34 @@ Add these as build variables before deploying:
 | `VITE_SUPABASE_URL` | The Supabase project URL used by SheepCount |
 | `VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY` | The Supabase publishable or anon key used by SheepCount |
 
-These are build-time values. Add them under the Worker's build settings rather than as runtime-only Worker variables.
+These are build-time values. Add them under the Worker's build settings.
+
+The Worker also generates gathering preview metadata for Messenger and other
+social apps. Deploy this version once so Cloudflare recognizes the Worker entry
+point, then add these under **Settings → Variables and Secrets → Runtime** and
+redeploy:
+
+| Variable | Value |
+| --- | --- |
+| `SUPABASE_URL` | The same Supabase project URL used above |
+| `SUPABASE_ANON_KEY` | The same public publishable or anon key used above |
+
+Use only the public publishable/anon key here, never the Supabase service-role
+key. Circles now has a Worker entry point in addition to its static assets, so
+Cloudflare accepts runtime variables for this deployment.
+
+### Existing invitation links
+
+Older invitations use a Supabase Edge Function URL. Deploy the included
+compatibility redirect after linking the Supabase CLI to the SheepCount
+project:
+
+```bash
+npx supabase functions deploy circle-gathering-share --project-ref qrmpogczieanpahxxxkc
+```
+
+Set the Edge Function secret `CIRCLES_PUBLIC_ORIGIN` to
+`https://circles.elgchurch.com`. New invitations use the normal public RSVP URL
+directly; the Edge Function only keeps previously shared links working.
 
 After saving the settings, Cloudflare will build and deploy every new commit pushed to `main`. Other branches can use the version command to create a version without replacing the production deployment.

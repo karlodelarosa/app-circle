@@ -1,4 +1,10 @@
-import { MapPin, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import {
+  ChevronRight,
+  MapPin,
+  ShieldCheck,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
@@ -7,7 +13,7 @@ import { Modal } from "../components/Modal";
 import { PeoplePage } from "./PeoplePage";
 
 export function CirclePage() {
-  const { data, selectGroup } = useCircles();
+  const { data, error, selectGroup } = useCircles();
   const { circleId } = useParams();
   const [managingPeople, setManagingPeople] = useState(false);
   useEffect(() => {
@@ -17,6 +23,88 @@ export function CirclePage() {
     }
   }, [circleId, data?.group?.id]);
   if (!data) return null;
+  if (!circleId) {
+    if (!data.groups.length)
+      return (
+        <div className="empty-state">
+          <UsersRound />
+          <h2>No Circle assigned</h2>
+          <p>
+            Ask your SheepCount administrator to add you to an active cell
+            group.
+          </p>
+        </div>
+      );
+    return (
+      <div>
+        <div className="page-heading">
+          <div>
+            <p className="page-kicker">Your community</p>
+            <h1>All Circles</h1>
+            <p>Choose a Circle to see its people, place, and gatherings.</p>
+          </div>
+        </div>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+          {data.groups.map((group) => (
+            <Link
+              key={group.id}
+              to={`/circles/${group.id}`}
+              className="group paper-panel flex min-h-56 flex-col p-6 transition-colors hover:border-sage focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive sm:p-7"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span className="quick-icon">
+                  <UsersRound />
+                </span>
+                <span className="role-label capitalize">{group.role}</span>
+              </div>
+              <h2 className="mt-6 font-display text-3xl leading-tight">
+                {group.name}
+              </h2>
+              <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">
+                {group.description || "A place to gather and grow together."}
+              </p>
+              <span className="mt-auto flex items-center gap-2 pt-6 text-sm text-olive">
+                <MapPin size={15} />
+                <span className="truncate">
+                  {group.location || "Location shared with members"}
+                </span>
+                <ChevronRight
+                  size={17}
+                  className="ml-auto transition-transform group-hover:translate-x-0.5"
+                />
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  const requestedGroup = data.groups.find((group) => group.id === circleId);
+  if (!requestedGroup)
+    return (
+      <div className="empty-state">
+        <UsersRound />
+        <h2>Circle not found</h2>
+        <Link className="text-link" to="/circles">
+          View all Circles
+        </Link>
+      </div>
+    );
+  if (data.group?.id !== requestedGroup.id)
+    return (
+      <div className="paper-panel p-8 text-center text-sm text-muted">
+        {error ? (
+          <>
+            <p>{error}</p>
+            <Link className="text-link mt-4" to="/circles">
+              Return to all Circles
+            </Link>
+          </>
+        ) : (
+          <>Opening {requestedGroup.name}…</>
+        )}
+      </div>
+    );
   if (!data.group)
     return (
       <div className="empty-state">
@@ -39,21 +127,9 @@ export function CirclePage() {
           <h1>{data.group.name}</h1>
           <p>{data.group.description}</p>
         </div>
-        {data.groups.length > 1 && (
-          <select
-            className="field max-w-xs"
-            aria-label="Choose Circle"
-            value={data.group.id}
-            onChange={(e) => void selectGroup(e.target.value)}
-          >
-            {data.groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-                {g.role === "leader" ? " — Leader" : ""}
-              </option>
-            ))}
-          </select>
-        )}
+        <Link className="secondary-button" to="/circles">
+          View all Circles
+        </Link>
       </div>
       <div className="mt-8 grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
         <aside className="paper-panel p-6">

@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Plus,
   QrCode,
+  Share2,
   Users,
 } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +18,7 @@ import { MeetingForm } from "../components/MeetingForm";
 import { Modal } from "../components/Modal";
 import { formatDate, formatTime } from "../lib/format";
 import { gatheringShareUrl } from "../lib/publicLinks";
+import { copyText, shareLink } from "../lib/share";
 import type { Meeting } from "../types";
 
 function GuestInvitationShare({
@@ -27,6 +29,7 @@ function GuestInvitationShare({
   organizationSlug: string;
 }) {
   const [qr, setQr] = useState("");
+  const [status, setStatus] = useState("");
   const link = gatheringShareUrl(organizationSlug, meeting.slug || "");
   useEffect(() => {
     void import("qrcode")
@@ -54,10 +57,20 @@ function GuestInvitationShare({
       </p>
       <button
         className="primary-button mt-5 w-full"
-        onClick={() => void navigator.clipboard?.writeText(link)}
+        onClick={() => {
+          setStatus("");
+          void copyText(link)
+            .then(() => setStatus("RSVP link copied."))
+            .catch(() => setStatus("The RSVP link could not be copied."));
+        }}
       >
-        <Copy size={16} /> Copy guest link
+        <Copy size={16} /> Copy RSVP link
       </button>
+      {status && (
+        <p className="mt-3 text-sm text-muted" role="status">
+          {status}
+        </p>
+      )}
     </div>
   );
 }
@@ -67,6 +80,7 @@ export function GatheringsPage() {
   const [editing, setEditing] = useState<Meeting | "new" | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [sharing, setSharing] = useState<Meeting | null>(null);
+  const [shareStatus, setShareStatus] = useState("");
   if (!data) return null;
   const isLeader =
     data.currentUser.role === "admin" || data.group?.role === "leader";
@@ -78,6 +92,30 @@ export function GatheringsPage() {
   const previous = data.meetings
     .filter((item) => item.meetingDate < now)
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
+  const copyInvitation = async (meeting: Meeting) => {
+    setShareStatus("");
+    try {
+      await copyText(
+        gatheringShareUrl(data.organization.slug, meeting.slug || ""),
+      );
+      setShareStatus(`RSVP link for ${meeting.title} copied.`);
+    } catch {
+      setShareStatus("The RSVP link could not be copied.");
+    }
+  };
+  const shareInvitation = async (meeting: Meeting) => {
+    setShareStatus("");
+    try {
+      const result = await shareLink(
+        meeting.title,
+        gatheringShareUrl(data.organization.slug, meeting.slug || ""),
+      );
+      if (result === "copied")
+        setShareStatus(`RSVP link for ${meeting.title} copied.`);
+    } catch {
+      setShareStatus("The invitation could not be shared.");
+    }
+  };
 
   return (
     <div>
@@ -93,6 +131,11 @@ export function GatheringsPage() {
           </button>
         )}
       </div>
+      {shareStatus && (
+        <p className="mt-5 rounded-xl bg-paper px-4 py-3 text-sm text-muted" role="status">
+          {shareStatus}
+        </p>
+      )}
       <section className="mt-8">
         <h2 className="subheading">Coming up</h2>
         {upcoming.length ? (
@@ -190,16 +233,15 @@ export function GatheringsPage() {
                           </button>
                           <button
                             className="secondary-button"
-                            onClick={() =>
-                              void navigator.clipboard?.writeText(
-                                gatheringShareUrl(
-                                  data.organization.slug,
-                                  meeting.slug || "",
-                                ),
-                              )
-                            }
+                            onClick={() => void shareInvitation(meeting)}
                           >
-                            <Copy size={15} /> Copy guest link
+                            <Share2 size={15} /> Share invitation
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() => void copyInvitation(meeting)}
+                          >
+                            <Copy size={15} /> Copy RSVP link
                           </button>
                         </div>
                       )}

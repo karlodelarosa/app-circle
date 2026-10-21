@@ -3,7 +3,9 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  Copy,
   MapPin,
+  Share2,
   UserPlus,
   UsersRound,
 } from "lucide-react";
@@ -13,6 +15,8 @@ import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
 import { getErrorMessage } from "../lib/errors";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringShareUrl } from "../lib/publicLinks";
+import { copyText, shareLink } from "../lib/share";
 import { supabase } from "../lib/supabase";
 import { recordAttendance, stageWalkIn } from "../services/circles";
 import type { ContactPreference, RsvpStatus } from "../types";
@@ -51,6 +55,7 @@ export function GatheringDetailPage() {
     consent: false,
   });
   const [saved, setSaved] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
   const meeting = data?.meetings.find((item) => item.id === id);
   const attending =
     data && meeting
@@ -151,6 +156,34 @@ export function GatheringDetailPage() {
       setWalkInBusy(false);
     }
   };
+  const invitationUrl = meeting.slug
+    ? gatheringShareUrl(data.organization.slug, meeting.slug)
+    : "";
+  const copyInvitation = async () => {
+    setShareStatus("");
+    try {
+      await copyText(invitationUrl);
+      setShareStatus("RSVP link copied.");
+    } catch {
+      setShareStatus("The RSVP link could not be copied.");
+    }
+  };
+  const shareInvitation = async () => {
+    setShareStatus("");
+    try {
+      const result = await shareLink(meeting.title, invitationUrl);
+      if (result === "copied") setShareStatus("RSVP link copied.");
+    } catch {
+      setShareStatus("The invitation could not be shared.");
+    }
+  };
+  const canShare = Boolean(
+    canLead &&
+      meeting.status === "scheduled" &&
+      meeting.visibility === "public" &&
+      meeting.guestRsvpEnabled &&
+      meeting.slug,
+  );
   return (
     <div className="mx-auto max-w-4xl">
       <Link
@@ -203,6 +236,30 @@ export function GatheringDetailPage() {
               <h2 className="font-display text-2xl">A note for the evening</h2>
               <p className="mt-2 leading-7 text-muted">{meeting.notes}</p>
             </div>
+            {canShare && (
+              <div className="mt-8 border-t border-line pt-6">
+                <p className="text-xs text-muted">Guest invitation</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    className="secondary-button"
+                    onClick={() => void shareInvitation()}
+                  >
+                    <Share2 size={16} /> Share invitation
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => void copyInvitation()}
+                  >
+                    <Copy size={16} /> Copy RSVP link
+                  </button>
+                </div>
+                {shareStatus && (
+                  <p className="mt-3 text-sm text-muted" role="status">
+                    {shareStatus}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <div className="border-t border-line pt-7 md:border-l md:border-t-0 md:pl-8 md:pt-0">
             <h2 className="flex items-center gap-2 font-display text-2xl">

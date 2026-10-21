@@ -99,7 +99,7 @@ describe("Circles MVP", () => {
       screen.queryByRole("link", { name: "Prayer" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Copy guest link" }).length,
+      screen.getAllByRole("button", { name: "Copy RSVP link" }).length,
     ).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: /guest check-in/i }),
@@ -118,7 +118,7 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
   });
   it("manages participants from the selected Circle", async () => {
-    renderApp("/circles");
+    renderApp("/circles/demo-group");
     expect(
       screen.queryByRole("link", { name: "People" }),
     ).not.toBeInTheDocument();
@@ -127,6 +127,23 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Add people to Grace & Ground" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Search People")).toBeInTheDocument();
+  });
+  it("shows an overview before opening a Circle", () => {
+    renderApp("/circles");
+    expect(
+      screen.getByRole("heading", { name: "All Circles" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Grace & Ground/ }),
+    ).toHaveAttribute("href", "/circles/demo-group");
+  });
+  it("uses the gathering cover on the dashboard", () => {
+    const { container } = renderApp("/");
+    expect(
+      container.querySelector(
+        'article img[src="/assets/devotional-table.webp"]',
+      ),
+    ).toBeInTheDocument();
   });
   it("registers a new walk-in from gathering attendance", async () => {
     renderApp("/gatherings/meeting-1");
