@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { demoData } from "./data/demo";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { getErrorMessage } from "./lib/errors";
 import * as api from "./services/circles";
@@ -46,11 +45,21 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData | null>(structuredClone(demoData));
-  const [session, setSession] = useState<Session | null>(null);
+export function AppProvider({
+  children,
+  initialData = null,
+  initialSession = null,
+}: {
+  children: ReactNode;
+  initialData?: AppData | null;
+  initialSession?: Session | null;
+}) {
+  const [data, setData] = useState<AppData | null>(initialData);
+  const [session, setSession] = useState<Session | null>(initialSession);
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [loading, setLoading] = useState(
+    isSupabaseConfigured && !initialSession,
+  );
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const authenticatedUserRef = useRef<string>();
@@ -101,7 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setLoading(true);
           }
         } else {
-          setData(structuredClone(demoData));
+          setData(null);
           setSelectedGroupId(undefined);
           setError(null);
           setLoading(false);
@@ -155,7 +164,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (cause) {
       await supabase.auth.signOut({ scope: "local" });
       setSession(null);
-      setData(structuredClone(demoData));
+      setData(null);
       setSelectedGroupId(undefined);
       setError(null);
       throw cause;

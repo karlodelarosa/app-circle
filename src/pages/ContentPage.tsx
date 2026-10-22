@@ -4,7 +4,7 @@ import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
 import { saveCirclePublicListing, unpublishCirclePublicListing } from "../services/circles";
-import type { Group } from "../types";
+import type { Group, Testimony } from "../types";
 
 type Composer = "testimony" | "gallery" | "announcement" | null;
 const slugify = (value: string) =>
@@ -29,11 +29,15 @@ export function ContentPage() {
   const [circleEditor, setCircleEditor] = useState<Group | null>(null);
   const [circleDescription, setCircleDescription] = useState("");
   const [circleCover, setCircleCover] = useState<File | null>(null);
+  const [reviewing,setReviewing]=useState<Testimony | null>(null);
+  const [reviewName,setReviewName]=useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (composer && !dialogRef.current?.open) dialogRef.current?.showModal();
   }, [composer]);
   if (!data) return null;
+  const pendingTestimonies=data.testimonies.filter((item)=>item.status==="draft");
+  const publishTestimony=async(event:FormEvent)=>{event.preventDefault();if(!reviewing||!supabase)return;setBusy(true);const result=await supabase.from("circle_testimonies").update({author_display_name:reviewName.trim(),status:"published",published_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",reviewing.id);setBusy(false);if(result.error)setMessage(result.error.message);else{setReviewing(null);setMessage("Testimony published to the public community page.");await refresh()}};
   const editCircleProfile = (group: Group) => {
     const listing = data.publicCircleListings.find((item) => item.groupId === group.id);
     setCircleDescription(listing?.description || group.description || "");
@@ -246,13 +250,14 @@ export function ContentPage() {
           </div>
         </section>
       )}
+      <section className="mt-10 border-t border-line pt-8"><div className="section-heading"><div><h2>Pending testimonies</h2><p>Review stories submitted by members of {data.group?.name||"this Circle"}.</p></div></div>{pendingTestimonies.length?<div className="divide-y divide-line border-y border-line">{pendingTestimonies.map(item=><div key={item.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><h3 className="font-display text-2xl">{item.title}</h3><p className="mt-1 text-sm text-muted">Submitted by {item.authorName}</p><p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">{item.body}</p></div><button className="primary-button" onClick={()=>{setReviewing(item);setReviewName(item.authorName)}}>Review and publish</button></div>)}</div>:<p className="border-y border-line py-6 text-sm text-muted">No testimonies are waiting for review.</p>}</section>
       <div className="mt-9 grid gap-5 md:grid-cols-2">
         <ContentCard
           icon={Quote}
           title="Testimonies"
           description="Share approved stories with an intentional public author name."
           destination="Public homepage and Testimonies"
-          count={data.testimonies.length}
+          count={data.testimonies.filter((item) => item.status === "published").length}
           onAdd={() => {
             setMessage("");
             setComposer("testimony");
@@ -439,6 +444,7 @@ export function ContentPage() {
           </form>
         </dialog>
       )}
+      {reviewing&&<dialog open className="fixed inset-0 z-50 m-auto w-[min(36rem,calc(100%-2rem))] rounded-[1.75rem] border border-line bg-paper p-0 text-ink shadow-quiet backdrop:bg-ink/55"><form onSubmit={publishTestimony} className="p-6 sm:p-8"><p className="text-xs text-olive">Testimony review</p><h2 className="mt-2 font-display text-3xl">{reviewing.title}</h2><p className="mt-4 whitespace-pre-line leading-7 text-muted">{reviewing.body}</p><label className="field-label mt-6">Public author name<input className="field" required value={reviewName} onChange={(e)=>setReviewName(e.target.value)}/></label><div className="mt-6 flex justify-end gap-3"><button type="button" className="secondary-button" onClick={()=>setReviewing(null)}>Keep pending</button><button className="primary-button" disabled={busy}>{busy?"Publishing…":"Publish testimony"}</button></div></form></dialog>}
       {circleEditor && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCircleEditor(null); }}>
           <form role="dialog" aria-modal="true" aria-labelledby="circle-profile-title" onSubmit={publishCircleProfile} className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-[1.75rem] border border-line bg-paper text-ink shadow-quiet">

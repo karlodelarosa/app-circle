@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-The app includes demo content, so it can be explored locally without connecting a live church account. From the demo account menu, members can sign in using the same email and password they use for SheepCount.
+The signed-in area requires a SheepCount account or a Member ID created by a Circle leader. Public community pages and gathering invitations remain available without signing in.
 
 ## Deploying to Cloudflare
 
@@ -101,5 +101,23 @@ npx supabase functions deploy circle-gathering-share --project-ref qrmpogczieanp
 Set the Edge Function secret `CIRCLES_PUBLIC_ORIGIN` to
 `https://circles.elgchurch.com`. New invitations use the normal public RSVP URL
 directly; the Edge Function only keeps previously shared links working.
+
+### Circle member accounts
+
+Circle leaders can give app access to an active person who is already part of
+their Circle. Existing SheepCount accounts are linked automatically. People
+without an account receive a Member ID and a one-time temporary password.
+
+Apply the current database migrations, then deploy the two authenticated Edge
+Functions used for account creation and password changes:
+
+```bash
+npx supabase db push
+npx supabase functions deploy circle-member-access --project-ref qrmpogczieanpahxxxkc
+npx supabase functions deploy circle-change-password --project-ref qrmpogczieanpahxxxkc
+```
+
+The functions use Supabase’s built-in project secrets. Do not add or expose a
+service-role key in Cloudflare or in browser environment variables.
 
 After saving the settings, Cloudflare will build and deploy every new commit pushed to `main`. Other branches can use the version command to create a version without replacing the production deployment.

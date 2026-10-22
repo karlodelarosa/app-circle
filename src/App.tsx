@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
 import { useCircles } from "./AppContext";
 import { AppShell } from "./components/AppShell";
 import { CirclePage } from "./pages/CirclePage";
@@ -8,6 +9,10 @@ import { GatheringDetailPage } from "./pages/GatheringDetailPage";
 import { GatheringsPage } from "./pages/GatheringsPage";
 import { HomePage } from "./pages/HomePage";
 import { SignInPage } from "./pages/SignInPage";
+import { PrayerPage } from "./pages/PrayerPage";
+import { MemberTestimonyPage } from "./pages/MemberTestimonyPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { MorePage } from "./pages/MorePage";
 import { PwaUpdatePrompt, RouteScrollManager } from "./components/RouteExperience";
 import {
   GalleriesPage,
@@ -66,7 +71,19 @@ function RootEntry() {
 }
 function ProtectedApp() {
   const { data, session, loading, error, refresh, signOut } = useCircles();
+  const location = useLocation();
   if (loading) return <LoadingScreen />;
+  if (!session) {
+    const next = `${location.pathname}${location.search}`;
+    return (
+      <Navigate
+        to={`/sign-in?next=${encodeURIComponent(next)}`}
+        replace
+      />
+    );
+  }
+  if (data?.account.mustChangePassword && location.pathname !== "/change-password")
+    return <Navigate to="/change-password" replace />;
   if (error && !data)
     return (
       <ErrorScreen
@@ -78,6 +95,19 @@ function ProtectedApp() {
   if (!data) return <LoadingScreen />;
   return <AppShell />;
 }
+function HomeEntry() {
+  const { data } = useCircles();
+  if (!data) return null;
+  if (data.currentUser.role === "member")
+    return <Navigate to={data.group ? `/circles/${data.group.id}` : "/circles"} replace />;
+  return <HomePage />;
+}
+function LeaderOnly({ children }: { children: ReactNode }) {
+  const { data } = useCircles();
+  if (!data) return null;
+  const canLead = data.currentUser.role === "admin" || data.groups.some((group) => group.role === "leader");
+  return canLead ? children : <Navigate to="/circles" replace />;
+}
 
 export default function App() {
   return (
@@ -87,7 +117,7 @@ export default function App() {
       <Routes>
       <Route path="/sign-in" element={<RootEntry />} />
       <Route element={<ProtectedApp />}>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<HomeEntry />} />
         <Route path="/circles" element={<CirclePage />} />
         <Route path="/circles/:circleId" element={<CirclePage />} />
         <Route path="/gatherings" element={<GatheringsPage />} />
@@ -95,9 +125,13 @@ export default function App() {
         <Route path="/gatherings/:id" element={<GatheringDetailPage />} />
         <Route path="/gatherings/:id/:mode" element={<GatheringDetailPage />} />
         <Route path="/people" element={<Navigate to="/circles" replace />} />
-        <Route path="/content" element={<ContentPage />} />
-        <Route path="/connections" element={<ConnectionsPage />} />
-        <Route path="/connections/:connectionId" element={<ConnectionsPage />} />
+        <Route path="/prayer" element={<PrayerPage />} />
+        <Route path="/share-testimony" element={<MemberTestimonyPage />} />
+        <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route path="/more" element={<LeaderOnly><MorePage /></LeaderOnly>} />
+        <Route path="/content" element={<LeaderOnly><ContentPage /></LeaderOnly>} />
+        <Route path="/connections" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
+        <Route path="/connections/:connectionId" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
       </Route>
       <Route path="/app/*" element={<Navigate to="/" replace />} />
       <Route path="/:orgSlug" element={<PublicShell />}>

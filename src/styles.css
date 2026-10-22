@@ -87,7 +87,7 @@
 
   .circle-intro .botanical-mark { @apply pointer-events-none absolute -bottom-20 -right-3 font-display text-[16rem] leading-none text-paper/[.07]; transform: rotate(-15deg); }
   .invite-code { @apply flex min-h-14 w-full items-center justify-between rounded-xl border border-dashed border-sage bg-parchment px-5 font-mono text-lg tracking-[0.22em] text-olive; }
-  .member-row { @apply flex min-h-[76px] items-center gap-3 px-5 py-3 sm:px-7; }
+  .member-row { @apply flex min-h-[76px] flex-wrap items-center gap-3 px-5 py-3 sm:flex-nowrap sm:px-7; }
   .role-label { @apply rounded-full bg-parchment px-3 py-1 text-[10px] capitalize text-muted; }
   .role-label-leader { @apply bg-[#E4E5D8] text-olive; }
 
@@ -119,4 +119,11 @@
   .hero-cover img { object-position: 66% center; }
   .public-hero > img { object-position: 65% center; opacity: .48; }
   .public-hero-wash { background: linear-gradient(0deg, rgba(243,239,229,.98), rgba(243,239,229,.68)); }
+}
+
+@media (min-width: 768px) {
+  .gathering-share-actions { @apply flex flex-wrap items-center gap-2; }
+  .gathering-share-primary { @apply w-auto; }
+  .gathering-share-actions .primary-button,
+  .gathering-share-actions .secondary-button { @apply min-h-10 px-4; }
 }

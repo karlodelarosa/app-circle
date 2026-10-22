@@ -1,272 +1,187 @@
 import {
   CalendarDays,
   ChevronRight,
-  CircleUserRound,
+  Clock3,
   ExternalLink,
-  HeartHandshake,
+  Heart,
   Images,
-  Megaphone,
-  Quote,
+  MapPin,
+  Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCircles } from "../AppContext";
+import { Avatar } from "../components/Avatar";
 import { formatDate, formatTime } from "../lib/format";
-import type { RsvpStatus } from "../types";
 
-const choices: { value: RsvpStatus; label: string }[] = [
-  { value: "attending", label: "I’m going" },
-  { value: "tentative", label: "Maybe" },
-  { value: "declined", label: "Can’t go" },
-];
+const dayGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
 
 export function HomePage() {
-  const { data, setRsvp } = useCircles();
+  const { data } = useCircles();
   if (!data) return null;
-  const canLead =
-    data.currentUser.role === "admin" || data.group?.role === "leader";
-  const next = data.meetings
+
+  const upcoming = data.meetings
     .filter(
       (meeting) =>
         meeting.status === "scheduled" &&
         new Date(meeting.meetingDate) >= new Date(),
     )
-    .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
-  const my =
-    next && data.currentUser.personId
-      ? next.rsvps[data.currentUser.personId]
-      : undefined;
-  const latestAnnouncement = data.announcements[0];
-  const latestGallery = data.galleries[0];
-  const latestTestimony = data.testimonies[0];
+    .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
+  const next = upcoming[0];
+  const following = upcoming[1];
+  const prayers = data.prayers.filter((prayer) => !prayer.isAnswered).slice(0, 3);
+  const announcement = data.announcements[0];
+  const gallery = data.galleries[0];
+  const heroImage = next?.coverUrl || data.organization.imageUrl || "/assets/devotional-table.webp";
+  const attending = following
+    ? Object.entries(following.rsvps)
+        .filter(([, status]) => status === "attending")
+        .map(([id]) => data.members.find((member) => member.id === id))
+        .filter((member) => member !== undefined)
+    : [];
 
   return (
     <div>
       <header className="flex flex-col gap-5 border-b border-line pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-olive">Welcome back</p>
-          <h1 className="mt-1 font-display text-5xl leading-none sm:text-6xl">
-            {data.currentUser.fullName.split(" ")[0]}
+          <p className="text-xs uppercase tracking-[0.14em] text-olive">
+            {new Intl.DateTimeFormat(undefined, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            }).format(new Date())}
+          </p>
+          <h1 className="mt-2 font-display text-5xl leading-none sm:text-6xl">
+            {dayGreeting()}, {data.currentUser.fullName.split(" ")[0]}.
           </h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-            Here’s what is happening in your community and where you can take
-            part next.
+          <p className="mt-3 text-sm text-muted">
+            Here’s what is happening in {data.group?.name || "your community"}.
           </p>
         </div>
         {data.currentUser.role === "admin" && (
-          <a
-            href={`/${encodeURIComponent(data.organization.slug)}?browse=1`}
-            target="_blank"
-            rel="noreferrer"
-            className="secondary-button"
-          >
+          <a href={`/${data.organization.slug}?browse=1`} target="_blank" rel="noreferrer" className="secondary-button">
             <ExternalLink size={16} /> View public page
           </a>
         )}
       </header>
 
-      <section className="py-9">
-        <div className="section-heading">
-          <div>
-            <h2>Community updates</h2>
-            <p>The latest word for your Circle this week.</p>
-          </div>
-        </div>
-        <div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
-          {latestAnnouncement ? (
-            <article className="border-l-2 border-olive py-3 pl-5 sm:pl-8">
-              <div className="flex items-center gap-2 text-sm text-olive">
-                <Megaphone size={16} /> Latest announcement
-              </div>
-              <h3 className="mt-4 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">
-                {latestAnnouncement.title}
-              </h3>
-              <p className="mt-4 max-w-2xl whitespace-pre-line leading-7 text-muted">
-                {latestAnnouncement.body}
-              </p>
-              <p className="mt-5 text-xs text-muted">
-                Shared {formatDate(latestAnnouncement.publishedAt)}
-              </p>
-            </article>
-          ) : (
-            <div className="border-l-2 border-sage py-3 pl-5 sm:pl-8">
-              <h3 className="font-display text-3xl">No new announcements</h3>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
-                Important community notes will appear here when they are
-                published.
-              </p>
-              {canLead && (
-                <Link className="text-link mt-4" to="/content">
-                  Publish an update <ChevronRight size={15} />
-                </Link>
-              )}
-            </div>
-          )}
-          {canLead && data.connectionAttentionCount > 0 ? (
-            <Link
-              to="/connections"
-              className="flex min-h-44 flex-col justify-between rounded-3xl bg-olive p-6 text-paper"
-            >
-              <HeartHandshake />
-              <div>
-                <strong className="font-display text-3xl font-normal">
-                  {data.connectionAttentionCount} guest
-                  {data.connectionAttentionCount === 1 ? "" : "s"} waiting
-                </strong>
-                <span className="mt-3 flex items-center justify-between text-sm text-paper/75">
-                  Continue their welcome <ChevronRight size={16} />
-                </span>
-              </div>
-            </Link>
-          ) : (
-            <Link to="/circles" className="quick-action min-h-32">
-              <span className="quick-icon">
-                <CircleUserRound />
-              </span>
-              <span>
-                <strong>Your Circles</strong>
-                <small>
-                  {data.groups.length} connected {data.groups.length === 1 ? "Circle" : "Circles"}
-                </small>
-              </span>
-              <ChevronRight className="ml-auto text-muted" size={18} />
-            </Link>
-          )}
-        </div>
-      </section>
-
-      <section className="border-t border-line py-10">
-        <div className="section-heading">
-          <div>
-            <h2>Next gathering</h2>
-            <p>Your next opportunity to show up and share life together.</p>
-          </div>
-        </div>
+      <section className="py-8">
         {next ? (
-          <article className="overflow-hidden rounded-[2rem] border border-line bg-paper">
-            <div
-              className={`relative flex min-h-64 flex-col justify-end overflow-hidden p-6 sm:min-h-80 sm:p-9 ${next.coverUrl ? "text-paper" : "bg-[#EFEBDF]"}`}
-            >
-              {next.coverUrl && (
-                <>
-                  <img
-                    src={next.coverUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/50 to-transparent" />
-                </>
-              )}
-              <p className={`relative text-sm ${next.coverUrl ? "text-paper/80" : "text-olive"}`}>
-                {formatDate(next.meetingDate)} at {formatTime(next.meetingDate)}
-              </p>
-              <h3 className="relative mt-2 max-w-4xl font-display text-4xl leading-tight sm:text-6xl">
-                {next.title}
-              </h3>
-              <p className={`relative mt-3 text-sm ${next.coverUrl ? "text-paper/80" : "text-muted"}`}>
-                {next.location}
-              </p>
+          <Link to={`/gatherings/${next.id}`} className="group relative flex min-h-[22rem] overflow-hidden rounded-[2rem] text-paper sm:min-h-[28rem]">
+            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02] motion-reduce:transition-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/95 via-ink/35 to-ink/5" />
+            <div className="relative mt-auto max-w-4xl p-6 sm:p-10">
+              <p className="text-sm text-paper/75">Next gathering · {formatDate(next.meetingDate)} at {formatTime(next.meetingDate)}</p>
+              <h2 className="mt-3 font-display text-4xl leading-tight sm:text-6xl">{next.title}</h2>
+              <p className="mt-3 flex items-center gap-2 text-sm text-paper/80"><MapPin size={15} /> {next.location}</p>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium">View gathering <ChevronRight size={16} /></span>
             </div>
-            <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-end">
-              <div>
-                <p className="max-w-2xl leading-7 text-muted">
-                  {next.summary || next.notes}
-                </p>
-                {data.currentUser.personId ? (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {choices.map((choice) => (
-                      <button
-                        key={choice.value}
-                        onClick={() => void setRsvp(next.id, choice.value)}
-                        aria-pressed={my === choice.value}
-                        className={`rsvp-button ${my === choice.value ? "rsvp-button-active" : ""}`}
-                      >
-                        {choice.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-5 rounded-xl bg-parchment p-4 text-sm text-muted">
-                    Your login is not linked to a SheepCount People record. Ask
-                    your administrator to link it before RSVPing.
-                  </p>
-                )}
+          </Link>
+        ) : (
+          <div className="relative flex min-h-80 overflow-hidden rounded-[2rem] text-paper">
+            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-ink/60" />
+            <div className="relative m-auto p-8 text-center">
+              <CalendarDays className="mx-auto" />
+              <h2 className="mt-4 font-display text-4xl">Make room for the next gathering.</h2>
+              <Link to="/gatherings" className="secondary-button mt-5">View gatherings</Link>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.8fr)_minmax(18rem,.85fr)]">
+        <section className="paper-panel p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-4 border-b border-line pb-5">
+            <div>
+              <p className="text-xs uppercase tracking-[0.14em] text-olive">Up next</p>
+              <h2 className="mt-2 font-display text-3xl">Following gathering</h2>
+            </div>
+            <Link to="/gatherings" className="text-link">All gatherings <ChevronRight size={14} /></Link>
+          </div>
+          {following ? (
+            <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-4">
+              <div className="date-block">
+                <span>{formatDate(following.meetingDate, { month: "short" })}</span>
+                <strong>{new Date(following.meetingDate).getDate()}</strong>
               </div>
-              <Link className="primary-button" to={`/gatherings/${next.id}`}>
-                View gathering <ChevronRight size={15} />
-              </Link>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-2xl">{following.title}</h3>
+                    <p className="mt-1 text-sm text-muted">{data.group?.name}</p>
+                  </div>
+                  <div className="flex -space-x-2">
+                    {attending.slice(0, 3).map((member) => <Avatar key={member.id} person={member} />)}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
+                  <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(following.meetingDate)}</span>
+                  <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{following.location}</span>
+                  <span className="inline-flex items-center gap-1.5"><Users size={14} />{attending.length} going</span>
+                </div>
+              </div>
             </div>
-          </article>
-        ) : (
-          <div className="empty-state border-y border-line">
-            <CalendarDays />
-            <h3>No gathering planned</h3>
-            <p>
-              {canLead
-                ? "Plan the next time your community will gather."
-                : "Your leader will share the next gathering here."}
-            </p>
-            {canLead && <Link className="primary-button" to="/gatherings">Plan a gathering</Link>}
-          </div>
-        )}
-      </section>
+          ) : (
+            <div className="py-8 text-sm text-muted">There is no second gathering scheduled yet. <Link className="text-link ml-1" to="/gatherings">Plan or view gatherings</Link></div>
+          )}
+        </section>
 
-      <section className="border-t border-line py-10">
-        <div className="section-heading">
-          <div>
-            <h2>Community life</h2>
-            <p>Photographs and stories from life together.</p>
+        <aside className="paper-panel overflow-hidden lg:col-start-2 lg:row-start-1 lg:row-span-3">
+          <div className="flex items-center justify-between border-b border-line p-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.14em] text-olive">Care</p>
+              <h2 className="mt-2 font-display text-3xl">Prayer requests</h2>
+            </div>
+            <Link to="/prayer" className="text-link">View all <ChevronRight size={14} /></Link>
           </div>
-        </div>
-        {latestGallery || latestTestimony ? (
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
-            {latestGallery && (
-              <a
-                href={`/${data.organization.slug}/galleries/${latestGallery.slug}?browse=1`}
-                target="_blank"
-                rel="noreferrer"
-                className="group relative min-h-72 overflow-hidden rounded-[2rem]"
-              >
-                <img
-                  src={latestGallery.coverUrl || "/assets/devotional-table.webp"}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/25 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-7 text-paper">
-                  <Images size={19} />
-                  <h3 className="mt-3 font-display text-4xl">{latestGallery.title}</h3>
-                  <p className="mt-2 text-sm text-paper/75">{latestGallery.description}</p>
-                </div>
-              </a>
-            )}
-            {latestTestimony && (
-              <article className="flex min-h-72 flex-col justify-between border-l-2 border-sage px-6 py-5">
-                <Quote className="text-olive" />
-                <div>
-                  <h3 className="font-display text-3xl leading-tight">{latestTestimony.title}</h3>
-                  <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted">{latestTestimony.body}</p>
-                  <p className="mt-5 text-xs text-olive">{latestTestimony.authorName}</p>
-                </div>
-              </article>
-            )}
+          <div className="divide-y divide-line px-6">
+            {prayers.length ? prayers.map((prayer) => (
+              <Link key={prayer.id} to="/prayer" className="flex gap-4 py-5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sage text-olive"><Heart size={17} /></span>
+                <span className="min-w-0">
+                  <strong className="block text-sm font-medium">{prayer.title}</strong>
+                  <small className="mt-1 block text-xs text-muted">{prayer.prayerCount} {prayer.prayerCount === 1 ? "person is" : "people are"} praying</small>
+                </span>
+              </Link>
+            )) : <p className="py-8 text-sm text-muted">No open requests right now.</p>}
           </div>
-        ) : (
-          <div className="border-y border-line py-8 text-sm text-muted">
-            Published photographs and testimonies will gather here over time.
-          </div>
-        )}
-      </section>
+        </aside>
 
-      <section className="border-t border-line py-10">
-        <Link to="/circles" className="quick-action">
-          <span className="quick-icon"><CircleUserRound /></span>
-          <span>
-            <strong>Explore your Circles</strong>
-            <small>People, places, and gatherings for each Circle</small>
-          </span>
-          <ChevronRight className="ml-auto text-muted" size={18} />
-        </Link>
-      </section>
+        <section className="paper-panel p-6 sm:p-8 lg:col-start-1">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.14em] text-olive">Latest announcement</p>
+            <span className="role-label">Members</span>
+          </div>
+          {announcement ? (
+            <>
+              <h2 className="mt-5 font-display text-4xl">{announcement.title}</h2>
+              <p className="mt-5 max-w-2xl whitespace-pre-line leading-7 text-muted">{announcement.body}</p>
+              <p className="mt-6 text-xs text-muted">Shared {formatDate(announcement.publishedAt)}</p>
+            </>
+          ) : (
+            <div className="py-8"><h2 className="font-display text-3xl">No current announcement</h2><p className="mt-2 text-sm text-muted">Your next community update will appear here.</p></div>
+          )}
+        </section>
+
+        {gallery ? (
+          <a href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`} target="_blank" rel="noreferrer" className="group relative flex min-h-72 overflow-hidden rounded-[2rem] text-paper lg:col-start-1">
+            <img src={gallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent" />
+            <div className="relative mt-auto p-6 sm:p-8">
+              <span className="flex items-center gap-2 text-xs text-paper/75"><Images size={15} />From the gallery</span>
+              <h2 className="mt-3 font-display text-4xl">{gallery.title}</h2>
+              <p className="mt-3 text-sm text-paper/75">View {gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"}</p>
+            </div>
+          </a>
+        ) : (
+          <div className="border-y border-line py-8 text-sm text-muted lg:col-start-1">Published community photographs will gather here over time.</div>
+        )}
+      </div>
     </div>
   );
 }

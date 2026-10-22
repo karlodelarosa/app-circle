@@ -1,16 +1,32 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import type { Session } from "@supabase/supabase-js";
 import App from "./App";
 import { AppProvider } from "./AppContext";
+import { demoData } from "./data/demo";
 
 vi.mock("./lib/supabase", () => ({
   isSupabaseConfigured: false,
   supabase: null,
 }));
-const renderApp = (path: string) =>
+const testSession = {
+  access_token: "test-token",
+  refresh_token: "test-refresh-token",
+  expires_in: 3600,
+  token_type: "bearer",
+  user: {
+    id: "demo-user",
+    email: "karlo@example.com",
+  },
+} as Session;
+
+const renderApp = (path: string, authenticated = true) =>
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AppProvider>
+      <AppProvider
+        initialData={authenticated ? structuredClone(demoData) : null}
+        initialSession={authenticated ? testSession : null}
+      >
         <App />
       </AppProvider>
     </MemoryRouter>,
@@ -108,7 +124,7 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
   });
   it("updates one member RSVP choice at a time", async () => {
-    renderApp("/");
+    renderApp("/gatherings/meeting-1");
     const maybe = screen.getByRole("button", { name: "Maybe" });
     const going = screen.getByRole("button", { name: "I’m going" });
     expect(going).toHaveAttribute("aria-pressed", "true");
@@ -116,27 +132,21 @@ describe("Circles MVP", () => {
     await waitFor(() => expect(maybe).toHaveAttribute("aria-pressed", "true"));
     expect(going).toHaveAttribute("aria-pressed", "false");
   });
-  it("lets a demo visitor open the SheepCount sign-in screen", async () => {
-    renderApp("/");
-    fireEvent.click(screen.getByRole("button", { name: /Karlo de la Rosa/i }));
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Sign in with SheepCount" }),
-    );
+  it("redirects an unauthenticated dashboard visit to SheepCount sign-in", async () => {
+    renderApp("/", false);
     expect(
       await screen.findByRole("heading", { name: "Return to your circle." }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Continue in demo mode" }),
-    ).toHaveAttribute("href", "/");
+      screen.queryByRole("link", { name: "Continue in demo mode" }),
+    ).not.toBeInTheDocument();
   });
-  it("shows leader gathering controls and no prayer navigation", () => {
+  it("shows leader gathering controls and prayer navigation", () => {
     renderApp("/gatherings");
     expect(
       screen.getByRole("button", { name: /plan a gathering/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Prayer" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Prayer" }).length).toBeGreaterThan(0);
     expect(
       screen.getAllByRole("button", { name: "Copy link" }).length,
     ).toBeGreaterThan(0);
@@ -179,18 +189,57 @@ describe("Circles MVP", () => {
   it("uses the gathering cover on the dashboard", () => {
     const { container } = renderApp("/");
     expect(
-      container.querySelector(
-        'article img[src="/assets/devotional-table.webp"]',
-      ),
+      container.querySelector('a[href="/gatherings/meeting-1"] img[src="/assets/devotional-table.webp"]'),
     ).toBeInTheDocument();
   });
-  it("orders the dashboard as community updates, gathering, and community life", () => {
+  it("orders the dashboard as hero, following gathering, prayer, announcement, and gallery", () => {
     renderApp("/");
-    const updates = screen.getByRole("heading", { name: "Community updates" });
-    const gathering = screen.getByRole("heading", { name: "Next gathering" });
-    const communityLife = screen.getByRole("heading", { name: "Community life" });
-    expect(updates.compareDocumentPosition(gathering) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(gathering.compareDocumentPosition(communityLife) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const hero = screen.getByRole("heading", { name: "Rooted in grace" });
+    const following = screen.getByRole("heading", { name: "Following gathering" });
+    const prayer = screen.getByRole("heading", { name: "Prayer requests" });
+    const announcement = screen.getByRole("heading", { name: "Bring a story from your week" });
+    const gallery = screen.getByRole("heading", { name: "Life around the table" });
+    expect(hero.compareDocumentPosition(following) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(following.compareDocumentPosition(prayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(prayer.compareDocumentPosition(announcement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(announcement.compareDocumentPosition(gallery) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("routes ordinary members to My Circle without a Dashboard destination", async () => {
+    const memberData = structuredClone(demoData);
+    memberData.currentUser = {
+      id: "member-auth",
+      personId: "member-2",
+      fullName: "Mara Santos",
+      email: "mara@example.com",
+      role: "member",
+    };
+    memberData.group = { ...memberData.group!, role: "member" };
+    memberData.groups = memberData.groups.map((group) => ({ ...group, role: "member" }));
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProvider initialData={memberData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Share testimony" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Life in our Circle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Life around the table" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Grace in the ordinary" })).toBeInTheDocument();
+  });
+  it("forces a generated member to change their temporary password", async () => {
+    const memberData = structuredClone(demoData);
+    memberData.account = { kind: "generated", loginId: "mara.santos-k7p4", mustChangePassword: true, status: "active" };
+    render(
+      <MemoryRouter initialEntries={["/gatherings"]}>
+        <AppProvider initialData={memberData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Choose your own password." })).toBeInTheDocument();
   });
   it("shows the persistent dashboard return while browsing public pages", async () => {
     renderApp("/ministry-lens-church?browse=1");

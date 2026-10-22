@@ -5,3 +5,9 @@ major_version = 17
 
 [functions.circle-gathering-share]
 verify_jwt = false
+
+[functions.circle-member-access]
+verify_jwt = true
+
+[functions.circle-change-password]
+verify_jwt = true

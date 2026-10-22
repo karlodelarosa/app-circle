@@ -33,6 +33,7 @@ export const demoData: AppData = {
     role: 'leader'
   },
   connectionAttentionCount: 1,
+  account: { kind: 'existing', mustChangePassword: false, status: 'active' },
   members: [
     { id: 'demo-user', membershipId: 'membership-1', fullName: 'Karlo de la Rosa', email: 'karlo@example.com', role: 'leader' },
     { id: 'member-2', membershipId: 'membership-2', fullName: 'Mara Santos', email: 'mara@example.com', role: 'member' },
@@ -61,7 +62,7 @@ export const demoData: AppData = {
     }
   ],
   announcements: [{ id: 'announcement-1', organizationId: 'demo-org', groupId: 'demo-group', title: 'Bring a story from your week', body: 'This Thursday we will begin around the table at 7:00 PM. Dinner is covered.', publishedAt: addDays(-1), isPublic: true }],
-  testimonies: [{ id: 'testimony-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-in-the-ordinary', title: 'Grace in the ordinary', body: 'In a season that felt hurried, our Circle became a place to slow down, listen, and notice how faithfully God was already at work.', authorName: 'Mara Santos', imageUrl: '/assets/devotional-table.webp', publishedAt: addDays(-8) }],
+  testimonies: [{ id: 'testimony-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-in-the-ordinary', title: 'Grace in the ordinary', body: 'In a season that felt hurried, our Circle became a place to slow down, listen, and notice how faithfully God was already at work.', authorName: 'Mara Santos', authorPersonId: 'member-2', imageUrl: '/assets/devotional-table.webp', publishedAt: addDays(-8), status: 'published' }],
   galleries: [{ id: 'gallery-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'life-around-the-table', title: 'Life around the table', description: 'Ordinary evenings made sacred by presence, prayer, and a shared meal.', coverUrl: '/assets/devotional-table.webp', publishedAt: addDays(-4), photos: [{ id: 'photo-1', imageUrl: '/assets/devotional-table.webp', altText: 'An open Bible and warm drink on a wooden table', caption: 'Making room to listen.' }] }],
   publicCircleListings: [{ id: 'demo-listing', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-and-ground', description: 'A place for honest conversation, shared meals, and growing faith.', coverUrl: '/assets/devotional-table.webp', isPublished: true }],
   prayers: [

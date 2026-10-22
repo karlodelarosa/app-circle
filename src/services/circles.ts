@@ -27,10 +27,12 @@ export async function loadAppData(
   userId: string,
   preferredGroupId?: string,
 ): Promise<AppData> {
-  const { data: rawContext, error: contextError } = await client.rpc(
-    "get_my_circle_context",
-  );
+  const [{ data: rawContext, error: contextError }, accountResult] = await Promise.all([
+    client.rpc("get_my_circle_context"),
+    client.rpc("get_my_circle_account_state"),
+  ]);
   if (contextError) throw contextError;
+  if (accountResult.error) throw accountResult.error;
   const context = rawContext as any;
   if (!context?.organization)
     throw new Error("No Circles organization is linked to this account.");
@@ -79,6 +81,12 @@ export async function loadAppData(
     publicCircleListings: [],
     currentUser,
     connectionAttentionCount: 0,
+    account: {
+      kind: accountResult.data?.kind,
+      loginId: accountResult.data?.loginId ?? undefined,
+      mustChangePassword: Boolean(accountResult.data?.mustChangePassword),
+      status: accountResult.data?.status,
+    },
   };
   const [attentionResult, listingsResult] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
@@ -101,7 +109,7 @@ export async function loadAppData(
   }));
   if (!group) return base;
 
-  const [membersResult, gatheringsResult, prayersResult] = await Promise.all([
+  const [membersResult, gatheringsResult, prayersResult, accountStatusesResult] = await Promise.all([
     client
       .from("cell_group_members")
       .select(
@@ -120,8 +128,11 @@ export async function loadAppData(
       )
       .eq("cell_group_id", group.id)
       .order("created_at", { ascending: false }),
+    currentUser.role === "admin" || group.role === "leader"
+      ? client.rpc("get_circle_member_account_statuses", { p_cell_group_id: group.id })
+      : Promise.resolve({ data: [], error: null }),
   ]);
-  for (const result of [membersResult, gatheringsResult, prayersResult])
+  for (const result of [membersResult, gatheringsResult, prayersResult, accountStatusesResult])
     if (result.error) throw result.error;
 
   const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
@@ -143,6 +154,7 @@ export async function loadAppData(
   if (rsvpsResult.error) throw rsvpsResult.error;
   if (clicksResult.error) throw clicksResult.error;
 
+  const accountStatuses = new Map((accountStatusesResult.data ?? []).map((item: any) => [item.personId, item]));
   const members: Member[] = (membersResult.data ?? []).map((row: any) => {
     const person = one(row.people);
     return {
@@ -153,6 +165,7 @@ export async function loadAppData(
       fullName: fullName(person),
       email: person?.email ?? "",
       avatarUrl: undefined,
+      account: accountStatuses.get(row.person_id) as any,
     };
   });
   const rsvps = rsvpsResult.data ?? [];
@@ -221,13 +234,15 @@ export async function loadAppData(
       .from("circle_testimonies")
       .select("*")
       .eq("organization_id", context.organization.id)
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
+      .eq("cell_group_id", group.id)
+      .in("status", ["draft", "published"])
+      .order("created_at", { ascending: false })
       .limit(6),
     client
       .from("circle_galleries")
       .select("id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,circle_gallery_photos(id,image_url,caption,alt_text)")
       .eq("organization_id", context.organization.id)
+      .eq("cell_group_id", group.id)
       .eq("status", "published")
       .order("published_at", { ascending: false })
       .limit(6),
@@ -253,8 +268,10 @@ export async function loadAppData(
     title: row.title,
     body: row.body,
     authorName: row.author_display_name,
+    authorPersonId: row.author_person_id ?? undefined,
     imageUrl: row.image_url ?? undefined,
-    publishedAt: row.published_at,
+    publishedAt: row.published_at ?? row.created_at,
+    status: row.status,
   }));
   const galleries: Gallery[] = (galleriesResult.data ?? []).map((row: any) => ({
     id: row.id,

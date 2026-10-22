@@ -283,6 +283,7 @@ export function GatheringDetailPage() {
                 <button
                   key={option.value}
                   onClick={() => void setRsvp(meeting.id, option.value)}
+                  aria-pressed={meeting.rsvps[data.currentUser.personId!] === option.value}
                   className={`rsvp-button ${meeting.rsvps[data.currentUser.personId!] === option.value ? "rsvp-button-active" : ""}`}
                 >
                   {option.label}

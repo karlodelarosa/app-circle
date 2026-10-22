@@ -5,10 +5,15 @@ import {
   FileText,
   Home,
   HeartHandshake,
+  Heart,
+  KeyRound,
   LogIn,
   LogOut,
+  MoreHorizontal,
+  Quote,
   WifiOff,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useCircles } from "../AppContext";
@@ -109,6 +114,8 @@ function AccountMenu({
               </Link>
             </>
           ) : (
+            <>
+            <Link to="/change-password" role="menuitem" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-parchment" onClick={()=>setOpen(false)}><KeyRound size={16}/>Change password</Link>
             <button
               type="button"
               role="menuitem"
@@ -118,6 +125,7 @@ function AccountMenu({
               <LogOut size={16} />
               Sign out
             </button>
+            </>
           )}
         </div>
       )}
@@ -133,24 +141,32 @@ export function AppShell() {
   const canLead =
     data.currentUser.role === "admin" ||
     data.groups.some((g) => g.role === "leader");
-  const links = [
+  const isMember = !canLead;
+  const memberHome = data.group ? `/circles/${data.group.id}` : "/circles";
+  type NavigationItem = {
+    to: string;
+    label: string;
+    mobileLabel: string;
+    icon: LucideIcon;
+    badge?: number;
+  };
+  const leaderLinks: NavigationItem[] = [
     { to: base, label: "Dashboard", mobileLabel: "Home", icon: Home },
     { to: "/circles", label: "My Circles", mobileLabel: "Circles", icon: CircleUserRound },
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
-    ...(canLead
-      ? [
-          {
-            to: "/connections",
-            label: "Guest connections",
-            mobileLabel: "Guests",
-            icon: HeartHandshake,
-            badge: data.connectionAttentionCount,
-          },
-          { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
-        ]
-      : []),
+    { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
+    { to: "/connections", label: "Guest connections", mobileLabel: "Guests", icon: HeartHandshake, badge: data.connectionAttentionCount },
+    { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
   ];
-  const topLevel = ["/", "/circles", "/gatherings", "/connections", "/content"];
+  const memberLinks: NavigationItem[] = [
+    { to: memberHome, label: "My Circle", mobileLabel: "My Circle", icon: CircleUserRound },
+    { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
+    { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
+    { to: "/share-testimony", label: "Share testimony", mobileLabel: "Share", icon: Quote },
+  ];
+  const links = isMember ? memberLinks : leaderLinks;
+  const mobileLinks: NavigationItem[] = isMember ? memberLinks : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
+  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/content", "/more"];
   const standaloneFallback = pathname.startsWith("/gatherings/")
     ? "/gatherings"
     : pathname.startsWith("/circles/")
@@ -161,7 +177,7 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-parchment text-ink">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-paper/95 px-6 py-7 lg:flex lg:flex-col">
-        <Link to="/">
+        <Link to={isMember ? memberHome : "/"}>
           <Brand />
         </Link>
         <div className="mt-10 border-t border-line pt-5">
@@ -211,20 +227,20 @@ export function AppShell() {
           </div>
         </header>
         <StandaloneRouteBar
-          homeTo="/"
-          homeLabel="Dashboard"
+          homeTo={isMember ? memberHome : "/"}
+          homeLabel={isMember ? "My Circle" : "Dashboard"}
           fallbackTo={standaloneFallback}
-          hidden={topLevel.includes(pathname)}
+          hidden={topLevel.includes(pathname) || (isMember && pathname === memberHome)}
         />
         <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
           <RouteOutlet />
         </main>
       </div>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden ${canLead ? "grid-cols-5" : "grid-cols-3"}`}
+        className={`fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden ${isMember ? "grid-cols-4" : "grid-cols-5"}`}
         aria-label="Main navigation"
       >
-        {links.map(({ to, mobileLabel, icon: Icon, ...item }) => (
+        {mobileLinks.map(({ to, mobileLabel, icon: Icon, ...item }) => (
           <NavLink
             key={to}
             to={to}

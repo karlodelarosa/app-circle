@@ -2,6 +2,11 @@ import {
   ChevronRight,
   MapPin,
   ShieldCheck,
+  KeyRound,
+  Copy,
+  Images,
+  Megaphone,
+  Quote,
   UserPlus,
   UsersRound,
 } from "lucide-react";
@@ -10,12 +15,16 @@ import { Link, useParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
+import { supabase } from "../lib/supabase";
+import { copyText } from "../lib/share";
 import { PeoplePage } from "./PeoplePage";
 
 export function CirclePage() {
   const { data, error, selectGroup } = useCircles();
   const { circleId } = useParams();
   const [managingPeople, setManagingPeople] = useState(false);
+  const [accountBusy,setAccountBusy]=useState<string|null>(null);
+  const [credentials,setCredentials]=useState<{name:string;loginId?:string;temporaryPassword?:string;message?:string}|null>(null);
   useEffect(() => {
     if (circleId && data?.group?.id !== circleId) {
       const found = data?.groups.find((group) => group.id === circleId);
@@ -151,6 +160,7 @@ export function CirclePage() {
     );
   const canManagePeople =
     data.currentUser.role === "admin" || data.group.role === "leader";
+  const manageAccount=async(member:typeof data.members[number],action:"provision"|"reset")=>{if(!supabase)return;setAccountBusy(member.id);const result=await supabase.functions.invoke("circle-member-access",{body:{action,groupId:data.group!.id,personId:member.id}});if(result.error||result.data?.error)setCredentials({name:member.fullName,message:result.data?.error||result.error?.message||"Account access could not be updated."});else{setCredentials({name:member.fullName,loginId:result.data.loginId,temporaryPassword:result.data.temporaryPassword,message:result.data.existingAccount?"Their existing SheepCount account is now linked to Circles.":result.data.alreadyExists?"This member already has Circles access.":undefined});await selectGroup(data.group!.id)}setAccountBusy(null)};
   const nextGathering = data.meetings
     .filter(
       (meeting) =>
@@ -159,6 +169,9 @@ export function CirclePage() {
         new Date(meeting.meetingDate) >= new Date(),
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
+  const latestAnnouncement = data.announcements[0];
+  const latestGallery = data.galleries[0];
+  const latestTestimony = data.testimonies.find((item) => item.status !== "draft");
   return (
     <div>
       <div className="page-heading">
@@ -186,6 +199,45 @@ export function CirclePage() {
         <Link className="primary-button" to={nextGathering ? `/gatherings/${nextGathering.id}` : "/gatherings"}>
           {nextGathering ? "View gathering" : "View gatherings"} <ChevronRight size={16} />
         </Link>
+      </section>
+      <section className="mt-10">
+        <div className="section-heading">
+          <div>
+            <h2>Life in our Circle</h2>
+            <p>Recent updates, photographs, and stories shared with this community.</p>
+          </div>
+        </div>
+        <div className="grid gap-5 md:grid-cols-3">
+          <article className="paper-panel p-6">
+            <Megaphone size={19} className="text-olive" />
+            <p className="mt-5 text-xs text-olive">Latest announcement</p>
+            <h3 className="mt-2 font-display text-2xl">{latestAnnouncement?.title || "No current update"}</h3>
+            <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted">{latestAnnouncement?.body || "Circle announcements will appear here."}</p>
+          </article>
+          {latestGallery ? (
+            <a href={`/${data.organization.slug}/galleries/${latestGallery.slug}`} target="_blank" rel="noreferrer" className="group relative min-h-64 overflow-hidden rounded-3xl text-paper">
+              <img src={latestGallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/15 to-transparent" />
+              <div className="relative flex h-full min-h-64 flex-col justify-end p-6">
+                <Images size={19} />
+                <h3 className="mt-3 font-display text-2xl">{latestGallery.title}</h3>
+                <p className="mt-2 text-xs text-paper/75">View gallery</p>
+              </div>
+            </a>
+          ) : (
+            <article className="paper-panel p-6"><Images className="text-olive" size={19} /><h3 className="mt-5 font-display text-2xl">No gallery yet</h3><p className="mt-3 text-sm leading-6 text-muted">Community photographs will appear here after they are published.</p></article>
+          )}
+          {latestTestimony ? (
+            <a href={`/${data.organization.slug}/testimonies/${latestTestimony.slug}`} target="_blank" rel="noreferrer" className="paper-panel p-6">
+              <Quote size={19} className="text-olive" />
+              <p className="mt-5 text-xs text-olive">Latest testimony</p>
+              <h3 className="mt-2 font-display text-2xl">{latestTestimony.title}</h3>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">{latestTestimony.body}</p>
+            </a>
+          ) : (
+            <article className="paper-panel p-6"><Quote className="text-olive" size={19} /><h3 className="mt-5 font-display text-2xl">Stories will gather here</h3><p className="mt-3 text-sm leading-6 text-muted">Published testimonies from your community will appear here.</p></article>
+          )}
+        </div>
       </section>
       <div className="mt-8 grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
         <aside className="paper-panel p-6">
@@ -215,7 +267,7 @@ export function CirclePage() {
             {data.members.map((m) => (
               <div key={m.id} className="member-row">
                 <Avatar person={m} size="lg" />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium">{m.fullName}</p>
                   <p className="text-xs text-muted">
                     {m.email || "No email on record"}
@@ -226,6 +278,9 @@ export function CirclePage() {
                 >
                   {m.role}
                 </span>
+                {canManagePeople&&m.role==="member"&&(
+                  m.account?.status==="active"?<button className="secondary-button ml-12 w-full sm:ml-0 sm:w-auto" disabled={accountBusy===m.id||m.account.kind!=="generated"} onClick={()=>m.account?.kind==="generated"&&window.confirm(`Issue a new temporary password for ${m.fullName}?`)?void manageAccount(m,"reset"):undefined}>{m.account.kind==="generated"?<><KeyRound size={15}/>Reset password</>:"SheepCount linked"}</button>:<button className="secondary-button ml-12 w-full sm:ml-0 sm:w-auto" disabled={accountBusy===m.id} onClick={()=>void manageAccount(m,"provision")}>{accountBusy===m.id?"Creating…":"Create app account"}</button>
+                )}
               </div>
             ))}
           </div>
@@ -249,6 +304,7 @@ export function CirclePage() {
           <PeoplePage compact />
         </Modal>
       )}
+      {credentials&&<Modal title="Member app access" onClose={()=>setCredentials(null)}><div><h3 className="font-display text-3xl">{credentials.name}</h3>{credentials.message&&<p className="mt-4 leading-6 text-muted">{credentials.message}</p>}{credentials.loginId&&credentials.temporaryPassword&&<><p className="mt-4 text-sm leading-6 text-muted">Copy these credentials now. The temporary password is shown only once and must be changed at first sign-in.</p><div className="mt-5 space-y-3 rounded-2xl bg-parchment p-5"><div><span className="text-xs text-muted">Member ID</span><strong className="mt-1 block font-mono">{credentials.loginId}</strong></div><div><span className="text-xs text-muted">Temporary password</span><strong className="mt-1 block break-all font-mono">{credentials.temporaryPassword}</strong></div></div><button className="primary-button mt-5 w-full" onClick={()=>void copyText(`Circles Member ID: ${credentials.loginId}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`)}><Copy size={16}/>Copy credentials</button></>}</div></Modal>}
     </div>
   );
 }

@@ -22,6 +22,14 @@ export interface Profile {
 export interface Member extends Profile {
   membershipId: string;
   role: Role;
+  account?: MemberAccountStatus;
+}
+
+export interface MemberAccountStatus {
+  status: "none" | "active" | "inactive";
+  kind?: "existing" | "generated";
+  loginId?: string;
+  mustChangePassword: boolean;
 }
 
 export interface Group {
@@ -143,8 +151,10 @@ export interface Testimony {
   title: string;
   body: string;
   authorName: string;
+  authorPersonId?: string;
   imageUrl?: string;
   publishedAt: string;
+  status?: "draft" | "published";
 }
 
 export interface GalleryPhoto {
@@ -222,6 +232,12 @@ export interface AppData {
   publicCircleListings: CirclePublicListing[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
+  account: {
+    kind?: "existing" | "generated";
+    loginId?: string;
+    mustChangePassword: boolean;
+    status?: string;
+  };
 }
 
 export interface MeetingInput {
