@@ -368,6 +368,13 @@ describe("Circles MVP", () => {
     expect(screen.getByText("One uppercase letter")).toBeInTheDocument();
     expect(screen.getByText("One lowercase letter")).toBeInTheDocument();
     expect(screen.getByText("One number")).toBeInTheDocument();
+    const password = screen.getByLabelText("New password");
+    const confirmation = screen.getByLabelText("Confirm new password");
+    expect(password).toHaveAttribute("type", "password");
+    expect(confirmation).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show passwords" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(confirmation).toHaveAttribute("type", "text");
   });
   it("shows the persistent dashboard return while browsing public pages", async () => {
     renderApp("/ministry-lens-church?browse=1");

@@ -25,17 +25,21 @@ export async function getFunctionErrorMessage(
   if (result.data?.error) return result.data.error;
   const functionError = result.error as {
     message?: string;
-    context?: Response;
+    context?: {
+      clone?: () => { json?: () => Promise<unknown> };
+      json?: () => Promise<unknown>;
+    };
   } | null;
-  if (functionError?.context instanceof Response) {
+  if (functionError?.context) {
     try {
-      const payload = await functionError.context.clone().json() as {
-        error?: string;
-      };
-      if (payload.error) return payload.error;
+      const readableContext = functionError.context.clone?.() ?? functionError.context;
+      const payload = await readableContext.json?.() as { error?: string } | undefined;
+      if (payload?.error) return payload.error;
     } catch {
-      // Fall back to the SDK message when the response is not JSON.
+      // Fall through to a safe user-facing message when the response is not JSON.
     }
   }
-  return functionError?.message || fallback;
+  const message = functionError?.message;
+  if (message && !message.toLowerCase().includes("non-2xx status code")) return message;
+  return fallback;
 }

@@ -61,4 +61,35 @@ describe("invokeAuthenticatedFunction", () => {
       "Use at least 10 characters with uppercase, lowercase, and a number.",
     );
   });
+
+  it("reads function errors from SDK response-like contexts", async () => {
+    const message = await getFunctionErrorMessage(
+      {
+        data: null,
+        error: {
+          message: "Edge Function returned a non-2xx status code",
+          context: {
+            clone: () => ({
+              json: async () => ({ error: "That password is not allowed." }),
+            }),
+          },
+        },
+      },
+      "Password could not be changed.",
+    );
+
+    expect(message).toBe("That password is not allowed.");
+  });
+
+  it("never exposes the generic non-2xx SDK message", async () => {
+    const message = await getFunctionErrorMessage(
+      {
+        data: null,
+        error: { message: "Edge Function returned a non-2xx status code" },
+      },
+      "Password could not be changed.",
+    );
+
+    expect(message).toBe("Password could not be changed.");
+  });
 });
