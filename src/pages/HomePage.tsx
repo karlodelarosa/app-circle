@@ -50,7 +50,7 @@ export function HomePage() {
 
   return (
     <div>
-      <header className="flex flex-col gap-5 border-b border-line pb-7 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-olive">
             {new Intl.DateTimeFormat(undefined, {
@@ -59,7 +59,7 @@ export function HomePage() {
               day: "numeric",
             }).format(new Date())}
           </p>
-          <h1 className="mt-2 font-display text-5xl leading-none sm:text-6xl">
+          <h1 className="mt-2 font-display text-5xl leading-none sm:text-[3.25rem]">
             {dayGreeting()}, {data.currentUser.fullName.split(" ")[0]}.
           </h1>
           <p className="mt-3 text-sm text-muted">
@@ -73,7 +73,7 @@ export function HomePage() {
         )}
       </header>
 
-      <section className="py-8">
+      <section className="py-6">
         <DashboardJumbotron
           defaultImage={defaultHeroImage}
           gatherings={upcoming.slice(0, 3)}

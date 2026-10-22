@@ -48,6 +48,7 @@ describe("DashboardJumbotron", () => {
     expect(screen.getByRole("heading", { name: "Make room for one another." })).toBeInTheDocument();
     expect(screen.getByText("Welcome to Grace & Ground")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View my Circle" })).toHaveAttribute("href", "/circles/circle-1");
+    expect(screen.getByRole("group", { name: "Slide 1 of 1" })).toHaveClass("lg:min-h-[21rem]");
     expect(screen.queryByRole("button", { name: "Next slide" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Show slide/ })).not.toBeInTheDocument();
   });

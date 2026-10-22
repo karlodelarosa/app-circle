@@ -163,7 +163,7 @@ export function DashboardJumbotron({
                 aria-hidden={!isActive}
                 aria-label={`Slide ${index + 1} of ${slides.length}`}
                 aria-roledescription="slide"
-                className="relative flex min-h-[24rem] w-full shrink-0 sm:min-h-[30rem]"
+                className="relative flex min-h-[23rem] w-full shrink-0 sm:min-h-[26rem] lg:min-h-[21rem] xl:min-h-[22rem]"
                 role="group"
               >
                 <img
@@ -172,9 +172,9 @@ export function DashboardJumbotron({
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
-                <div className={`relative mt-auto max-w-4xl p-6 sm:p-10 ${slides.length > 1 ? "pb-24 sm:pb-24" : "pb-9 sm:pb-11"}`}>
+                <div className={`relative mt-auto max-w-4xl p-6 sm:p-8 ${slides.length > 1 ? "pb-24" : "pb-8 lg:pb-9"}`}>
                   <p className="text-sm text-paper/80">Welcome to {circleName}</p>
-                  <h2 className="mt-2 max-w-3xl font-display text-4xl leading-[1.04] sm:text-6xl">
+                  <h2 className="mt-2 max-w-3xl font-display text-4xl leading-[1.04] sm:text-5xl">
                     Make room for one another.
                   </h2>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-paper/80 sm:text-base">
@@ -197,7 +197,7 @@ export function DashboardJumbotron({
               aria-hidden={!isActive}
               aria-label={`Slide ${index + 1} of ${slides.length}: ${meeting.title}`}
               aria-roledescription="slide"
-              className="group relative flex min-h-[22rem] w-full shrink-0 sm:min-h-[28rem]"
+              className="group relative flex min-h-[23rem] w-full shrink-0 sm:min-h-[26rem] lg:min-h-[21rem] xl:min-h-[22rem]"
               tabIndex={isActive ? 0 : -1}
             >
               <img
@@ -206,11 +206,11 @@ export function DashboardJumbotron({
                 className="absolute inset-0 h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-ink/95 via-ink/35 to-ink/5" />
-              <div className="relative mt-auto max-w-4xl p-6 pb-24 sm:p-10 sm:pb-24">
+              <div className="relative mt-auto max-w-4xl p-6 pb-24 sm:p-8 sm:pb-24">
                 <p className="text-sm text-paper/75">
                   Upcoming gathering · {formatDate(meeting.meetingDate)} at {formatTime(meeting.meetingDate)}
                 </p>
-                <h2 className="mt-3 font-display text-4xl leading-tight sm:text-6xl">
+                <h2 className="mt-3 font-display text-4xl leading-tight sm:text-5xl">
                   {meeting.title}
                 </h2>
                 <p className="mt-3 flex items-center gap-2 text-sm text-paper/80">
