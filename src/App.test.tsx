@@ -245,7 +245,7 @@ describe("Circles MVP", () => {
   });
   it("orders the dashboard as hero, following gathering, prayer, announcement, and gallery", () => {
     renderApp("/");
-    const hero = screen.getByRole("heading", { name: "Make room for the next gathering." });
+    const hero = screen.getByRole("heading", { name: "Make room for one another." });
     const following = screen.getByRole("heading", { name: "Following gathering" });
     const prayer = screen.getByRole("heading", { name: "Prayer requests" });
     const announcement = screen.getByRole("heading", { name: "Bring a story from your week" });

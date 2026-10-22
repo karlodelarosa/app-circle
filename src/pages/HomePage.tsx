@@ -38,8 +38,7 @@ export function HomePage() {
   const circleCover = data.publicCircleListings.find(
     (listing) => listing.groupId === data.group?.id,
   )?.coverUrl;
-  const defaultHeroImage =
-    circleCover || data.organization.imageUrl || "/assets/devotional-table.webp";
+  const defaultHeroImage = circleCover || "/assets/devotional-table.webp";
   const attending = next
     ? Object.entries(next.rsvps)
         .filter(([, status]) => status === "attending")
@@ -78,6 +77,8 @@ export function HomePage() {
         <DashboardJumbotron
           defaultImage={defaultHeroImage}
           gatherings={upcoming.slice(0, 3)}
+          circleName={data.group?.name}
+          circlePath={data.group ? `/circles/${data.group.id}` : "/circles"}
         />
       </section>
 

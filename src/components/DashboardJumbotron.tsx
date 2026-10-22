@@ -1,5 +1,4 @@
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -18,6 +17,8 @@ import { formatDate, formatTime } from "../lib/format";
 interface DashboardJumbotronProps {
   defaultImage: string;
   gatherings: Meeting[];
+  circleName?: string;
+  circlePath?: string;
 }
 
 const AUTOPLAY_INTERVAL = 7000;
@@ -29,6 +30,8 @@ const reducedMotionPreference = () =>
 export function DashboardJumbotron({
   defaultImage,
   gatherings,
+  circleName = "your Circle",
+  circlePath = "/circles",
 }: DashboardJumbotronProps) {
   const slides = [
     { id: "welcome", meeting: undefined },
@@ -160,7 +163,7 @@ export function DashboardJumbotron({
                 aria-hidden={!isActive}
                 aria-label={`Slide ${index + 1} of ${slides.length}`}
                 aria-roledescription="slide"
-                className="relative flex min-h-[22rem] w-full shrink-0 sm:min-h-[28rem]"
+                className="relative flex min-h-[24rem] w-full shrink-0 sm:min-h-[30rem]"
                 role="group"
               >
                 <img
@@ -168,18 +171,21 @@ export function DashboardJumbotron({
                   alt=""
                   className="absolute inset-0 h-full w-full object-cover"
                 />
-                <div className="absolute inset-0 bg-ink/60" />
-                <div className="relative m-auto max-w-3xl px-7 pb-24 pt-12 text-center sm:px-12">
-                  <CalendarDays className="mx-auto" />
-                  <h2 className="mt-4 font-display text-4xl leading-tight sm:text-6xl">
-                    Make room for the next gathering.
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
+                <div className={`relative mt-auto max-w-4xl p-6 sm:p-10 ${slides.length > 1 ? "pb-24 sm:pb-24" : "pb-9 sm:pb-11"}`}>
+                  <p className="text-sm text-paper/80">Welcome to {circleName}</p>
+                  <h2 className="mt-2 max-w-3xl font-display text-4xl leading-[1.04] sm:text-6xl">
+                    Make room for one another.
                   </h2>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-paper/80 sm:text-base">
+                    Your Circle’s gatherings, prayers, and shared life begin here.
+                  </p>
                   <Link
-                    to="/gatherings"
+                    to={circlePath}
                     className="secondary-button mt-6"
                     tabIndex={isActive ? 0 : -1}
                   >
-                    View gatherings
+                    View my Circle
                   </Link>
                 </div>
               </div>

@@ -23,6 +23,8 @@ const renderCarousel = () =>
       <DashboardJumbotron
         defaultImage="/assets/devotional-table.webp"
         gatherings={[gathering]}
+        circleName="Grace & Ground"
+        circlePath="/circles/circle-1"
       />
     </MemoryRouter>,
   );
@@ -38,10 +40,14 @@ describe("DashboardJumbotron", () => {
         <DashboardJumbotron
           defaultImage="/assets/devotional-table.webp"
           gatherings={[]}
+          circleName="Grace & Ground"
+          circlePath="/circles/circle-1"
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: "Make room for the next gathering." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Make room for one another." })).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Grace & Ground")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View my Circle" })).toHaveAttribute("href", "/circles/circle-1");
     expect(screen.queryByRole("button", { name: "Next slide" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Show slide/ })).not.toBeInTheDocument();
   });
