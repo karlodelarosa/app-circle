@@ -155,9 +155,8 @@ export function GatheringsPage() {
                     </span>
                     <strong>{new Date(meeting.meetingDate).getDate()}</strong>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
+                  <div className="gathering-card-heading">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <h3>{meeting.title}</h3>
                           {meeting.status === "cancelled" && (
@@ -207,7 +206,8 @@ export function GatheringsPage() {
                           )}
                         </div>
                       )}
-                    </div>
+                  </div>
+                  <div className="gathering-card-body">
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted">
                       <span>
                         <Clock3 size={15} /> {formatTime(meeting.meetingDate)}
@@ -224,24 +224,24 @@ export function GatheringsPage() {
                       meeting.visibility === "public" &&
                       meeting.guestRsvpEnabled &&
                       meeting.slug && (
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <div className="gathering-share-actions">
                           <button
-                            className="secondary-button"
-                            onClick={() => setSharing(meeting)}
-                          >
-                            <QrCode size={15} /> Show invitation QR
-                          </button>
-                          <button
-                            className="secondary-button"
+                            className="primary-button gathering-share-primary"
                             onClick={() => void shareInvitation(meeting)}
                           >
                             <Share2 size={15} /> Share invitation
                           </button>
                           <button
                             className="secondary-button"
+                            onClick={() => setSharing(meeting)}
+                          >
+                            <QrCode size={15} /> QR code
+                          </button>
+                          <button
+                            className="secondary-button"
                             onClick={() => void copyInvitation(meeting)}
                           >
-                            <Copy size={15} /> Copy RSVP link
+                            <Copy size={15} /> Copy link
                           </button>
                         </div>
                       )}

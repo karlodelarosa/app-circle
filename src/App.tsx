@@ -16,6 +16,7 @@ import {
   PublicGatheringPage,
   PublicGatheringsPage,
   PublicHomePage,
+  PublicUpdatesPage,
   PublicShell,
   TestimoniesPage,
   TestimonyPage,
@@ -98,6 +99,7 @@ export default function App() {
       <Route path="/:orgSlug" element={<PublicShell />}>
         <Route index element={<PublicHomePage />} />
         <Route path="gatherings" element={<PublicGatheringsPage />} />
+        <Route path="updates" element={<PublicUpdatesPage />} />
         <Route
           path="gatherings/:gatheringSlug"
           element={<PublicGatheringPage />}

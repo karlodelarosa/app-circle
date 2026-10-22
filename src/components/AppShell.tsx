@@ -144,7 +144,7 @@ export function AppShell() {
             icon: HeartHandshake,
             badge: data.connectionAttentionCount,
           },
-          { to: "/content", label: "Content", mobileLabel: "Content", icon: FileText },
+          { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
         ]
       : []),
   ];

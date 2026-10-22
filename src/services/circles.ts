@@ -11,6 +11,7 @@ import type {
   RsvpStatus,
   PersonSearchResult,
   GuestConnection,
+  Gallery,
   ContactPreference,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
@@ -73,6 +74,7 @@ export async function loadAppData(
     prayers: [],
     announcements: [],
     testimonies: [],
+    galleries: [],
     currentUser,
     connectionAttentionCount: 0,
   };
@@ -191,7 +193,7 @@ export async function loadAppData(
       };
     },
   );
-  const [announcementsResult, testimoniesResult] = await Promise.all([
+  const [announcementsResult, testimoniesResult, galleriesResult] = await Promise.all([
     client
       .from("circle_announcements")
       .select("*")
@@ -206,16 +208,27 @@ export async function loadAppData(
       .eq("status", "published")
       .order("published_at", { ascending: false })
       .limit(6),
+    client
+      .from("circle_galleries")
+      .select("id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,circle_gallery_photos(id,image_url,caption,alt_text)")
+      .eq("organization_id", context.organization.id)
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .limit(6),
   ]);
-  const announcements = (announcementsResult.data ?? []).map((row: any) => ({
-    id: row.id,
-    organizationId: row.organization_id,
-    groupId: row.cell_group_id ?? undefined,
-    title: row.title,
-    body: row.body,
-    publishedAt: row.published_at,
-    expiresAt: row.expires_at ?? undefined,
-  }));
+  const now = Date.now();
+  const announcements = (announcementsResult.data ?? [])
+    .filter((row: any) => !row.expires_at || new Date(row.expires_at).getTime() > now)
+    .map((row: any) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      groupId: row.cell_group_id ?? undefined,
+      title: row.title,
+      body: row.body,
+      publishedAt: row.published_at,
+      expiresAt: row.expires_at ?? undefined,
+      isPublic: Boolean(row.is_public),
+    }));
   const testimonies = (testimoniesResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -227,7 +240,23 @@ export async function loadAppData(
     imageUrl: row.image_url ?? undefined,
     publishedAt: row.published_at,
   }));
-  return { ...base, members, meetings, prayers, announcements, testimonies };
+  const galleries: Gallery[] = (galleriesResult.data ?? []).map((row: any) => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    groupId: row.cell_group_id ?? undefined,
+    slug: row.public_slug,
+    title: row.title,
+    description: row.description ?? "",
+    coverUrl: row.cover_url ?? undefined,
+    publishedAt: row.published_at,
+    photos: (row.circle_gallery_photos ?? []).map((photo: any) => ({
+      id: photo.id,
+      imageUrl: photo.image_url,
+      caption: photo.caption ?? undefined,
+      altText: photo.alt_text ?? "",
+    })),
+  }));
+  return { ...base, members, meetings, prayers, announcements, testimonies, galleries };
 }
 
 export async function acceptAccess(client: SupabaseClient) {

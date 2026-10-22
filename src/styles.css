@@ -49,14 +49,19 @@
   .prayer-preview > div { @apply mt-5 text-xs text-muted; }
 
   .field-label { @apply block text-xs font-medium text-ink; }
-  .field { @apply mt-2 block min-h-12 w-full rounded-xl border border-line bg-[#FFFDF8] px-4 py-3 text-sm text-ink placeholder:text-[#9A978F] focus:border-olive focus:outline-none focus:ring-2 focus:ring-olive/10; }
+  .field { @apply mt-2 block min-h-12 w-full rounded-xl border border-line bg-[#FFFDF8] px-4 py-3 text-base text-ink placeholder:text-[#9A978F] focus:border-olive focus:outline-none focus:ring-2 focus:ring-olive/10 sm:text-sm; }
   .choice-chip { @apply rounded-full border border-line px-3 py-2 text-xs text-muted transition-colors; }
   .choice-chip-active { @apply border-olive bg-olive text-paper; }
   .form-error { @apply rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800; }
 
-  .gathering-card { @apply flex gap-4 rounded-3xl border border-line bg-paper p-5 sm:gap-6 sm:p-7; }
+  .gathering-card { @apply grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 rounded-3xl border border-line bg-paper p-5 sm:gap-x-6 sm:p-7; }
   .gathering-card h3 { @apply font-display text-2xl leading-tight sm:text-3xl; }
   .gathering-card .date-block { @apply flex h-[72px] w-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#EEE8DA] text-center sm:h-20 sm:w-16; }
+  .gathering-card-heading { @apply flex min-w-0 items-start justify-between gap-2; }
+  .gathering-card-body { @apply col-start-2 min-w-0; }
+  .gathering-share-actions { @apply mt-4 grid grid-cols-2 gap-2; }
+  .gathering-share-primary { @apply col-span-2 w-full; }
+  .gathering-share-actions .secondary-button { @apply min-h-11 px-3; }
   .date-block span { @apply text-[10px] uppercase tracking-wider text-muted; }
   .date-block strong { @apply font-display text-3xl font-medium leading-none; }
   .gathering-card > div:last-child > div:nth-child(2) span { @apply inline-flex items-center gap-1.5; }
@@ -102,6 +107,8 @@
 }
 
 @media (max-width: 639px) {
+  input, select, textarea { font-size: 16px; }
+  .gathering-card-body { grid-column: 1 / -1; }
   .hero-cover img { object-position: 66% center; }
   .public-hero > img { object-position: 65% center; opacity: .48; }
   .public-hero-wash { background: linear-gradient(0deg, rgba(243,239,229,.98), rgba(243,239,229,.68)); }

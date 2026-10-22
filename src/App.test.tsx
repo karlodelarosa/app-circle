@@ -99,7 +99,7 @@ describe("Circles MVP", () => {
       screen.queryByRole("link", { name: "Prayer" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Copy RSVP link" }).length,
+      screen.getAllByRole("button", { name: "Copy link" }).length,
     ).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: /guest check-in/i }),
@@ -144,6 +144,36 @@ describe("Circles MVP", () => {
         'article img[src="/assets/devotional-table.webp"]',
       ),
     ).toBeInTheDocument();
+  });
+  it("orders the dashboard as community updates, gathering, and community life", () => {
+    renderApp("/");
+    const updates = screen.getByRole("heading", { name: "Community updates" });
+    const gathering = screen.getByRole("heading", { name: "Next gathering" });
+    const communityLife = screen.getByRole("heading", { name: "Community life" });
+    expect(updates.compareDocumentPosition(gathering) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gathering.compareDocumentPosition(communityLife) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("shows the persistent dashboard return while browsing public pages", async () => {
+    renderApp("/ministry-lens-church?browse=1");
+    expect(await screen.findByText("Public preview")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to dashboard" })).toHaveAttribute("href", "/");
+  });
+  it("keeps past gatherings out of public lists but preserves their direct link", async () => {
+    const list = renderApp("/ministry-lens-church/gatherings");
+    expect(await screen.findByRole("heading", { name: "Gatherings" })).toBeInTheDocument();
+    expect(screen.queryByText("Carrying one another")).not.toBeInTheDocument();
+    list.unmount();
+    renderApp("/ministry-lens-church/gatherings/carrying-one-another");
+    expect(await screen.findByText("This gathering has ended.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save my RSVP" })).not.toBeInTheDocument();
+  });
+  it("explains announcement audiences and keeps galleries discoverable in Publish", () => {
+    renderApp("/content");
+    expect(screen.getByRole("heading", { name: "Publish" })).toBeInTheDocument();
+    expect(screen.getByText("Life around the table")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Announcements" }));
+    expect(screen.getByLabelText("Members only")).toBeChecked();
+    expect(screen.getByLabelText("Members and public")).not.toBeChecked();
   });
   it("registers a new walk-in from gathering attendance", async () => {
     renderApp("/gatherings/meeting-1");

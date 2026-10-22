@@ -149,9 +149,16 @@ export function CirclePage() {
         </p>
       </div>
     );
-  const base = "";
   const canManagePeople =
     data.currentUser.role === "admin" || data.group.role === "leader";
+  const nextGathering = data.meetings
+    .filter(
+      (meeting) =>
+        meeting.groupId === data.group?.id &&
+        meeting.status === "scheduled" &&
+        new Date(meeting.meetingDate) >= new Date(),
+    )
+    .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
   return (
     <div>
       <div className="page-heading">
@@ -164,6 +171,22 @@ export function CirclePage() {
           View all Circles
         </Link>
       </div>
+      <section className="mt-8 flex flex-col gap-5 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs text-olive">Next gathering</p>
+          <h2 className="mt-1 font-display text-3xl">
+            {nextGathering?.title || "Nothing scheduled yet"}
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            {nextGathering
+              ? `${new Date(nextGathering.meetingDate).toLocaleDateString(undefined, { month: "long", day: "numeric" })} · ${nextGathering.location}`
+              : "The next date will appear here when it is planned."}
+          </p>
+        </div>
+        <Link className="primary-button" to={nextGathering ? `/gatherings/${nextGathering.id}` : "/gatherings"}>
+          {nextGathering ? "View gathering" : "View gatherings"} <ChevronRight size={16} />
+        </Link>
+      </section>
       <div className="mt-8 grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
         <aside className="paper-panel p-6">
           <MapPin className="text-olive" />
@@ -209,9 +232,6 @@ export function CirclePage() {
         </section>
       </div>
       <div className="mt-8 flex flex-wrap gap-3">
-        <Link className="secondary-button" to={`${base}/gatherings`}>
-          View gatherings
-        </Link>
         {canManagePeople && (
           <button
             className="primary-button"

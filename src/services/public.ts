@@ -15,7 +15,10 @@ export function demoPublicSpace(): PublicSpace {
     heroTitle: "There is room for you here.",
     heroImageUrl: "/assets/devotional-table.webp",
     gatherings: demoData.meetings.filter(
-      (item) => item.visibility === "public",
+      (item) =>
+        item.visibility === "public" &&
+        item.status === "scheduled" &&
+        new Date(item.meetingDate) >= new Date(),
     ),
     testimonies: demoData.testimonies,
     galleries: [
@@ -46,6 +49,7 @@ export function demoPublicSpace(): PublicSpace {
         ],
       },
     ],
+    announcements: demoData.announcements.filter((item) => item.isPublic),
     circles: demoData.groups.filter((item) => item.isPublic),
   };
 }
@@ -65,7 +69,34 @@ export async function loadPublicSpace(
   });
   if (error) throw error;
   if (!data) throw new Error("This community page is not available.");
-  return data as PublicSpace;
+  const space = data as PublicSpace;
+  return {
+    ...space,
+    announcements: space.announcements ?? [],
+    gatherings: space.gatherings ?? [],
+    testimonies: space.testimonies ?? [],
+    galleries: space.galleries ?? [],
+    circles: space.circles ?? [],
+  };
+}
+
+export async function loadPublicGathering(
+  client: SupabaseClient | null,
+  organizationSlug: string,
+  gatheringSlug: string,
+) {
+  if (!client) {
+    return (
+      demoData.meetings.find((item) => item.slug === gatheringSlug) ?? null
+    );
+  }
+  const { data, error } = await client.rpc("get_circle_public_gathering", {
+    p_org_slug: organizationSlug,
+    p_gathering_slug: gatheringSlug,
+  });
+  if (error) throw error;
+  return ((data as { gathering?: PublicSpace["gatherings"][number] } | null)
+    ?.gathering || null);
 }
 
 export async function submitGuestRsvp(

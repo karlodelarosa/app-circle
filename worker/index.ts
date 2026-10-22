@@ -22,7 +22,7 @@ interface PublicGathering {
 
 interface PublicSpaceResponse {
   organization?: { name?: string };
-  gatherings?: PublicGathering[];
+  gathering?: PublicGathering;
 }
 
 const escapeHtml = (value: unknown) =>
@@ -103,7 +103,7 @@ async function loadPublicGathering(
   env: WorkerEnv,
 ) {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
-  const endpoint = new URL("/rest/v1/rpc/get_circle_public_space", env.SUPABASE_URL);
+  const endpoint = new URL("/rest/v1/rpc/get_circle_public_gathering", env.SUPABASE_URL);
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -111,13 +111,14 @@ async function loadPublicGathering(
       authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ p_org_slug: parts.organization }),
+    body: JSON.stringify({
+      p_org_slug: parts.organization,
+      p_gathering_slug: parts.gathering,
+    }),
   });
   if (!response.ok) return null;
   const space = (await response.json()) as PublicSpaceResponse | null;
-  const gathering = space?.gatherings?.find(
-    (item) => item.slug === parts.gathering,
-  );
+  const gathering = space?.gathering;
   return space && gathering ? { space, gathering } : null;
 }
 

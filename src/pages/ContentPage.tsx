@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, Images, Megaphone, Plus, Quote, X } from "lucide-react";
+import { CalendarDays, ChevronRight, Images, Megaphone, Plus, Quote, X } from "lucide-react";
 import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
@@ -19,6 +19,7 @@ export function ContentPage() {
     body: "",
     author: "",
     description: "",
+    audience: "members" as "members" | "public",
   });
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
@@ -72,6 +73,7 @@ export function ContentPage() {
             title: form.title,
             body: form.body,
             published_at: new Date().toISOString(),
+            is_public: form.audience === "public",
           });
           if (error) throw error;
         } else if (composer === "gallery") {
@@ -114,10 +116,12 @@ export function ContentPage() {
         await refresh();
       }
       setMessage(
-        `${composer === "announcement" ? "Announcement" : composer === "gallery" ? "Gallery" : "Testimony"} published.`,
+        composer === "announcement"
+          ? `Announcement published to ${form.audience === "public" ? "the member dashboard and public Updates" : "the member dashboard"}.`
+          : `${composer === "gallery" ? "Gallery" : "Testimony"} published to the public community page.`,
       );
       setComposer(null);
-      setForm({ title: "", body: "", author: "", description: "" });
+      setForm({ title: "", body: "", author: "", description: "", audience: "members" });
       setFile(null);
     } catch (c) {
       setMessage(getErrorMessage(c, "Content could not be published."));
@@ -130,7 +134,7 @@ export function ContentPage() {
       <div className="page-heading">
         <div>
           <p className="page-kicker">Community publishing</p>
-          <h1>Content</h1>
+          <h1>Publish</h1>
           <p>
             Publish only what is meant for your organization’s public community
             space.
@@ -157,6 +161,7 @@ export function ContentPage() {
           icon={Quote}
           title="Testimonies"
           description="Share approved stories with an intentional public author name."
+          destination="Public homepage and Testimonies"
           count={data.testimonies.length}
           onAdd={() => {
             setMessage("");
@@ -166,7 +171,9 @@ export function ContentPage() {
         <ContentCard
           icon={Images}
           title="Galleries"
-          description="Create albums connected to gatherings and add accessible captions."
+          description="Publish a standalone photo album that remains easy to find later."
+          destination="Public homepage and Gallery"
+          count={data.galleries.length}
           onAdd={() => {
             setMessage("");
             setComposer("gallery");
@@ -176,12 +183,14 @@ export function ContentPage() {
           icon={CalendarDays}
           title="Public gatherings"
           description="Visibility and guest RSVP are managed from each gathering."
+          destination="Public Gatherings"
           count={data.meetings.filter((m) => m.visibility === "public").length}
         />
         <ContentCard
           icon={Megaphone}
           title="Announcements"
-          description="Keep members informed without creating a social feed."
+          description="Share a timely note with members, with optional public visibility."
+          destination="Member dashboard; public Updates when enabled"
           count={data.announcements.length}
           onAdd={() => {
             setMessage("");
@@ -270,15 +279,34 @@ export function ContentPage() {
                 </>
               )}
               {composer === "announcement" && (
-                <label className="field-label">
-                  Announcement
-                  <textarea
-                    className="field min-h-32"
-                    required
-                    value={form.body}
-                    onChange={(e) => setForm({ ...form, body: e.target.value })}
-                  />
-                </label>
+                <>
+                  <label className="field-label">
+                    Announcement
+                    <textarea
+                      className="field min-h-32"
+                      required
+                      value={form.body}
+                      onChange={(e) => setForm({ ...form, body: e.target.value })}
+                    />
+                  </label>
+                  <fieldset>
+                    <legend className="field-label">Audience</legend>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {[
+                        ["members", "Members only", "Appears on the signed-in dashboard."],
+                        ["public", "Members and public", "Also appears on public Updates."],
+                      ].map(([value, label, help]) => (
+                        <label key={value} className={`cursor-pointer rounded-2xl border p-4 ${form.audience === value ? "border-olive bg-parchment" : "border-line"}`}>
+                          <span className="flex items-center gap-2 text-sm font-medium">
+                            <input aria-label={label} type="radio" name="announcement-audience" value={value} checked={form.audience === value} onChange={() => setForm({ ...form, audience: value as "members" | "public" })} />
+                            {label}
+                          </span>
+                          <span className="mt-2 block text-xs leading-5 text-muted">{help}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                </>
               )}
               {composer === "gallery" && (
                 <>
@@ -321,6 +349,49 @@ export function ContentPage() {
           </form>
         </dialog>
       )}
+      <section className="mt-12 border-t border-line pt-8">
+        <div className="section-heading">
+          <div>
+            <h2>Recently published</h2>
+            <p>Open the destination to confirm exactly where each item appears.</p>
+          </div>
+        </div>
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div>
+            <h3 className="font-display text-2xl">Announcements</h3>
+            <div className="mt-3 divide-y divide-line border-y border-line">
+              {data.announcements.slice(0, 3).map((item) => (
+                <div key={item.id} className="py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-medium">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted">{item.isPublic ? "Member dashboard · Public Updates" : "Member dashboard"}</p>
+                    </div>
+                    {item.isPublic && <a className="text-link shrink-0" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/updates?browse=1`}>View <ChevronRight size={14} /></a>}
+                  </div>
+                </div>
+              ))}
+              {!data.announcements.length && <p className="py-5 text-sm text-muted">Published announcements will appear here.</p>}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-display text-2xl">Galleries</h3>
+            <div className="mt-3 divide-y divide-line border-y border-line">
+              {data.galleries.slice(0, 3).map((gallery) => (
+                <div key={gallery.id} className="flex items-center gap-4 py-4">
+                  <img src={gallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="h-14 w-16 rounded-xl object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{gallery.title}</p>
+                    <p className="mt-1 text-xs text-muted">{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · Public Gallery</p>
+                  </div>
+                  <a className="text-link shrink-0" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}>View <ChevronRight size={14} /></a>
+                </div>
+              ))}
+              {!data.galleries.length && <p className="py-5 text-sm text-muted">Published galleries will appear here and on the public Gallery page.</p>}
+            </div>
+          </div>
+        </div>
+      </section>
       <section className="mt-10 border-t border-line pt-8">
         <h2 className="font-display text-3xl">Publishing boundary</h2>
         <p className="mt-3 max-w-2xl leading-7 text-muted">
@@ -336,16 +407,18 @@ function ContentCard({
   title,
   description,
   count,
+  destination,
   onAdd,
 }: {
   icon: typeof Quote;
   title: string;
   description: string;
   count?: number;
+  destination: string;
   onAdd?: () => void;
 }) {
   return (
-    <article className="paper-panel p-7">
+    <article className="border-t border-line py-6">
       <div className="flex justify-between">
         <Icon className="text-olive" />
         {onAdd && (
@@ -362,6 +435,7 @@ function ContentCard({
         <div>
           <h2 className="font-display text-3xl">{title}</h2>
           <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
+          <p className="mt-3 text-xs font-medium text-olive">Appears in: {destination}</p>
         </div>
         {count !== undefined && (
           <span className="font-display text-4xl text-olive">{count}</span>

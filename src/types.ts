@@ -122,6 +122,7 @@ export interface Announcement {
   body: string;
   publishedAt: string;
   expiresAt?: string;
+  isPublic: boolean;
 }
 
 export interface Testimony {
@@ -164,6 +165,7 @@ export interface PublicSpace {
   testimonies: Testimony[];
   galleries: Gallery[];
   circles: Group[];
+  announcements: Announcement[];
 }
 
 export interface GuestRsvpInput {
@@ -206,6 +208,7 @@ export interface AppData {
   prayers: PrayerRequest[];
   announcements: Announcement[];
   testimonies: Testimony[];
+  galleries: Gallery[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
 }

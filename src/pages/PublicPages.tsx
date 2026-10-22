@@ -7,12 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ArrowLeft,
   CalendarDays,
   ChevronRight,
   Copy,
   Images,
   MapPin,
   Menu,
+  Megaphone,
   Share2,
   Smartphone,
   UsersRound,
@@ -38,6 +40,7 @@ import { supabase } from "../lib/supabase";
 import {
   galleryBySlug,
   loadPublicSpace,
+  loadPublicGathering,
   requestCircleConnection,
   submitGuestRsvp,
 } from "../services/public";
@@ -128,14 +131,26 @@ export function PublicShell() {
   const href = (path: string) => withBrowseMode(path, browse);
   const links = [
     ["Gatherings", `${base}/gatherings`],
-    ["Testimonies", `${base}/testimonies`],
-    ["Gallery", `${base}/galleries`],
-    ["Discover Circles", `${base}/circles`],
+    ...(space.announcements.length ? [["Updates", `${base}/updates`]] : []),
+    ...(space.testimonies.length ? [["Testimonies", `${base}/testimonies`]] : []),
+    ...(space.galleries.length ? [["Gallery", `${base}/galleries`]] : []),
+    ...(space.circles.length ? [["Discover Circles", `${base}/circles`]] : []),
   ];
   return (
     <PublicContext.Provider value={{ space, browse, href }}>
       <div className="min-h-screen bg-parchment text-ink">
-        <header className="sticky top-0 z-40 border-b border-line/80 bg-paper/95 backdrop-blur">
+        <div className="sticky top-0 z-40">
+        {browse && (
+          <div className="bg-olive text-paper">
+            <div className="mx-auto flex min-h-11 max-w-7xl items-center justify-between gap-4 px-5 text-xs lg:px-10">
+              <span>Public preview</span>
+              <Link to="/" className="inline-flex min-h-11 items-center gap-2 font-medium">
+                <ArrowLeft size={14} /> Back to dashboard
+              </Link>
+            </div>
+          </div>
+        )}
+        <header className="border-b border-line/80 bg-paper/95 backdrop-blur">
           <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 lg:px-10">
             <Link to={href(base)}>
               <Brand />
@@ -191,6 +206,7 @@ export function PublicShell() {
             </nav>
           )}
         </header>
+        </div>
         <Outlet />
         <footer className="border-t border-line bg-paper">
           <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-10 sm:flex-row sm:items-center sm:justify-between lg:px-10">
@@ -233,16 +249,39 @@ export function PublicHomePage() {
               >
                 Find a gathering
               </Link>
-              <Link
-                className="secondary-button min-h-11 justify-center"
-                to={href(`/${slug}/circles`)}
-              >
-                Discover Circles
-              </Link>
+              {space.circles.length > 0 && (
+                <Link
+                  className="secondary-button min-h-11 justify-center"
+                  to={href(`/${slug}/circles`)}
+                >
+                  Discover Circles
+                </Link>
+              )}
             </div>
           </div>
         </div>
       </section>
+      {space.announcements[0] && (
+        <section className="border-b border-line bg-paper">
+          <div className="public-section grid gap-6 py-10 sm:py-14 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+            <span className="grid h-11 w-11 place-items-center rounded-full bg-[#E4E5D8] text-olive">
+              <Megaphone size={18} />
+            </span>
+            <div>
+              <p className="text-sm text-olive">Latest community update</p>
+              <h2 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">
+                {space.announcements[0].title}
+              </h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
+                {space.announcements[0].body}
+              </p>
+            </div>
+            <Link className="text-link" to={href(`/${slug}/updates`)}>
+              All updates <ChevronRight size={15} />
+            </Link>
+          </div>
+        </section>
+      )}
       <section className="public-section">
         <div className="section-heading">
           <div>
@@ -259,6 +298,34 @@ export function PublicHomePage() {
           ))}
         </div>
       </section>
+      {space.galleries[0] && (
+        <section className="border-t border-line">
+          <div className="public-section grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
+            <div>
+              <p className="page-kicker">Life together</p>
+              <h2 className="mt-2 font-display text-4xl leading-tight sm:text-5xl">
+                Photographs from our community.
+              </h2>
+              <p className="mt-4 max-w-md leading-7 text-muted">
+                {space.galleries[0].description}
+              </p>
+              <Link className="text-link mt-6" to={href(`/${slug}/galleries`)}>
+                Visit the Gallery <ChevronRight size={15} />
+              </Link>
+            </div>
+            <Link
+              to={href(`/${slug}/galleries/${space.galleries[0].slug}`)}
+              className="group relative min-h-80 overflow-hidden rounded-[2rem]"
+            >
+              <img src={space.galleries[0].coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-transparent to-transparent" />
+              <h3 className="absolute inset-x-0 bottom-0 p-7 font-display text-4xl text-paper">
+                {space.galleries[0].title}
+              </h3>
+            </Link>
+          </div>
+        </section>
+      )}
       <section className="bg-paper">
         <div className="public-section grid gap-8 lg:grid-cols-[.8fr_1.2fr]">
           <div>
@@ -468,7 +535,9 @@ export function PublicGatheringPage() {
   const { space, browse, href } = usePublic();
   const { gatheringSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const item = space.gatherings.find((entry) => entry.slug === gatheringSlug);
+  const indexedItem = space.gatherings.find((entry) => entry.slug === gatheringSlug);
+  const [directItem, setDirectItem] = useState<typeof indexedItem>();
+  const [itemLoading, setItemLoading] = useState(!indexedItem);
   const [done, setDone] = useState(false);
   const [rsvpId, setRsvpId] = useState<string>();
   const [connectOpen, setConnectOpen] = useState(false);
@@ -490,6 +559,29 @@ export function PublicGatheringPage() {
     consent: false,
   });
   const install = useInstallPrompt();
+  useEffect(() => {
+    if (indexedItem) {
+      setDirectItem(indexedItem);
+      setItemLoading(false);
+      return;
+    }
+    setItemLoading(true);
+    void loadPublicGathering(
+      supabase,
+      space.organization.slug,
+      gatheringSlug || "",
+    )
+      .then((value) => setDirectItem(value || undefined))
+      .catch(() => setDirectItem(undefined))
+      .finally(() => setItemLoading(false));
+  }, [gatheringSlug, indexedItem, space.organization.slug]);
+  const item = indexedItem || directItem;
+  if (itemLoading)
+    return (
+      <div className="grid min-h-64 place-items-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
+      </div>
+    );
   if (!item)
     return (
       <PublicIndex
@@ -497,6 +589,8 @@ export function PublicGatheringPage() {
         intro="This invitation may have moved or is no longer public."
       />
     );
+  const ended = new Date(item.meetingDate) < new Date();
+  const listedCircle = space.circles.find((circle) => circle.id === item.groupId);
   const communityUrl = publicCommunityUrl(space.organization.slug);
   const saveCommunityLink = async () => {
     try {
@@ -599,12 +693,14 @@ export function PublicGatheringPage() {
                   {item.location}
                 </p>
               </div>
-              <button
-                className="secondary-button mt-8 min-h-11"
-                onClick={() => void shareInvitation()}
-              >
-                <Share2 size={16} /> Share invitation
-              </button>
+              {!ended && (
+                <button
+                  className="secondary-button mt-8 min-h-11"
+                  onClick={() => void shareInvitation()}
+                >
+                  <Share2 size={16} /> Share invitation
+                </button>
+              )}
               {returnStatus && !done && (
                 <p role="status" className="mt-3 text-sm text-olive">
                   {returnStatus}
@@ -612,7 +708,19 @@ export function PublicGatheringPage() {
               )}
             </div>
             <div className="border-t border-line pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
-              {done ? (
+              {ended ? (
+                <div className="py-4">
+                  <p className="font-display text-4xl leading-tight">
+                    This gathering has ended.
+                  </p>
+                  <p className="mt-3 leading-7 text-muted">
+                    This invitation remains available for reference. See what is coming next in the community.
+                  </p>
+                  <Link className="primary-button mt-6" to={href(`/${space.organization.slug}/gatherings`)}>
+                    See upcoming gatherings
+                  </Link>
+                </div>
+              ) : done ? (
                 <div>
                   <p className="font-display text-4xl leading-tight">
                     You’re on the list.
@@ -621,22 +729,22 @@ export function PublicGatheringPage() {
                     We look forward to welcoming you.
                   </p>
                   <div className="mt-7 grid gap-3">
-                    <button
-                      className="primary-button min-h-11 w-full justify-center"
-                      onClick={() =>
-                        document
-                          .getElementById("circle-life")
-                          ?.scrollIntoView({
-                            behavior: window.matchMedia(
-                              "(prefers-reduced-motion: reduce)",
-                            ).matches
-                              ? "auto"
-                              : "smooth",
+                    {listedCircle ? (
+                      <button
+                        className="primary-button min-h-11 w-full justify-center"
+                        onClick={() =>
+                          document.getElementById("circle-life")?.scrollIntoView({
+                            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
                           })
-                      }
-                    >
-                      Explore this Circle
-                    </button>
+                        }
+                      >
+                        Explore this Circle
+                      </button>
+                    ) : (
+                      <Link className="primary-button min-h-11 w-full justify-center" to={withBrowseMode(`/${space.organization.slug}/gatherings`, true)}>
+                        See upcoming gatherings
+                      </Link>
+                    )}
                     <Link
                       className="secondary-button min-h-11 w-full justify-center text-center"
                       to={withBrowseMode(`/${space.organization.slug}`, true)}
@@ -716,8 +824,8 @@ export function PublicGatheringPage() {
                       </button>
                     )}
                   </div>
-                  <div className="mt-8 border-t border-line pt-6">
-                    <h2 className="font-display text-2xl">Come back anytime</h2>
+                  <details className="mt-8 border-t border-line pt-6">
+                    <summary className="cursor-pointer font-display text-2xl">More ways to stay connected</summary>
                     <p className="mt-2 text-sm leading-6 text-muted">
                       Save this community so its public gatherings and stories
                       are easy to find again.
@@ -754,7 +862,7 @@ export function PublicGatheringPage() {
                         {returnStatus}
                       </p>
                     )}
-                  </div>
+                  </details>
                 </div>
               ) : browse ? (
                 <div className="py-4">
@@ -841,7 +949,7 @@ export function PublicGatheringPage() {
           </div>
         </div>
       </section>
-      {(done || browse) && (
+      {(done || browse) && !ended && (
         <DiscoverySection
           space={space}
           gatheringId={item.id}
@@ -849,6 +957,34 @@ export function PublicGatheringPage() {
         />
       )}
     </main>
+  );
+}
+
+export function PublicUpdatesPage() {
+  const { space, href } = usePublic();
+  if (!space.announcements.length)
+    return (
+      <PublicIndex
+        title="Updates"
+        intro="There are no public community updates right now."
+      >
+        <Link className="primary-button" to={href(`/${space.organization.slug}/gatherings`)}>
+          See upcoming gatherings
+        </Link>
+      </PublicIndex>
+    );
+  return (
+    <PublicIndex title="Updates" intro="Current notes and invitations from our community.">
+      <div className="mx-auto max-w-4xl divide-y divide-line border-y border-line">
+        {space.announcements.map((item) => (
+          <article key={item.id} className="py-7 sm:py-10">
+            <p className="text-sm text-olive">{formatDate(item.publishedAt)}</p>
+            <h2 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">{item.title}</h2>
+            <p className="mt-4 whitespace-pre-line leading-7 text-muted">{item.body}</p>
+          </article>
+        ))}
+      </div>
+    </PublicIndex>
   );
 }
 
@@ -994,6 +1130,17 @@ export function GalleryPage() {
 
 export function PublicCirclesPage() {
   const { space, href } = usePublic();
+  if (!space.circles.length)
+    return (
+      <PublicIndex
+        title="Circles"
+        intro="This community has not published any Circle profiles yet."
+      >
+        <Link className="primary-button" to={href(`/${space.organization.slug}/gatherings`)}>
+          See upcoming gatherings
+        </Link>
+      </PublicIndex>
+    );
   return (
     <PublicIndex
       title="Discover Circles"

@@ -3,6 +3,8 @@ import {
   ChevronRight,
   CircleUserRound,
   ExternalLink,
+  HeartHandshake,
+  Images,
   Megaphone,
   Quote,
 } from "lucide-react";
@@ -16,83 +18,169 @@ const choices: { value: RsvpStatus; label: string }[] = [
   { value: "tentative", label: "Maybe" },
   { value: "declined", label: "Can’t go" },
 ];
+
 export function HomePage() {
   const { data, setRsvp } = useCircles();
   if (!data) return null;
-  const base = "";
-  const next = data.meetings.find(
-    (m) => m.status === "scheduled" && new Date(m.meetingDate) >= new Date(),
-  );
+  const canLead =
+    data.currentUser.role === "admin" || data.group?.role === "leader";
+  const next = data.meetings
+    .filter(
+      (meeting) =>
+        meeting.status === "scheduled" &&
+        new Date(meeting.meetingDate) >= new Date(),
+    )
+    .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
   const my =
     next && data.currentUser.personId
       ? next.rsvps[data.currentUser.personId]
       : undefined;
+  const latestAnnouncement = data.announcements[0];
+  const latestGallery = data.galleries[0];
+  const latestTestimony = data.testimonies[0];
+
   return (
     <div>
-      <section className="relative flex min-h-[22rem] flex-col justify-end overflow-hidden rounded-[2rem] p-7 text-paper sm:min-h-[26rem] sm:p-10">
-        <img
-          src="/assets/devotional-table.webp"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-ink/60" />
-        <p className="relative text-sm text-paper/75">
-          Welcome back, {data.currentUser.fullName.split(" ")[0]}
-        </p>
-        <h1 className="relative mt-3 max-w-2xl font-display text-5xl leading-[1.02] sm:text-7xl">
-          Make room for one another.
-        </h1>
-        <p className="relative mt-5 max-w-xl leading-7 text-paper/85">
-          Your gatherings, Circles, and community stories are gathered
-          here—without turning participation into another dashboard.
-        </p>
-      </section>
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
-        <section>
-          {next ? (
-            <article className="paper-panel overflow-hidden">
-              <div
-                className={`relative flex min-h-56 flex-col justify-end overflow-hidden border-b border-line p-6 sm:min-h-64 sm:p-8 ${next.coverUrl ? "text-paper" : "bg-[#EFEBDF]"}`}
-              >
-                {next.coverUrl && (
-                  <>
-                    <img
-                      src={next.coverUrl}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/45 to-ink/10" />
-                  </>
-                )}
-                <p
-                  className={`relative text-xs ${next.coverUrl ? "text-paper/80" : "text-olive"}`}
-                >
-                  Our next gathering
-                </p>
-                <h2 className="relative mt-2 font-display text-4xl">
-                  {next.title}
-                </h2>
-                <p
-                  className={`relative mt-3 text-sm ${next.coverUrl ? "text-paper/85" : "text-muted"}`}
-                >
-                  {formatDate(next.meetingDate)} at{" "}
-                  {formatTime(next.meetingDate)} · {next.location}
-                </p>
+      <header className="flex flex-col gap-5 border-b border-line pb-7 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-olive">Welcome back</p>
+          <h1 className="mt-1 font-display text-5xl leading-none sm:text-6xl">
+            {data.currentUser.fullName.split(" ")[0]}
+          </h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
+            Here’s what is happening in your community and where you can take
+            part next.
+          </p>
+        </div>
+        {data.currentUser.role === "admin" && (
+          <a
+            href={`/${encodeURIComponent(data.organization.slug)}?browse=1`}
+            target="_blank"
+            rel="noreferrer"
+            className="secondary-button"
+          >
+            <ExternalLink size={16} /> View public page
+          </a>
+        )}
+      </header>
+
+      <section className="py-9">
+        <div className="section-heading">
+          <div>
+            <h2>Community updates</h2>
+            <p>The latest word for your Circle this week.</p>
+          </div>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
+          {latestAnnouncement ? (
+            <article className="border-l-2 border-olive py-3 pl-5 sm:pl-8">
+              <div className="flex items-center gap-2 text-sm text-olive">
+                <Megaphone size={16} /> Latest announcement
               </div>
-              <div className="p-6 sm:p-8">
-                <p className="leading-7 text-muted">
+              <h3 className="mt-4 max-w-3xl font-display text-4xl leading-tight sm:text-5xl">
+                {latestAnnouncement.title}
+              </h3>
+              <p className="mt-4 max-w-2xl whitespace-pre-line leading-7 text-muted">
+                {latestAnnouncement.body}
+              </p>
+              <p className="mt-5 text-xs text-muted">
+                Shared {formatDate(latestAnnouncement.publishedAt)}
+              </p>
+            </article>
+          ) : (
+            <div className="border-l-2 border-sage py-3 pl-5 sm:pl-8">
+              <h3 className="font-display text-3xl">No new announcements</h3>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
+                Important community notes will appear here when they are
+                published.
+              </p>
+              {canLead && (
+                <Link className="text-link mt-4" to="/content">
+                  Publish an update <ChevronRight size={15} />
+                </Link>
+              )}
+            </div>
+          )}
+          {canLead && data.connectionAttentionCount > 0 ? (
+            <Link
+              to="/connections"
+              className="flex min-h-44 flex-col justify-between rounded-3xl bg-olive p-6 text-paper"
+            >
+              <HeartHandshake />
+              <div>
+                <strong className="font-display text-3xl font-normal">
+                  {data.connectionAttentionCount} guest
+                  {data.connectionAttentionCount === 1 ? "" : "s"} waiting
+                </strong>
+                <span className="mt-3 flex items-center justify-between text-sm text-paper/75">
+                  Continue their welcome <ChevronRight size={16} />
+                </span>
+              </div>
+            </Link>
+          ) : (
+            <Link to="/circles" className="quick-action min-h-32">
+              <span className="quick-icon">
+                <CircleUserRound />
+              </span>
+              <span>
+                <strong>Your Circles</strong>
+                <small>
+                  {data.groups.length} connected {data.groups.length === 1 ? "Circle" : "Circles"}
+                </small>
+              </span>
+              <ChevronRight className="ml-auto text-muted" size={18} />
+            </Link>
+          )}
+        </div>
+      </section>
+
+      <section className="border-t border-line py-10">
+        <div className="section-heading">
+          <div>
+            <h2>Next gathering</h2>
+            <p>Your next opportunity to show up and share life together.</p>
+          </div>
+        </div>
+        {next ? (
+          <article className="overflow-hidden rounded-[2rem] border border-line bg-paper">
+            <div
+              className={`relative flex min-h-64 flex-col justify-end overflow-hidden p-6 sm:min-h-80 sm:p-9 ${next.coverUrl ? "text-paper" : "bg-[#EFEBDF]"}`}
+            >
+              {next.coverUrl && (
+                <>
+                  <img
+                    src={next.coverUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/50 to-transparent" />
+                </>
+              )}
+              <p className={`relative text-sm ${next.coverUrl ? "text-paper/80" : "text-olive"}`}>
+                {formatDate(next.meetingDate)} at {formatTime(next.meetingDate)}
+              </p>
+              <h3 className="relative mt-2 max-w-4xl font-display text-4xl leading-tight sm:text-6xl">
+                {next.title}
+              </h3>
+              <p className={`relative mt-3 text-sm ${next.coverUrl ? "text-paper/80" : "text-muted"}`}>
+                {next.location}
+              </p>
+            </div>
+            <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div>
+                <p className="max-w-2xl leading-7 text-muted">
                   {next.summary || next.notes}
                 </p>
                 {data.currentUser.personId ? (
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    {choices.map((c) => (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {choices.map((choice) => (
                       <button
-                        key={c.value}
-                        onClick={() => void setRsvp(next.id, c.value)}
-                        aria-pressed={my === c.value}
-                        className={`rsvp-button ${my === c.value ? "rsvp-button-active" : ""}`}
+                        key={choice.value}
+                        onClick={() => void setRsvp(next.id, choice.value)}
+                        aria-pressed={my === choice.value}
+                        className={`rsvp-button ${my === choice.value ? "rsvp-button-active" : ""}`}
                       >
-                        {c.label}
+                        {choice.label}
                       </button>
                     ))}
                   </div>
@@ -102,83 +190,83 @@ export function HomePage() {
                     your administrator to link it before RSVPing.
                   </p>
                 )}
-                <Link
-                  className="text-link mt-6"
-                  to={`${base}/gatherings/${next.id}`}
-                >
-                  View gathering <ChevronRight size={15} />
-                </Link>
               </div>
-            </article>
-          ) : (
-            <div className="empty-state paper-panel">
-              <CalendarDays />
-              <h2>No gathering planned</h2>
+              <Link className="primary-button" to={`/gatherings/${next.id}`}>
+                View gathering <ChevronRight size={15} />
+              </Link>
             </div>
-          )}
-        </section>
-        <aside className="space-y-5">
-          <Link to={`${base}/circles`} className="quick-action">
-            <span className="quick-icon">
-              <CircleUserRound />
-            </span>
-            <span>
-              <strong>My Circles</strong>
-              <small>
-                {data.groups.length} connected{" "}
-                {data.groups.length === 1 ? "Circle" : "Circles"}
-              </small>
-            </span>
-            <ChevronRight className="ml-auto text-muted" size={18} />
-          </Link>
-          {data.currentUser.role === "admin" && (
-            <a
-              href={`/${encodeURIComponent(data.organization.slug)}?browse=1`}
-              target="_blank"
-              rel="noreferrer"
-              className="quick-action"
-            >
-              <span className="quick-icon">
-                <ExternalLink />
-              </span>
-              <span>
-                <strong>View public page</strong>
-                <small>Preview gatherings and community stories</small>
-              </span>
-              <ChevronRight className="ml-auto text-muted" size={18} />
-            </a>
-          )}
-          {data.announcements.slice(0, 2).map((a) => (
-            <article key={a.id} className="paper-panel p-5">
-              <Megaphone size={17} className="text-olive" />
-              <h2 className="mt-4 font-display text-2xl">{a.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted">{a.body}</p>
-            </article>
-          ))}
-        </aside>
-      </div>
-      {data.testimonies.length > 0 && (
-        <section className="mt-12">
-          <div className="section-heading">
-            <div>
-              <h2>Recent testimonies</h2>
-              <p>Stories published by your community.</p>
-            </div>
+          </article>
+        ) : (
+          <div className="empty-state border-y border-line">
+            <CalendarDays />
+            <h3>No gathering planned</h3>
+            <p>
+              {canLead
+                ? "Plan the next time your community will gather."
+                : "Your leader will share the next gathering here."}
+            </p>
+            {canLead && <Link className="primary-button" to="/gatherings">Plan a gathering</Link>}
           </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            {data.testimonies.map((t) => (
-              <article className="paper-panel p-6" key={t.id}>
-                <Quote className="text-sage" />
-                <h3 className="mt-5 font-display text-3xl">{t.title}</h3>
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">
-                  {t.body}
-                </p>
-                <p className="mt-5 text-xs text-olive">{t.authorName}</p>
+        )}
+      </section>
+
+      <section className="border-t border-line py-10">
+        <div className="section-heading">
+          <div>
+            <h2>Community life</h2>
+            <p>Photographs and stories from life together.</p>
+          </div>
+        </div>
+        {latestGallery || latestTestimony ? (
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+            {latestGallery && (
+              <a
+                href={`/${data.organization.slug}/galleries/${latestGallery.slug}?browse=1`}
+                target="_blank"
+                rel="noreferrer"
+                className="group relative min-h-72 overflow-hidden rounded-[2rem]"
+              >
+                <img
+                  src={latestGallery.coverUrl || "/assets/devotional-table.webp"}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/25 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-7 text-paper">
+                  <Images size={19} />
+                  <h3 className="mt-3 font-display text-4xl">{latestGallery.title}</h3>
+                  <p className="mt-2 text-sm text-paper/75">{latestGallery.description}</p>
+                </div>
+              </a>
+            )}
+            {latestTestimony && (
+              <article className="flex min-h-72 flex-col justify-between border-l-2 border-sage px-6 py-5">
+                <Quote className="text-olive" />
+                <div>
+                  <h3 className="font-display text-3xl leading-tight">{latestTestimony.title}</h3>
+                  <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted">{latestTestimony.body}</p>
+                  <p className="mt-5 text-xs text-olive">{latestTestimony.authorName}</p>
+                </div>
               </article>
-            ))}
+            )}
           </div>
-        </section>
-      )}
+        ) : (
+          <div className="border-y border-line py-8 text-sm text-muted">
+            Published photographs and testimonies will gather here over time.
+          </div>
+        )}
+      </section>
+
+      <section className="border-t border-line py-10">
+        <Link to="/circles" className="quick-action">
+          <span className="quick-icon"><CircleUserRound /></span>
+          <span>
+            <strong>Explore your Circles</strong>
+            <small>People, places, and gatherings for each Circle</small>
+          </span>
+          <ChevronRight className="ml-auto text-muted" size={18} />
+        </Link>
+      </section>
     </div>
   );
 }

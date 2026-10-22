@@ -57,11 +57,12 @@ export const demoData: AppData = {
       id: 'meeting-3', groupId: 'demo-group', title: 'Carrying one another', meetingDate: addDays(-7),
       location: 'The Cruz home', studyTopic: 'Galatians 6:1–10',
       notes: 'We reflected on practical ways to carry one another’s burdens this month.',
-      status: 'scheduled', createdBy: 'demo-user', organizationId: 'demo-org', slug: 'carrying-one-another', visibility: 'private', rsvps: { 'demo-user': 'attending', 'member-2': 'attending' }
+      status: 'scheduled', createdBy: 'demo-user', organizationId: 'demo-org', slug: 'carrying-one-another', summary: 'A completed gathering kept available for people returning to an invitation.', visibility: 'public', publishedAt: now.toISOString(), guestRsvpEnabled: true, rsvps: { 'demo-user': 'attending', 'member-2': 'attending' }
     }
   ],
-  announcements: [{ id: 'announcement-1', organizationId: 'demo-org', groupId: 'demo-group', title: 'Bring a story from your week', body: 'This Thursday we will begin around the table at 7:00 PM. Dinner is covered.', publishedAt: addDays(-1) }],
+  announcements: [{ id: 'announcement-1', organizationId: 'demo-org', groupId: 'demo-group', title: 'Bring a story from your week', body: 'This Thursday we will begin around the table at 7:00 PM. Dinner is covered.', publishedAt: addDays(-1), isPublic: true }],
   testimonies: [{ id: 'testimony-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-in-the-ordinary', title: 'Grace in the ordinary', body: 'In a season that felt hurried, our Circle became a place to slow down, listen, and notice how faithfully God was already at work.', authorName: 'Mara Santos', imageUrl: '/assets/devotional-table.webp', publishedAt: addDays(-8) }],
+  galleries: [{ id: 'gallery-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'life-around-the-table', title: 'Life around the table', description: 'Ordinary evenings made sacred by presence, prayer, and a shared meal.', coverUrl: '/assets/devotional-table.webp', publishedAt: addDays(-4), photos: [{ id: 'photo-1', imageUrl: '/assets/devotional-table.webp', altText: 'An open Bible and warm drink on a wooden table', caption: 'Making room to listen.' }] }],
   prayers: [
     {
       id: 'prayer-1', groupId: 'demo-group', userId: 'member-2', authorName: 'Mara Santos',

@@ -29,14 +29,12 @@ describe("Circles Cloudflare Worker", () => {
       vi.fn(async () =>
         Response.json({
           organization: { name: "ELGC & Friends" },
-          gatherings: [
-            {
-              slug: "lunch",
-              title: "Lunch <Together>",
-              summary: 'Bring friends & say "hello".',
-              coverUrl: "https://images.example/cover.webp",
-            },
-          ],
+          gathering: {
+            slug: "lunch",
+            title: "Lunch <Together>",
+            summary: 'Bring friends & say "hello".',
+            coverUrl: "https://images.example/cover.webp",
+          },
         }),
       ),
     );
@@ -70,16 +68,14 @@ describe("Circles Cloudflare Worker", () => {
   it("proxies the cover with crawler-friendly cache headers", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
-      if (url.includes("get_circle_public_space"))
+      if (url.includes("get_circle_public_gathering"))
         return Response.json({
           organization: { name: "ELGC" },
-          gatherings: [
-            {
-              slug: "lunch",
-              title: "Lunch",
-              coverUrl: "https://images.example/cover.webp",
-            },
-          ],
+          gathering: {
+            slug: "lunch",
+            title: "Lunch",
+            coverUrl: "https://images.example/cover.webp",
+          },
         });
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: {
