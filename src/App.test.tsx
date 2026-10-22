@@ -228,7 +228,7 @@ describe("Circles MVP", () => {
   });
   it("orders the dashboard as hero, following gathering, prayer, announcement, and gallery", () => {
     renderApp("/");
-    const hero = screen.getByRole("heading", { name: "Rooted in grace" });
+    const hero = screen.getByRole("heading", { name: "Make room for the next gathering." });
     const following = screen.getByRole("heading", { name: "Following gathering" });
     const prayer = screen.getByRole("heading", { name: "Prayer requests" });
     const announcement = screen.getByRole("heading", { name: "Bring a story from your week" });
@@ -237,6 +237,77 @@ describe("Circles MVP", () => {
     expect(following.compareDocumentPosition(prayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(prayer.compareDocumentPosition(announcement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(announcement.compareDocumentPosition(gallery) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("keeps the nearest gathering detailed beneath the jumbotron", () => {
+    renderApp("/");
+    expect(screen.getByRole("heading", { name: "Rooted in grace" })).toBeInTheDocument();
+    expect(screen.getByText("Colossians 2:6–7")).toBeInTheDocument();
+    expect(screen.getByText("3 going")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/)).toBeInTheDocument();
+  });
+  it("summarizes extra attendees and explains when no one is confirmed", () => {
+    const fullData = structuredClone(demoData);
+    fullData.meetings[0].rsvps = Object.fromEntries(
+      fullData.members.map((member) => [member.id, "attending"]),
+    );
+    const populated = render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProvider initialData={fullData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("+1")).toBeInTheDocument();
+    expect(screen.getByText("5 going")).toBeInTheDocument();
+    populated.unmount();
+
+    const emptyData = structuredClone(demoData);
+    emptyData.meetings[0].rsvps = {};
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProvider initialData={emptyData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("No one confirmed yet")).toBeInTheDocument();
+    expect(screen.getByText("0 going")).toBeInTheDocument();
+  });
+  it("limits the jumbotron to the next three upcoming gatherings", () => {
+    const carouselData = structuredClone(demoData);
+    const later = new Date();
+    later.setDate(later.getDate() + 20);
+    carouselData.meetings.push(
+      { ...carouselData.meetings[1], id: "meeting-4", title: "Third upcoming", meetingDate: later.toISOString() },
+      { ...carouselData.meetings[1], id: "meeting-5", title: "Fourth upcoming", meetingDate: new Date(later.getTime() + 86400000).toISOString() },
+    );
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProvider initialData={carouselData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByRole("button", { name: /Show slide/ })).toHaveLength(4);
+    expect(screen.queryByText("Fourth upcoming")).not.toBeInTheDocument();
+  });
+  it("hides empty editorial sections from a Circle detail", async () => {
+    const emptyCircle = structuredClone(demoData);
+    emptyCircle.announcements = [];
+    emptyCircle.galleries = [];
+    emptyCircle.testimonies = [];
+    render(
+      <MemoryRouter initialEntries={["/circles/demo-group"]}>
+        <AppProvider initialData={emptyCircle} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Grace & Ground updates" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Life in Grace & Ground" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Stories from Grace & Ground" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Our people" })).toBeInTheDocument();
   });
   it("routes ordinary members to My Circle without a Dashboard destination", async () => {
     const memberData = structuredClone(demoData);

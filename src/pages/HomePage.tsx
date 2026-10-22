@@ -1,5 +1,4 @@
 import {
-  CalendarDays,
   ChevronRight,
   Clock3,
   ExternalLink,
@@ -11,6 +10,7 @@ import {
 import { Link } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
+import { DashboardJumbotron } from "../components/DashboardJumbotron";
 import { formatDate, formatTime } from "../lib/format";
 
 const dayGreeting = () => {
@@ -32,17 +32,22 @@ export function HomePage() {
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
   const next = upcoming[0];
-  const following = upcoming[1];
   const prayers = data.prayers.filter((prayer) => !prayer.isAnswered).slice(0, 3);
   const announcement = data.announcements[0];
   const gallery = data.galleries[0];
-  const heroImage = next?.coverUrl || data.organization.imageUrl || "/assets/devotional-table.webp";
-  const attending = following
-    ? Object.entries(following.rsvps)
+  const circleCover = data.publicCircleListings.find(
+    (listing) => listing.groupId === data.group?.id,
+  )?.coverUrl;
+  const defaultHeroImage =
+    circleCover || data.organization.imageUrl || "/assets/devotional-table.webp";
+  const attending = next
+    ? Object.entries(next.rsvps)
         .filter(([, status]) => status === "attending")
         .map(([id]) => data.members.find((member) => member.id === id))
         .filter((member) => member !== undefined)
     : [];
+  const visibleAttendees = attending.slice(0, 4);
+  const additionalAttendees = Math.max(attending.length - visibleAttendees.length, 0);
 
   return (
     <div>
@@ -70,28 +75,10 @@ export function HomePage() {
       </header>
 
       <section className="py-8">
-        {next ? (
-          <Link to={`/gatherings/${next.id}`} className="group relative flex min-h-[22rem] overflow-hidden rounded-[2rem] text-paper sm:min-h-[28rem]">
-            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02] motion-reduce:transition-none" />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink/95 via-ink/35 to-ink/5" />
-            <div className="relative mt-auto max-w-4xl p-6 sm:p-10">
-              <p className="text-sm text-paper/75">Next gathering · {formatDate(next.meetingDate)} at {formatTime(next.meetingDate)}</p>
-              <h2 className="mt-3 font-display text-4xl leading-tight sm:text-6xl">{next.title}</h2>
-              <p className="mt-3 flex items-center gap-2 text-sm text-paper/80"><MapPin size={15} /> {next.location}</p>
-              <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium">View gathering <ChevronRight size={16} /></span>
-            </div>
-          </Link>
-        ) : (
-          <div className="relative flex min-h-80 overflow-hidden rounded-[2rem] text-paper">
-            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            <div className="absolute inset-0 bg-ink/60" />
-            <div className="relative m-auto p-8 text-center">
-              <CalendarDays className="mx-auto" />
-              <h2 className="mt-4 font-display text-4xl">Make room for the next gathering.</h2>
-              <Link to="/gatherings" className="secondary-button mt-5">View gatherings</Link>
-            </div>
-          </div>
-        )}
+        <DashboardJumbotron
+          defaultImage={defaultHeroImage}
+          gatherings={upcoming.slice(0, 3)}
+        />
       </section>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.8fr)_minmax(18rem,.85fr)]">
@@ -103,31 +90,51 @@ export function HomePage() {
             </div>
             <Link to="/gatherings" className="text-link">All gatherings <ChevronRight size={14} /></Link>
           </div>
-          {following ? (
-            <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-4">
+          {next ? (
+            <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-4 sm:gap-5">
               <div className="date-block">
-                <span>{formatDate(following.meetingDate, { month: "short" })}</span>
-                <strong>{new Date(following.meetingDate).getDate()}</strong>
+                <span>{formatDate(next.meetingDate, { month: "short" })}</span>
+                <strong>{new Date(next.meetingDate).getDate()}</strong>
               </div>
               <div className="min-w-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-display text-2xl">{following.title}</h3>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <Link to={`/gatherings/${next.id}`} className="hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive">
+                      <h3 className="font-display text-2xl sm:text-3xl">{next.title}</h3>
+                    </Link>
                     <p className="mt-1 text-sm text-muted">{data.group?.name}</p>
+                    {next.studyTopic && (
+                      <p className="mt-2 font-display text-lg text-olive">{next.studyTopic}</p>
+                    )}
                   </div>
-                  <div className="flex -space-x-2">
-                    {attending.slice(0, 3).map((member) => <Avatar key={member.id} person={member} />)}
-                  </div>
+                  {attending.length ? (
+                    <div
+                      className="flex shrink-0 -space-x-2"
+                      aria-label={`${attending.map((member) => member.fullName).join(", ")} going`}
+                    >
+                      {visibleAttendees.map((member) => <Avatar key={member.id} person={member} />)}
+                      {additionalAttendees > 0 && (
+                        <span aria-hidden="true" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-olive text-xs font-semibold text-paper ring-2 ring-paper">
+                          +{additionalAttendees}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="shrink-0 text-xs text-muted">No one confirmed yet</p>
+                  )}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(following.meetingDate)}</span>
-                  <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{following.location}</span>
+                  <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(next.meetingDate)}</span>
+                  <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{next.location}</span>
                   <span className="inline-flex items-center gap-1.5"><Users size={14} />{attending.length} going</span>
                 </div>
+                <Link to={`/gatherings/${next.id}`} className="text-link mt-5">
+                  View gathering <ChevronRight size={14} />
+                </Link>
               </div>
             </div>
           ) : (
-            <div className="py-8 text-sm text-muted">There is no second gathering scheduled yet. <Link className="text-link ml-1" to="/gatherings">Plan or view gatherings</Link></div>
+            <div className="py-8 text-sm text-muted">There is no gathering scheduled yet. <Link className="text-link ml-1" to="/gatherings">Plan or view gatherings</Link></div>
           )}
         </section>
 
