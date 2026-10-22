@@ -21,6 +21,7 @@ import { Modal } from "../components/Modal";
 import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
 import { getErrorMessage } from "../lib/errors";
+import { invokeAuthenticatedFunction } from "../lib/functions";
 import type { Member } from "../types";
 import { PeoplePage } from "./PeoplePage";
 
@@ -227,9 +228,11 @@ export function CirclePage() {
     setAccessMessageKind(null);
     setCredentials(null);
     try {
-      const result = await supabase.functions.invoke("circle-member-access", {
-        body: { action, groupId: activeGroup.id, personId: member.id },
-      });
+      const result = await invokeAuthenticatedFunction(
+        supabase,
+        "circle-member-access",
+        { action, groupId: activeGroup.id, personId: member.id },
+      );
       if (result.error || result.data?.error) {
         let message = result.data?.error || result.error?.message || "Account access could not be updated.";
         const response = (result.error as { context?: Response } | null)?.context;
