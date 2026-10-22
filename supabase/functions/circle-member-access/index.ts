@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -29,6 +29,17 @@ const randomPassword = () => {
 const slug = (value: string) => value.toLowerCase().normalize("NFKD")
   .replace(/[^a-z0-9]+/g, ".").replace(/^\.|\.$/g, "").slice(0, 32) || "member";
 
+const findUserByEmail = async (service: SupabaseClient, email: string) => {
+  for (let page = 1; page <= 100; page++) {
+    const listed = await service.auth.admin.listUsers({ page, perPage: 100 });
+    if (listed.error) throw listed.error;
+    const found = listed.data.users.find((user) => user.email?.toLowerCase() === email);
+    if (found) return found;
+    if (listed.data.users.length < 100) return undefined;
+  }
+  return undefined;
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -42,7 +53,7 @@ Deno.serve(async (request) => {
   if (authError || !auth.user) return json({ error: "Authentication required" }, 401);
   try {
     const { action, groupId, personId } = await request.json();
-    if (!["provision", "reset"].includes(action) || !groupId || !personId)
+    if (!["provision", "reset", "promote"].includes(action) || !groupId || !personId)
       return json({ error: "Invalid request" }, 400);
     const access = await callerClient.rpc("get_circle_member_account_statuses", {
       p_cell_group_id: groupId,
@@ -58,6 +69,59 @@ Deno.serve(async (request) => {
     const organizationId = group.organization_id;
     const { data: current } = await service.from("circle_user_links").select("*")
       .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
+
+    if (action === "promote") {
+      const realEmail = String(person.email || "").trim().toLowerCase();
+      if (!realEmail)
+        return json({ error: "Add a valid email to this SheepCount People record before promotion." }, 400);
+      let targetUser = await findUserByEmail(service, realEmail);
+      let temporaryPassword: string | undefined;
+      let createdUser = false;
+      if (!targetUser) {
+        temporaryPassword = randomPassword();
+        const created = await service.auth.admin.createUser({
+          email: realEmail,
+          password: temporaryPassword,
+          email_confirm: true,
+          user_metadata: {
+            first_name: person.first_name,
+            last_name: person.last_name,
+            circles_leader_account: true,
+          },
+        });
+        if (created.error || !created.data.user)
+          throw created.error || new Error("The SheepCount account could not be created.");
+        targetUser = created.data.user;
+        createdUser = true;
+      }
+      const promoted = await callerClient.rpc("promote_circle_leader", {
+        p_person_id: personId,
+        p_new_user_id: targetUser.id,
+        p_old_user_id: current?.user_id ?? null,
+        p_created_new_user: createdUser,
+      });
+      if (promoted.error) {
+        if (createdUser) await service.auth.admin.deleteUser(targetUser.id);
+        throw promoted.error;
+      }
+      let retirementWarning: string | undefined;
+      if (current?.account_kind === "generated" && current.user_id !== targetUser.id) {
+        const retired = await service.auth.admin.updateUserById(current.user_id, {
+          ban_duration: "876000h",
+          user_metadata: { circles_member_id_retired: true },
+        });
+        if (retired.error)
+          retirementWarning = "The old Member ID no longer has Circles access, but its auth login could not be disabled automatically.";
+      }
+      return json({
+        kind: "existing",
+        email: realEmail,
+        temporaryPassword,
+        createdAccount: createdUser,
+        linkedExisting: !createdUser,
+        warning: retirementWarning,
+      });
+    }
 
     if (action === "reset") {
       if (!current || current.account_kind !== "generated")
@@ -79,14 +143,7 @@ Deno.serve(async (request) => {
 
     let userId: string | undefined;
     const realEmail = String(person.email || "").trim().toLowerCase();
-    if (realEmail) {
-      for (let page = 1; page <= 20 && !userId; page++) {
-        const listed = await service.auth.admin.listUsers({ page, perPage: 100 });
-        if (listed.error) throw listed.error;
-        userId = listed.data.users.find((user) => user.email?.toLowerCase() === realEmail)?.id;
-        if (listed.data.users.length < 100) break;
-      }
-    }
+    if (realEmail) userId = (await findUserByEmail(service, realEmail))?.id;
     let kind: "existing" | "generated" = "existing";
     let loginId: string | null = null;
     let temporaryPassword: string | undefined;
@@ -111,9 +168,14 @@ Deno.serve(async (request) => {
       createdUser = true;
     }
     try {
-      const orgMember = await service.from("organization_members").upsert({
-        user_id: userId, organization_id: organizationId, role: "member", status: "active",
-      }, { onConflict: "user_id,organization_id" });
+      const existingMembership = await service.from("organization_members")
+        .select("id").eq("user_id", userId).eq("organization_id", organizationId).maybeSingle();
+      if (existingMembership.error) throw existingMembership.error;
+      const orgMember = existingMembership.data
+        ? await service.from("organization_members").update({ status: "active" }).eq("id", existingMembership.data.id)
+        : await service.from("organization_members").insert({
+            user_id: userId, organization_id: organizationId, role: "member", status: "active",
+          });
       if (orgMember.error) throw orgMember.error;
       const link = await service.from("circle_user_links").insert({
         user_id: userId, organization_id: organizationId, person_id: personId, status: "active",

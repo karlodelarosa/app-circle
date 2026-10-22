@@ -108,6 +108,13 @@ Circle leaders can give app access to an active person who is already part of
 their Circle. Existing SheepCount accounts are linked automatically. People
 without an account receive a Member ID and a one-time temporary password.
 
+Account access is managed from **My Circles → open a Circle → Our people →
+Manage access**. Organization administrators can record a Discipleship badge
+and then separately approve that person for leadership. Promotion changes a
+generated Member ID into normal SheepCount email credentials; it does not move
+the person out of their current Circle. New Circles can only be created by an
+organization administrator and must be assigned to an approved leader.
+
 Apply the current database migrations, then deploy the two authenticated Edge
 Functions used for account creation and password changes:
 

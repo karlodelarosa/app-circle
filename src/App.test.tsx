@@ -184,6 +184,33 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Search People")).toBeInTheDocument();
   });
+  it("keeps member login, discipleship, and leadership in one access record", () => {
+    renderApp("/circles/demo-group");
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage access" })[0]);
+    expect(screen.getByRole("heading", { name: "Manage access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Discipleship" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Leadership" })).toBeInTheDocument();
+    expect(screen.getByText("mara.santos-k7p4")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Award Discipleship badge" })).not.toBeInTheDocument();
+  });
+  it("lets admins create Circles only with approved SheepCount leaders", () => {
+    const adminData = structuredClone(demoData);
+    adminData.currentUser.role = "admin";
+    adminData.group = { ...adminData.group!, role: "admin" };
+    adminData.groups = adminData.groups.map((group) => ({ ...group, role: "admin" }));
+    render(
+      <MemoryRouter initialEntries={["/circles"]}>
+        <AppProvider initialData={adminData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create a Circle" }));
+    expect(screen.getByRole("heading", { name: "Create a Circle" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Karlo de la Rosa/ })).toHaveValue("demo-user");
+    expect(screen.queryByRole("option", { name: /Mara Santos/ })).not.toBeInTheDocument();
+  });
   it("shows an overview before opening a Circle", () => {
     renderApp("/circles");
     expect(

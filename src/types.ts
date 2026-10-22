@@ -23,6 +23,20 @@ export interface Member extends Profile {
   membershipId: string;
   role: Role;
   account?: MemberAccountStatus;
+  discipleshipBadge: boolean;
+  badgeSource?: "manual" | "system_grandfathered";
+  badgeAwardedAt?: string;
+  leadershipStatus?: "approved" | "revoked";
+}
+
+export interface AccountTransition {
+  action:
+    | "generated_to_sheepcount"
+    | "leadership_approved"
+    | "badge_awarded"
+    | "badge_revoked";
+  note: string;
+  createdAt: string;
 }
 
 export interface MemberAccountStatus {
@@ -30,6 +44,13 @@ export interface MemberAccountStatus {
   kind?: "existing" | "generated";
   loginId?: string;
   mustChangePassword: boolean;
+  transitions: AccountTransition[];
+}
+
+export interface ApprovedLeader {
+  personId: string;
+  fullName: string;
+  email: string;
 }
 
 export interface Group {
@@ -230,6 +251,7 @@ export interface AppData {
   testimonies: Testimony[];
   galleries: Gallery[];
   publicCircleListings: CirclePublicListing[];
+  approvedLeaders: ApprovedLeader[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
   account: {

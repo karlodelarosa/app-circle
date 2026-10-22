@@ -14,6 +14,7 @@ import type {
   Gallery,
   ContactPreference,
   CirclePublicListing,
+  ApprovedLeader,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -48,7 +49,10 @@ export async function loadAppData(
     role: row.role as Role,
   }));
   const group =
-    groups.find((item) => item.id === preferredGroupId) ?? groups[0] ?? null;
+    groups.find((item) => item.id === preferredGroupId) ??
+    groups.find((item) => item.role === "admin" || item.role === "leader") ??
+    groups[0] ??
+    null;
   const profile = context.profile ?? {};
   const currentUser = {
     id: userId,
@@ -79,6 +83,7 @@ export async function loadAppData(
     testimonies: [],
     galleries: [],
     publicCircleListings: [],
+    approvedLeaders: [],
     currentUser,
     connectionAttentionCount: 0,
     account: {
@@ -88,16 +93,21 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, listingsResult] = await Promise.all([
+  const [attentionResult, listingsResult, approvedLeadersResult] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
     client
       .from("circle_public_listings")
       .select("id,organization_id,cell_group_id,public_slug,description,cover_url,is_published")
       .eq("organization_id", context.organization.id),
+    context.isAdmin
+      ? client.rpc("get_circle_approved_leaders")
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (!attentionResult.error)
     base.connectionAttentionCount = Number(attentionResult.data ?? 0);
   if (listingsResult.error) throw listingsResult.error;
+  if (approvedLeadersResult.error) throw approvedLeadersResult.error;
+  base.approvedLeaders = (approvedLeadersResult.data ?? []) as ApprovedLeader[];
   base.publicCircleListings = (listingsResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -109,7 +119,7 @@ export async function loadAppData(
   }));
   if (!group) return base;
 
-  const [membersResult, gatheringsResult, prayersResult, accountStatusesResult] = await Promise.all([
+  const [membersResult, gatheringsResult, prayersResult, accountStatusesResult, badgesResult] = await Promise.all([
     client
       .from("cell_group_members")
       .select(
@@ -131,8 +141,9 @@ export async function loadAppData(
     currentUser.role === "admin" || group.role === "leader"
       ? client.rpc("get_circle_member_account_statuses", { p_cell_group_id: group.id })
       : Promise.resolve({ data: [], error: null }),
+    client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
   ]);
-  for (const result of [membersResult, gatheringsResult, prayersResult, accountStatusesResult])
+  for (const result of [membersResult, gatheringsResult, prayersResult, accountStatusesResult, badgesResult])
     if (result.error) throw result.error;
 
   const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
@@ -155,8 +166,10 @@ export async function loadAppData(
   if (clicksResult.error) throw clicksResult.error;
 
   const accountStatuses = new Map((accountStatusesResult.data ?? []).map((item: any) => [item.personId, item]));
+  const badges = new Map((badgesResult.data ?? []).map((item: any) => [item.personId, item]));
   const members: Member[] = (membersResult.data ?? []).map((row: any) => {
     const person = one(row.people);
+    const badge = badges.get(row.person_id) as any;
     return {
       id: row.person_id,
       personId: row.person_id,
@@ -166,6 +179,10 @@ export async function loadAppData(
       email: person?.email ?? "",
       avatarUrl: undefined,
       account: accountStatuses.get(row.person_id) as any,
+      discipleshipBadge: Boolean(badge?.discipleshipBadge),
+      badgeSource: badge?.badgeSource ?? undefined,
+      badgeAwardedAt: badge?.badgeAwardedAt ?? undefined,
+      leadershipStatus: badge?.leadershipStatus ?? undefined,
     };
   });
   const rsvps = rsvpsResult.data ?? [];
