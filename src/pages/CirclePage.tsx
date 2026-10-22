@@ -31,6 +31,8 @@ export function CirclePage() {
   const [accountBusy,setAccountBusy]=useState<string|null>(null);
   const [accessMemberId,setAccessMemberId]=useState<string|null>(null);
   const [accessMessage,setAccessMessage]=useState("");
+  const [accessMessageKind,setAccessMessageKind]=useState<"success"|"error"|null>(null);
+  const [accessNeedsRefresh,setAccessNeedsRefresh]=useState(false);
   const [badgeNote,setBadgeNote]=useState("");
   const [credentials,setCredentials]=useState<{login:string;temporaryPassword:string;kind:"member"|"leader"}|null>(null);
   const [creatingCircle,setCreatingCircle]=useState(false);
@@ -208,34 +210,65 @@ export function CirclePage() {
   const canManagePeople =
     data.currentUser.role === "admin" || activeGroup.role === "leader";
   const accessMember = data.members.find((member) => member.id === accessMemberId);
+  const closeAccess = () => {
+    setAccessMemberId(null);
+    setAccessMessage("");
+    setAccessMessageKind(null);
+    setCredentials(null);
+    if (accessNeedsRefresh) {
+      setAccessNeedsRefresh(false);
+      void selectGroup(activeGroup.id);
+    }
+  };
   const manageAccount = async (member: Member, action: "provision" | "reset" | "promote") => {
     if (!supabase) return;
     setAccountBusy(member.id);
     setAccessMessage("");
+    setAccessMessageKind(null);
     setCredentials(null);
-    const result = await supabase.functions.invoke("circle-member-access", {
-      body: { action, groupId: activeGroup.id, personId: member.id },
-    });
-    if (result.error || result.data?.error) {
-      setAccessMessage(result.data?.error || result.error?.message || "Account access could not be updated.");
-    } else if (action === "promote") {
-      setAccessMessage(result.data.linkedExisting
-        ? "Leadership approved. Their existing SheepCount account is now linked."
-        : "Leadership approved. Copy the new SheepCount credentials now.");
-      if (result.data.temporaryPassword)
-        setCredentials({ login: result.data.email, temporaryPassword: result.data.temporaryPassword, kind: "leader" });
-      if (result.data.warning) setAccessMessage((message) => `${message} ${result.data.warning}`);
-    } else {
-      setAccessMessage(result.data.existingAccount
-        ? "Their existing SheepCount account is linked to Circles."
-        : result.data.alreadyExists
-          ? "This member already has Circles access."
-          : "Copy the temporary Member ID and password now.");
-      if (result.data.loginId && result.data.temporaryPassword)
-        setCredentials({ login: result.data.loginId, temporaryPassword: result.data.temporaryPassword, kind: "member" });
+    try {
+      const result = await supabase.functions.invoke("circle-member-access", {
+        body: { action, groupId: activeGroup.id, personId: member.id },
+      });
+      if (result.error || result.data?.error) {
+        let message = result.data?.error || result.error?.message || "Account access could not be updated.";
+        const response = (result.error as { context?: Response } | null)?.context;
+        if (response instanceof Response) {
+          try {
+            const payload = await response.clone().json() as { error?: string };
+            if (payload.error) message = payload.error;
+          } catch {
+            // Keep the SDK error when the function did not return JSON.
+          }
+        }
+        setAccessMessage(message);
+        setAccessMessageKind("error");
+        return;
+      }
+      setAccessNeedsRefresh(true);
+      setAccessMessageKind("success");
+      if (action === "promote") {
+        setAccessMessage(result.data.linkedExisting
+          ? "Leadership approved. Their existing SheepCount account is now linked."
+          : "Leadership approved. Copy the new SheepCount credentials now.");
+        if (result.data.temporaryPassword)
+          setCredentials({ login: result.data.email, temporaryPassword: result.data.temporaryPassword, kind: "leader" });
+        if (result.data.warning) setAccessMessage((message) => `${message} ${result.data.warning}`);
+      } else {
+        setAccessMessage(result.data.existingAccount
+          ? "Their existing SheepCount account is linked to Circles."
+          : result.data.alreadyExists
+            ? "This member already has Circles access. Use Reset temporary password if they no longer have the original password."
+            : "Account created. Copy the Member ID and temporary password before closing this window.");
+        if (result.data.loginId && result.data.temporaryPassword)
+          setCredentials({ login: result.data.loginId, temporaryPassword: result.data.temporaryPassword, kind: "member" });
+      }
+    } catch (error) {
+      setAccessMessage(getErrorMessage(error, "Account access could not be updated."));
+      setAccessMessageKind("error");
+    } finally {
+      setAccountBusy(null);
     }
-    await selectGroup(activeGroup.id);
-    setAccountBusy(null);
   };
   const setBadge = async (member: Member, active: boolean) => {
     if (!supabase) return;
@@ -391,7 +424,7 @@ export function CirclePage() {
         </Modal>
       )}
       {accessMember && (
-        <Modal title="Manage access" onClose={() => setAccessMemberId(null)}>
+        <Modal title="Manage access" onClose={closeAccess}>
           <div>
             <div className="border-b border-line pb-5">
               <p className="page-kicker">Member record</p>
@@ -420,6 +453,23 @@ export function CirclePage() {
                   ) : accessMember.account?.status !== "active" ? (
                     <button className="secondary-button mt-4" disabled={accountBusy === accessMember.id} onClick={() => void manageAccount(accessMember, "provision")}>{accountBusy === accessMember.id ? "Creating…" : "Create Member ID"}</button>
                   ) : null}
+
+                  {credentials && (
+                    <div className="mt-5 rounded-2xl border border-olive/25 bg-sage/60 p-5" role="status">
+                      <h4 className="font-medium">Copy these credentials now</h4>
+                      <p className="mt-2 text-sm leading-6 text-muted">The temporary password is shown only once and must be changed at first sign-in.</p>
+                      <div className="mt-4 space-y-3 rounded-xl bg-paper p-4">
+                        <div><span className="text-xs text-muted">{credentials.kind === "leader" ? "SheepCount email" : "Member ID"}</span><strong className="mt-1 block break-all font-mono">{credentials.login}</strong></div>
+                        <div><span className="text-xs text-muted">Temporary password</span><strong className="mt-1 block break-all font-mono">{credentials.temporaryPassword}</strong></div>
+                      </div>
+                      <button className="primary-button mt-4 w-full" onClick={() => void copyText(`${credentials.kind === "leader" ? "SheepCount email" : "Circles Member ID"}: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`)}><Copy size={16} /> Copy credentials</button>
+                    </div>
+                  )}
+                  {accessMessage && (
+                    <p role={accessMessageKind === "error" ? "alert" : "status"} className={`mt-4 rounded-xl p-4 text-sm leading-6 ${accessMessageKind === "error" ? "bg-red-50 text-red-800" : "bg-parchment text-muted"}`}>
+                      {accessMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             </section>
@@ -471,19 +521,6 @@ export function CirclePage() {
                 </div>
               </div>
             </section>
-
-            {credentials && (
-              <section className="my-5 rounded-2xl border border-olive/25 bg-sage/60 p-5">
-                <h4 className="font-medium">Copy these credentials now</h4>
-                <p className="mt-2 text-sm leading-6 text-muted">The temporary password is shown only once and must be changed at first sign-in.</p>
-                <div className="mt-4 space-y-3 rounded-xl bg-paper p-4">
-                  <div><span className="text-xs text-muted">{credentials.kind === "leader" ? "SheepCount email" : "Member ID"}</span><strong className="mt-1 block break-all font-mono">{credentials.login}</strong></div>
-                  <div><span className="text-xs text-muted">Temporary password</span><strong className="mt-1 block break-all font-mono">{credentials.temporaryPassword}</strong></div>
-                </div>
-                <button className="primary-button mt-4 w-full" onClick={() => void copyText(`${credentials.kind === "leader" ? "SheepCount email" : "Circles Member ID"}: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`)}><Copy size={16} /> Copy credentials</button>
-              </section>
-            )}
-            {accessMessage && <p role="status" className="my-5 rounded-xl bg-parchment p-4 text-sm leading-6 text-muted">{accessMessage}</p>}
 
             {data.currentUser.role === "admin" && Boolean(accessMember.account?.transitions?.length) && (
               <section className="pt-5">

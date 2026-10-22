@@ -159,7 +159,7 @@ Deno.serve(async (request) => {
       if (!loginId) throw new Error("A unique Member ID could not be generated.");
       temporaryPassword = randomPassword();
       const created = await service.auth.admin.createUser({
-        email: `${loginId}@members.circles.invalid`, password: temporaryPassword,
+        email: `${loginId}@members.circles.elgchurch.com`, password: temporaryPassword,
         email_confirm: true,
         user_metadata: { first_name: person.first_name, last_name: person.last_name, circles_member_id: loginId },
       });
