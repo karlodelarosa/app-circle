@@ -221,7 +221,7 @@ export function CirclePage() {
       void selectGroup(activeGroup.id);
     }
   };
-  const manageAccount = async (member: Member, action: "provision" | "reset" | "promote") => {
+  const manageAccount = async (member: Member, action: "provision" | "reset" | "replace" | "promote") => {
     if (!supabase) return;
     setAccountBusy(member.id);
     setAccessMessage("");
@@ -258,7 +258,9 @@ export function CirclePage() {
           setCredentials({ login: result.data.email, temporaryPassword: result.data.temporaryPassword, kind: "leader" });
         if (result.data.warning) setAccessMessage((message) => `${message} ${result.data.warning}`);
       } else {
-        setAccessMessage(result.data.existingAccount
+        setAccessMessage(result.data.replacedAccount
+          ? "New Circles login created. Copy the Member ID and temporary password before closing this window."
+          : result.data.existingAccount
           ? "Their existing SheepCount account is linked to Circles."
           : result.data.alreadyExists
             ? "This member already has Circles access. Use Reset temporary password if they no longer have the original password."
@@ -456,6 +458,14 @@ export function CirclePage() {
                   ) : accessMember.account?.status !== "active" ? (
                     <button className="secondary-button mt-4" disabled={accountBusy === accessMember.id} onClick={() => void manageAccount(accessMember, "provision")}>{accountBusy === accessMember.id ? "Creating…" : "Create Member ID"}</button>
                   ) : null}
+                  {data.currentUser.role === "admin" && accessMember.account?.status === "active" && accessMember.account.kind === "existing" && (
+                    <div className="mt-4 rounded-xl border border-line bg-parchment/60 p-4">
+                      <p className="text-xs leading-5 text-muted">If this SheepCount account was linked by mistake, replace only its Circles access with a new Member ID. The original SheepCount account will not be deleted.</p>
+                      <button className="secondary-button mt-3" disabled={accountBusy === accessMember.id} onClick={() => window.confirm(`Replace ${accessMember.fullName}’s linked Circles login with a new Member ID? Their existing SheepCount account will remain intact but will no longer represent this People record in Circles.`) && void manageAccount(accessMember, "replace")}>
+                        <KeyRound size={15} /> {accountBusy === accessMember.id ? "Creating…" : "Create new Member ID"}
+                      </button>
+                    </div>
+                  )}
 
                   {credentials && (
                     <div className="mt-5 rounded-2xl border border-olive/25 bg-sage/60 p-5" role="status">

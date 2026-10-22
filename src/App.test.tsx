@@ -211,6 +211,23 @@ describe("Circles MVP", () => {
     expect(screen.getByRole("option", { name: /Karlo de la Rosa/ })).toHaveValue("demo-user");
     expect(screen.queryByRole("option", { name: /Mara Santos/ })).not.toBeInTheDocument();
   });
+  it("lets an admin replace a mistaken SheepCount link with a Member ID", () => {
+    const adminData = structuredClone(demoData);
+    adminData.currentUser.role = "admin";
+    adminData.group = { ...adminData.group!, role: "admin" };
+    adminData.groups = adminData.groups.map((group) => ({ ...group, role: "admin" }));
+    render(
+      <MemoryRouter initialEntries={["/circles/demo-group"]}>
+        <AppProvider initialData={adminData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage access" })[0]);
+    expect(screen.getByText("SheepCount linked")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create new Member ID" })).toBeInTheDocument();
+    expect(screen.getByText(/original SheepCount account will not be deleted/i)).toBeInTheDocument();
+  });
   it("shows an overview before opening a Circle", () => {
     renderApp("/circles");
     expect(

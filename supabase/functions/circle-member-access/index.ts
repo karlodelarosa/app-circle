@@ -55,7 +55,7 @@ Deno.serve(async (request) => {
   if (authError || !auth.user) return json({ error: "Authentication required" }, 401);
   try {
     const { action, groupId, personId } = await request.json();
-    if (!["provision", "reset", "promote"].includes(action) || !groupId || !personId)
+    if (!["provision", "reset", "replace", "promote"].includes(action) || !groupId || !personId)
       return json({ error: "Invalid request" }, 400);
     const access = await callerClient.rpc("get_circle_member_account_statuses", {
       p_cell_group_id: groupId,
@@ -71,6 +71,48 @@ Deno.serve(async (request) => {
     const organizationId = group.organization_id;
     const { data: current } = await service.from("circle_user_links").select("*")
       .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
+
+    if (action === "replace") {
+      if (!current || current.account_kind !== "existing")
+        return json({ error: "Only a SheepCount-linked Circles login can be replaced here." }, 400);
+      let loginId: string | null = null;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 4);
+        const candidate = `${slug(`${person.first_name}.${person.last_name}`)}-${suffix}`;
+        const exists = await service.from("circle_user_links").select("id").eq("login_id", candidate).maybeSingle();
+        if (!exists.data) { loginId = candidate; break; }
+      }
+      if (!loginId) throw new Error("A unique Member ID could not be generated.");
+      const temporaryPassword = randomPassword();
+      const created = await service.auth.admin.createUser({
+        email: `${loginId}@members.circles.elgchurch.com`,
+        password: temporaryPassword,
+        email_confirm: true,
+        user_metadata: {
+          first_name: person.first_name,
+          last_name: person.last_name,
+          circles_member_id: loginId,
+        },
+      });
+      if (created.error || !created.data.user)
+        throw created.error || new Error("Account creation failed.");
+      const replaced = await callerClient.rpc("replace_circle_member_login", {
+        p_cell_group_id: groupId,
+        p_person_id: personId,
+        p_new_user_id: created.data.user.id,
+        p_login_id: loginId,
+      });
+      if (replaced.error) {
+        await service.auth.admin.deleteUser(created.data.user.id);
+        throw replaced.error;
+      }
+      return json({
+        kind: "generated",
+        loginId,
+        temporaryPassword,
+        replacedAccount: true,
+      });
+    }
 
     if (action === "promote") {
       const realEmail = String(person.email || "").trim().toLowerCase();

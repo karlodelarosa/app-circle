@@ -34,7 +34,8 @@ export interface AccountTransition {
     | "generated_to_sheepcount"
     | "leadership_approved"
     | "badge_awarded"
-    | "badge_revoked";
+    | "badge_revoked"
+    | "login_replaced";
   note: string;
   createdAt: string;
 }
