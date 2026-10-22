@@ -5,10 +5,11 @@ Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const url = Deno.env.get("SUPABASE_URL")!;
-  const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const service = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const caller = createClient(url, anon, { global: { headers: { authorization: request.headers.get("authorization") || "" } } });
-  const { data: auth, error } = await caller.auth.getUser();
+  const authorization = request.headers.get("authorization") || "";
+  const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) return json({ error: "Authentication required" }, 401);
+  const { data: auth, error } = await service.auth.getUser(accessToken);
   if (error || !auth.user) return json({ error: "Authentication required" }, 401);
   const { password } = await request.json();
   if (typeof password !== "string" || password.length < 10 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password))

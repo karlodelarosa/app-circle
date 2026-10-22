@@ -7,7 +7,7 @@ major_version = 17
 verify_jwt = false
 
 [functions.circle-member-access]
-verify_jwt = true
+verify_jwt = false
 
 [functions.circle-change-password]
-verify_jwt = true
+verify_jwt = false

@@ -49,7 +49,9 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get("authorization") || "";
   const callerClient = createClient(url, anon, { global: { headers: { authorization } } });
   const service = createClient(url, serviceKey);
-  const { data: auth, error: authError } = await callerClient.auth.getUser();
+  const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) return json({ error: "Authentication required" }, 401);
+  const { data: auth, error: authError } = await service.auth.getUser(accessToken);
   if (authError || !auth.user) return json({ error: "Authentication required" }, 401);
   try {
     const { action, groupId, personId } = await request.json();
