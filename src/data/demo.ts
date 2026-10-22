@@ -35,6 +35,7 @@ export const demoData: AppData = {
   connectionAttentionCount: 1,
   account: { kind: 'existing', mustChangePassword: false, status: 'active' },
   approvedLeaders: [{ personId: 'demo-user', fullName: 'Karlo de la Rosa', email: 'karlo@example.com' }],
+  contentAssignments: [],
   members: [
     { id: 'demo-user', membershipId: 'membership-1', fullName: 'Karlo de la Rosa', email: 'karlo@example.com', role: 'leader', discipleshipBadge: true, badgeSource: 'system_grandfathered', leadershipStatus: 'approved', account: { status: 'active', kind: 'existing', mustChangePassword: false, transitions: [] } },
     { id: 'member-2', membershipId: 'membership-2', fullName: 'Mara Santos', email: 'mara@example.com', role: 'member', discipleshipBadge: true, badgeSource: 'manual', account: { status: 'active', kind: 'generated', loginId: 'mara.santos-k7p4', mustChangePassword: false, transitions: [] } },

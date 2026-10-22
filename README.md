@@ -127,4 +127,14 @@ npx supabase functions deploy circle-change-password --project-ref qrmpogczieanp
 The functions use Supabase’s built-in project secrets. Do not add or expose a
 service-role key in Cloudflare or in browser environment variables.
 
+### Circle content assignments
+
+Gatherings, galleries, testimonies, and Circle announcements always show their
+destination before publishing. After applying the latest migration, existing
+content is intentionally marked **Needs review** and is hidden from private
+Circle detail pages until an organization administrator confirms or corrects
+it under **Publish → Content assignments**. Public organization pages remain
+available during this review. Reassignment keeps existing links and media;
+gatherings with RSVP or attendance records cannot be moved.
+
 After saving the settings, Cloudflare will build and deploy every new commit pushed to `main`. Other branches can use the version command to create a version without replacing the production deployment.

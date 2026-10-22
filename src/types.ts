@@ -151,6 +151,7 @@ export interface Meeting {
   visibility?: "private" | "public";
   publishedAt?: string;
   guestRsvpEnabled?: boolean;
+  assignmentConfirmedAt?: string;
 }
 
 export interface Announcement {
@@ -162,6 +163,7 @@ export interface Announcement {
   publishedAt: string;
   expiresAt?: string;
   isPublic: boolean;
+  assignmentConfirmedAt?: string;
 }
 
 export interface Testimony {
@@ -176,6 +178,7 @@ export interface Testimony {
   imageUrl?: string;
   publishedAt: string;
   status?: "draft" | "published";
+  assignmentConfirmedAt?: string;
 }
 
 export interface GalleryPhoto {
@@ -195,6 +198,24 @@ export interface Gallery {
   coverUrl?: string;
   publishedAt: string;
   photos: GalleryPhoto[];
+  assignmentConfirmedAt?: string;
+}
+
+export type ContentAssignmentType =
+  | "gathering"
+  | "gallery"
+  | "testimony"
+  | "announcement";
+
+export interface ContentAssignment {
+  id: string;
+  type: ContentAssignmentType;
+  title: string;
+  groupId?: string;
+  groupName?: string;
+  confirmedAt?: string;
+  publishedAt?: string;
+  hasParticipation: boolean;
 }
 
 export interface PublicSpace {
@@ -252,6 +273,7 @@ export interface AppData {
   galleries: Gallery[];
   publicCircleListings: CirclePublicListing[];
   approvedLeaders: ApprovedLeader[];
+  contentAssignments: ContentAssignment[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
   account: {
@@ -263,6 +285,7 @@ export interface AppData {
 }
 
 export interface MeetingInput {
+  groupId: string;
   title: string;
   meetingDate: string;
   location: string;

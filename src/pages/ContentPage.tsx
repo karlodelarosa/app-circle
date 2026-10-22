@@ -4,7 +4,8 @@ import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
 import { saveCirclePublicListing, unpublishCirclePublicListing } from "../services/circles";
-import type { Group, Testimony } from "../types";
+import type { ContentAssignment, ContentAssignmentType, Group, Testimony } from "../types";
+import { Modal } from "../components/Modal";
 
 type Composer = "testimony" | "gallery" | "announcement" | null;
 const slugify = (value: string) =>
@@ -31,11 +32,34 @@ export function ContentPage() {
   const [circleCover, setCircleCover] = useState<File | null>(null);
   const [reviewing,setReviewing]=useState<Testimony | null>(null);
   const [reviewName,setReviewName]=useState("");
+  const [targetGroupId,setTargetGroupId]=useState("");
+  const [assignmentType,setAssignmentType]=useState<"all"|ContentAssignmentType>("all");
+  const [assignmentGroup,setAssignmentGroup]=useState("all");
+  const [assignmentReview,setAssignmentReview]=useState<ContentAssignment|null>(null);
+  const [assignmentTarget,setAssignmentTarget]=useState("");
+  const [assignmentError,setAssignmentError]=useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (composer && !dialogRef.current?.open) dialogRef.current?.showModal();
   }, [composer]);
   if (!data) return null;
+  const manageableGroups=data.groups.filter((group)=>data.currentUser.role==="admin"||group.role==="leader");
+  const hasSingleLeaderDestination=data.currentUser.role!=="admin"&&manageableGroups.length===1;
+  const beginComposer=(kind:Exclude<Composer,null>)=>{
+    setMessage("");
+    setTargetGroupId(hasSingleLeaderDestination?manageableGroups[0].id:"");
+    setComposer(kind);
+  };
+  const assignmentItems=data.contentAssignments.filter((item)=>{
+    const matchesType=assignmentType==="all"||item.type===assignmentType;
+    const matchesGroup=assignmentGroup==="all"||
+      (assignmentGroup==="unreviewed"&&!item.confirmedAt)||
+      (assignmentGroup==="organization"&&!item.groupId)||
+      item.groupId===assignmentGroup;
+    return matchesType&&matchesGroup;
+  });
+  const openAssignment=(item:ContentAssignment)=>{setAssignmentReview(item);setAssignmentTarget(item.groupId||"organization");setAssignmentError("")};
+  const saveAssignment=async()=>{if(!supabase||!assignmentReview)return;setBusy(true);setAssignmentError("");const target=assignmentTarget==="organization"?null:assignmentTarget;const result=await supabase.rpc("review_circle_content_assignment",{p_content_type:assignmentReview.type,p_content_id:assignmentReview.id,p_target_cell_group_id:target});if(result.error)setAssignmentError(result.error.message);else{setAssignmentReview(null);setMessage(`${assignmentReview.title} assignment saved.`);await refresh()}setBusy(false)};
   const pendingTestimonies=data.testimonies.filter((item)=>item.status==="draft");
   const publishTestimony=async(event:FormEvent)=>{event.preventDefault();if(!reviewing||!supabase)return;setBusy(true);const result=await supabase.from("circle_testimonies").update({author_display_name:reviewName.trim(),status:"published",published_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",reviewing.id);setBusy(false);if(result.error)setMessage(result.error.message);else{setReviewing(null);setMessage("Testimony published to the public community page.");await refresh()}};
   const editCircleProfile = (group: Group) => {
@@ -104,10 +128,13 @@ export function ContentPage() {
     setBusy(true);
     setMessage("");
     try {
+      if (!targetGroupId) throw new Error("Choose where this content belongs.");
+      if (targetGroupId === "organization" && composer !== "announcement")
+        throw new Error("Only announcements can be published to the entire organization.");
       if (!demoMode && supabase && data.group) {
         const common = {
           organization_id: data.organization.id,
-          cell_group_id: data.group.id,
+          cell_group_id: targetGroupId === "organization" ? null : targetGroupId,
           created_by: data.currentUser.id,
         };
         if (composer === "testimony") {
@@ -177,6 +204,7 @@ export function ContentPage() {
       setComposer(null);
       setForm({ title: "", body: "", author: "", description: "", audience: "members" });
       setFile(null);
+      setTargetGroupId("");
     } catch (c) {
       setMessage(getErrorMessage(c, "Content could not be published."));
     } finally {
@@ -250,6 +278,25 @@ export function ContentPage() {
           </div>
         </section>
       )}
+      {data.currentUser.role === "admin" && (
+        <section className="mt-10 border-t border-line pt-8">
+          <div className="section-heading">
+            <div>
+              <h2>Content assignments</h2>
+              <p>Confirm which Circle owns each item before it appears in that Circle’s private views.</p>
+            </div>
+            <span className="role-label">{data.contentAssignments.filter((item)=>!item.confirmedAt).length} need review</span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label className="field-label">Content type<select className="field" value={assignmentType} onChange={(event)=>setAssignmentType(event.target.value as "all"|ContentAssignmentType)}><option value="all">All content</option><option value="gathering">Gatherings</option><option value="gallery">Galleries</option><option value="testimony">Testimonies</option><option value="announcement">Announcements</option></select></label>
+            <label className="field-label">Assignment<select className="field" value={assignmentGroup} onChange={(event)=>setAssignmentGroup(event.target.value)}><option value="all">All assignments</option><option value="unreviewed">Needs review</option><option value="organization">Entire organization</option>{data.groups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+          </div>
+          <div className="mt-5 divide-y divide-line border-y border-line">
+            {assignmentItems.map((item)=><div key={`${item.type}-${item.id}`} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="role-label capitalize">{item.type}</span>{!item.confirmedAt&&<span className="rounded-full bg-[#F4E5C7] px-2.5 py-1 text-[10px] text-[#72551E]">Needs review</span>}</div><h3 className="mt-2 truncate font-medium">{item.title}</h3><p className="mt-1 text-xs text-muted">Currently assigned to {item.groupName||"Entire organization"}{item.hasParticipation?" · Participation recorded":""}</p></div><button className={item.confirmedAt?"secondary-button":"primary-button"} onClick={()=>openAssignment(item)}>{item.confirmedAt?"Change assignment":"Review assignment"}</button></div>)}
+            {!assignmentItems.length&&<p className="py-6 text-sm text-muted">No content matches these filters.</p>}
+          </div>
+        </section>
+      )}
       <section className="mt-10 border-t border-line pt-8"><div className="section-heading"><div><h2>Pending testimonies</h2><p>Review stories submitted by members of {data.group?.name||"this Circle"}.</p></div></div>{pendingTestimonies.length?<div className="divide-y divide-line border-y border-line">{pendingTestimonies.map(item=><div key={item.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><h3 className="font-display text-2xl">{item.title}</h3><p className="mt-1 text-sm text-muted">Submitted by {item.authorName}</p><p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">{item.body}</p></div><button className="primary-button" onClick={()=>{setReviewing(item);setReviewName(item.authorName)}}>Review and publish</button></div>)}</div>:<p className="border-y border-line py-6 text-sm text-muted">No testimonies are waiting for review.</p>}</section>
       <div className="mt-9 grid gap-5 md:grid-cols-2">
         <ContentCard
@@ -258,10 +305,7 @@ export function ContentPage() {
           description="Share approved stories with an intentional public author name."
           destination="Public homepage and Testimonies"
           count={data.testimonies.filter((item) => item.status === "published").length}
-          onAdd={() => {
-            setMessage("");
-            setComposer("testimony");
-          }}
+          onAdd={() => beginComposer("testimony")}
         />
         <ContentCard
           icon={Images}
@@ -269,10 +313,7 @@ export function ContentPage() {
           description="Publish a standalone photo album that remains easy to find later."
           destination="Public homepage and Gallery"
           count={data.galleries.length}
-          onAdd={() => {
-            setMessage("");
-            setComposer("gallery");
-          }}
+          onAdd={() => beginComposer("gallery")}
         />
         <ContentCard
           icon={CalendarDays}
@@ -287,10 +328,7 @@ export function ContentPage() {
           description="Share a timely note with members, with optional public visibility."
           destination="Member dashboard; public Updates when enabled"
           count={data.announcements.length}
-          onAdd={() => {
-            setMessage("");
-            setComposer("announcement");
-          }}
+          onAdd={() => beginComposer("announcement")}
         />
       </div>
       {composer && (
@@ -337,6 +375,19 @@ export function ContentPage() {
                   {message}
                 </p>
               )}
+              <div className="rounded-2xl border border-olive/20 bg-parchment p-4">
+                <label className="field-label">
+                  Destination
+                  <select className="field" required value={targetGroupId} onChange={(event)=>setTargetGroupId(event.target.value)} disabled={hasSingleLeaderDestination}>
+                    <option value="">Choose where this belongs</option>
+                    {composer==="announcement"&&data.currentUser.role==="admin"&&<option value="organization">Entire organization</option>}
+                    {manageableGroups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}
+                  </select>
+                </label>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  {composer==="announcement"?"Circle announcements stay with that Circle. Organization announcements appear on the main dashboard and public Updates.":"This content will appear only in the selected Circle’s private detail view."}
+                </p>
+              </div>
               <label className="field-label">
                 Title
                 <input
@@ -444,6 +495,7 @@ export function ContentPage() {
           </form>
         </dialog>
       )}
+      {assignmentReview&&<Modal title="Review assignment" onClose={()=>setAssignmentReview(null)}><div><span className="role-label capitalize">{assignmentReview.type}</span><h3 className="mt-3 font-display text-3xl">{assignmentReview.title}</h3><p className="mt-3 text-sm leading-6 text-muted">Confirm the current destination or choose the Circle this content truly belongs to.</p><label className="field-label mt-6">Destination<select className="field" value={assignmentTarget} onChange={(event)=>setAssignmentTarget(event.target.value)}>{assignmentReview.type==="announcement"&&<option value="organization">Entire organization</option>}{data.groups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==assignmentReview.groupId&&<p className="mt-3 rounded-xl bg-[#F4E5C7] p-4 text-sm leading-6 text-[#72551E]">This gathering already has RSVPs or attendance and cannot be moved. You can confirm its current Circle.</p>}{assignmentError&&<p className="form-error mt-4" role="alert">{assignmentError}</p>}<button className="primary-button mt-6 w-full" disabled={busy||!assignmentTarget||(assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==assignmentReview.groupId)} onClick={()=>void saveAssignment()}>{busy?"Saving…":assignmentTarget===assignmentReview.groupId||(!assignmentReview.groupId&&assignmentTarget==="organization")?"Confirm assignment":"Move and confirm"}</button></div></Modal>}
       {reviewing&&<dialog open className="fixed inset-0 z-50 m-auto w-[min(36rem,calc(100%-2rem))] rounded-[1.75rem] border border-line bg-paper p-0 text-ink shadow-quiet backdrop:bg-ink/55"><form onSubmit={publishTestimony} className="p-6 sm:p-8"><p className="text-xs text-olive">Testimony review</p><h2 className="mt-2 font-display text-3xl">{reviewing.title}</h2><p className="mt-4 whitespace-pre-line leading-7 text-muted">{reviewing.body}</p><label className="field-label mt-6">Public author name<input className="field" required value={reviewName} onChange={(e)=>setReviewName(e.target.value)}/></label><div className="mt-6 flex justify-end gap-3"><button type="button" className="secondary-button" onClick={()=>setReviewing(null)}>Keep pending</button><button className="primary-button" disabled={busy}>{busy?"Publishing…":"Publish testimony"}</button></div></form></dialog>}
       {circleEditor && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCircleEditor(null); }}>

@@ -259,7 +259,9 @@ describe("Circles MVP", () => {
     expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Share testimony" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Life in our Circle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Grace & Ground updates" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Life in Grace & Ground" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Stories from Grace & Ground" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Life around the table" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Grace in the ordinary" })).toBeInTheDocument();
   });
@@ -296,6 +298,65 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Announcements" }));
     expect(screen.getByLabelText("Members only")).toBeChecked();
     expect(screen.getByLabelText("Members and public")).not.toBeChecked();
+  });
+  it("keeps organization announcements out of a Circle detail", () => {
+    const scopedData = structuredClone(demoData);
+    scopedData.announcements.push({
+      id: "organization-update",
+      organizationId: "demo-org",
+      groupId: undefined,
+      title: "Organization-wide update",
+      body: "This belongs on the organization dashboard, not a Circle detail.",
+      publishedAt: new Date().toISOString(),
+      isPublic: true,
+    });
+    render(
+      <MemoryRouter initialEntries={["/circles/demo-group"]}>
+        <AppProvider initialData={scopedData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Bring a story from your week")).toBeInTheDocument();
+    expect(screen.queryByText("Organization-wide update")).not.toBeInTheDocument();
+  });
+  it("shows admins an assignment review queue and explicit publishing destination", () => {
+    const adminData = structuredClone(demoData);
+    adminData.currentUser.role = "admin";
+    adminData.group = { ...adminData.group!, role: "admin" };
+    adminData.groups = [
+      { ...adminData.groups[0], role: "admin" },
+      {
+        ...adminData.groups[0],
+        id: "second-group",
+        name: "Second Circle",
+        role: "admin",
+      },
+    ];
+    adminData.contentAssignments = [{
+      id: "gallery-review",
+      type: "gallery",
+      title: "Needs a real Circle",
+      groupId: "demo-group",
+      groupName: "Grace & Ground",
+      confirmedAt: undefined,
+      publishedAt: new Date().toISOString(),
+      hasParticipation: false,
+    }];
+    render(
+      <MemoryRouter initialEntries={["/content"]}>
+        <AppProvider initialData={adminData} initialSession={testSession}>
+          <App />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { name: "Content assignments" })).toBeInTheDocument();
+    expect(screen.getByText("Needs a real Circle")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review assignment" }));
+    expect(screen.getByRole("heading", { name: "Review assignment" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
+    expect(screen.getByLabelText("Destination")).toHaveValue("");
   });
   it("registers a new walk-in from gathering attendance", async () => {
     renderApp("/gatherings/meeting-1");

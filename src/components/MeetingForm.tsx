@@ -13,7 +13,15 @@ export function MeetingForm({
   meeting?: Meeting;
   onDone: () => void;
 }) {
-  const { saveMeeting } = useCircles();
+  const { data, saveMeeting } = useCircles();
+  const manageableGroups = data?.groups.filter(
+    (group) => data.currentUser.role === "admin" || group.role === "leader",
+  ) ?? [];
+  const hasSingleLeaderDestination =
+    data?.currentUser.role !== "admin" && manageableGroups.length === 1;
+  const [groupId, setGroupId] = useState(
+    meeting?.groupId ?? (hasSingleLeaderDestination ? manageableGroups[0].id : ""),
+  );
   const [title, setTitle] = useState(meeting?.title ?? "");
   const [meetingDate, setMeetingDate] = useState(
     meeting ? toDateTimeLocal(meeting.meetingDate) : "",
@@ -54,6 +62,7 @@ export function MeetingForm({
     try {
       await saveMeeting(
         {
+          groupId,
           title,
           meetingDate: new Date(meetingDate).toISOString(),
           location,
@@ -77,6 +86,28 @@ export function MeetingForm({
   };
   return (
     <form onSubmit={submit} className="space-y-4">
+      <div className="rounded-2xl border border-olive/20 bg-parchment p-4">
+        <label className="field-label">
+          Destination Circle
+          <select
+            className="field"
+            value={groupId}
+            onChange={(event) => setGroupId(event.target.value)}
+            required
+            disabled={Boolean(meeting) || hasSingleLeaderDestination}
+          >
+            <option value="">Choose a Circle</option>
+            {manageableGroups.map((group) => (
+              <option key={group.id} value={group.id}>{group.name}</option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-2 text-xs leading-5 text-muted">
+          {meeting
+            ? "Existing gatherings are reassigned from Publish → Content assignments."
+            : "This gathering will appear only in the selected Circle’s private views."}
+        </p>
+      </div>
       <label className="field-label">
         Gathering title
         <input

@@ -262,7 +262,9 @@ export function CirclePage() {
         new Date(meeting.meetingDate) >= new Date(),
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
-  const latestAnnouncement = data.announcements[0];
+  const circleLeader = data.members.find((member) => member.role === "leader" || member.id === activeGroup.leaderId);
+  const circleAnnouncements = data.announcements.filter((item) => item.groupId === activeGroup.id);
+  const latestAnnouncement = circleAnnouncements[0];
   const latestGallery = data.galleries[0];
   const latestTestimony = data.testimonies.find((item) => item.status !== "draft");
   return (
@@ -272,6 +274,10 @@ export function CirclePage() {
           <p className="page-kicker">My Circles</p>
           <h1>{data.group.name}</h1>
           <p>{data.group.description}</p>
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
+            <span className="inline-flex items-center gap-2"><MapPin size={15} className="text-olive" />{activeGroup.location||"Location shared with members"}</span>
+            {circleLeader&&<span className="inline-flex items-center gap-2"><UsersRound size={15} className="text-olive" />Led by {circleLeader.fullName}</span>}
+          </div>
         </div>
         <Link className="secondary-button" to="/circles">
           View all Circles
@@ -293,44 +299,17 @@ export function CirclePage() {
           {nextGathering ? "View gathering" : "View gatherings"} <ChevronRight size={16} />
         </Link>
       </section>
-      <section className="mt-10">
-        <div className="section-heading">
-          <div>
-            <h2>Life in our Circle</h2>
-            <p>Recent updates, photographs, and stories shared with this community.</p>
-          </div>
-        </div>
-        <div className="grid gap-5 md:grid-cols-3">
-          <article className="paper-panel p-6">
-            <Megaphone size={19} className="text-olive" />
-            <p className="mt-5 text-xs text-olive">Latest announcement</p>
-            <h3 className="mt-2 font-display text-2xl">{latestAnnouncement?.title || "No current update"}</h3>
-            <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted">{latestAnnouncement?.body || "Circle announcements will appear here."}</p>
-          </article>
-          {latestGallery ? (
-            <a href={`/${data.organization.slug}/galleries/${latestGallery.slug}`} target="_blank" rel="noreferrer" className="group relative min-h-64 overflow-hidden rounded-3xl text-paper">
-              <img src={latestGallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/15 to-transparent" />
-              <div className="relative flex h-full min-h-64 flex-col justify-end p-6">
-                <Images size={19} />
-                <h3 className="mt-3 font-display text-2xl">{latestGallery.title}</h3>
-                <p className="mt-2 text-xs text-paper/75">View gallery</p>
-              </div>
-            </a>
-          ) : (
-            <article className="paper-panel p-6"><Images className="text-olive" size={19} /><h3 className="mt-5 font-display text-2xl">No gallery yet</h3><p className="mt-3 text-sm leading-6 text-muted">Community photographs will appear here after they are published.</p></article>
-          )}
-          {latestTestimony ? (
-            <a href={`/${data.organization.slug}/testimonies/${latestTestimony.slug}`} target="_blank" rel="noreferrer" className="paper-panel p-6">
-              <Quote size={19} className="text-olive" />
-              <p className="mt-5 text-xs text-olive">Latest testimony</p>
-              <h3 className="mt-2 font-display text-2xl">{latestTestimony.title}</h3>
-              <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">{latestTestimony.body}</p>
-            </a>
-          ) : (
-            <article className="paper-panel p-6"><Quote className="text-olive" size={19} /><h3 className="mt-5 font-display text-2xl">Stories will gather here</h3><p className="mt-3 text-sm leading-6 text-muted">Published testimonies from your community will appear here.</p></article>
-          )}
-        </div>
+      <section className="mt-12 border-t border-line pt-8">
+        <div className="section-heading"><div><h2>{activeGroup.name} updates</h2><p>Notes shared specifically with this Circle.</p></div></div>
+        {latestAnnouncement?<article className="max-w-4xl border-l-2 border-olive pl-5 sm:pl-7"><Megaphone size={18} className="text-olive"/><h3 className="mt-4 font-display text-3xl">{latestAnnouncement.title}</h3><p className="mt-3 whitespace-pre-line leading-7 text-muted">{latestAnnouncement.body}</p></article>:<div className="border-y border-line py-6"><p className="font-medium">No Circle update yet</p><p className="mt-1 text-sm text-muted">Announcements addressed to {activeGroup.name} will appear here. Organization updates stay on the main dashboard.</p></div>}
+      </section>
+      <section className="mt-12 border-t border-line pt-8">
+        <div className="section-heading"><div><h2>Life in {activeGroup.name}</h2><p>Photographs published for this Circle.</p></div></div>
+        {latestGallery?<a href={`/${data.organization.slug}/galleries/${latestGallery.slug}`} target="_blank" rel="noreferrer" className="group relative block min-h-72 overflow-hidden rounded-[1.75rem] text-paper sm:min-h-96"><img src={latestGallery.coverUrl||"/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover"/><div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent"/><div className="relative flex min-h-72 flex-col justify-end p-6 sm:min-h-96 sm:p-8"><Images size={20}/><h3 className="mt-4 max-w-2xl font-display text-3xl sm:text-4xl">{latestGallery.title}</h3><p className="mt-2 max-w-xl text-sm text-paper/80">{latestGallery.description}</p><span className="mt-5 text-sm font-medium">View {latestGallery.photos.length} {latestGallery.photos.length===1?"photo":"photos"}</span></div></a>:<div className="border-y border-line py-6"><p className="font-medium">No photographs published</p><p className="mt-1 text-sm text-muted">Galleries assigned to {activeGroup.name} will gather here.</p></div>}
+      </section>
+      <section className="mt-12 border-t border-line pt-8">
+        <div className="section-heading"><div><h2>Stories from {activeGroup.name}</h2><p>Testimonies rooted in this Circle’s life together.</p></div></div>
+        {latestTestimony?<a href={`/${data.organization.slug}/testimonies/${latestTestimony.slug}`} target="_blank" rel="noreferrer" className="block max-w-4xl border-y border-line py-7"><Quote size={19} className="text-olive"/><h3 className="mt-4 font-display text-3xl">{latestTestimony.title}</h3><p className="mt-3 line-clamp-4 leading-7 text-muted">{latestTestimony.body}</p><p className="mt-4 text-sm text-olive">Shared by {latestTestimony.authorName}</p></a>:<div className="border-y border-line py-6"><p className="font-medium">No testimony published</p><p className="mt-1 text-sm text-muted">Approved stories from members of {activeGroup.name} will appear here.</p></div>}
       </section>
       <div className="mt-8 grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
         <aside className="paper-panel p-6">

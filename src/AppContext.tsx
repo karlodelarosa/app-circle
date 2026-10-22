@@ -348,13 +348,17 @@ export function AppProvider({
       await api.saveMeeting(
         supabase,
         data.organization.id,
-        data.group.id,
         data.currentUser.id,
-        data.group.leaderId,
+        data.groups.find((group) => group.id === input.groupId)?.leaderId,
         input,
         id,
       );
-      await refresh();
+      if (input.groupId !== data.group.id && session?.user) {
+        const next = await api.loadAppData(supabase, session.user.id, input.groupId);
+        next.currentUser.email = session.user.email ?? "";
+        setData(next);
+        setSelectedGroupId(next.group?.id);
+      } else await refresh();
     } else {
       const { coverFile, removeCover, coverUrl, ...meetingFields } = input;
       const nextCoverUrl = coverFile
@@ -378,7 +382,6 @@ export function AppProvider({
             ...data.meetings,
             {
               id: crypto.randomUUID(),
-              groupId: data.group.id,
               createdBy: data.currentUser.id,
               status: "scheduled" as const,
               rsvps: {},
