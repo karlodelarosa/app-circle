@@ -83,6 +83,13 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
     expect(screen.queryByText("A new version of Circles is ready.")).not.toBeInTheDocument();
   });
+  it("does not lose an update notice raised before the app mounts", () => {
+    window.__circlesUpdatePending = true;
+    renderApp("/");
+    expect(screen.getByText("A new version of Circles is ready.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Later" }));
+    window.__circlesUpdatePending = false;
+  });
   it("stages a public guest RSVP without creating an account", async () => {
     renderApp("/ministry-lens-church/gatherings/rooted-in-grace");
     fireEvent.change(await screen.findByLabelText("Your name"), {

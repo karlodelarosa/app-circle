@@ -87,7 +87,10 @@ export function PwaUpdatePrompt() {
       <button
         type="button"
         className="min-h-10 rounded-xl bg-paper px-3 text-sm font-medium text-ink"
-        onClick={() => void window.__circlesUpdateSW?.(true)}
+        onClick={() => {
+          window.__circlesUpdatePending = false;
+          void window.__circlesUpdateSW?.(true);
+        }}
       >
         Update
       </button>
@@ -103,10 +106,13 @@ export function PwaUpdatePrompt() {
 }
 
 function usePwaUpdateNotice() {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(
+    () => Boolean(window.__circlesUpdatePending),
+  );
   useEffect(() => {
     const show = () => setVisible(true);
     window.addEventListener("circles:pwa-update", show);
+    if (window.__circlesUpdatePending) show();
     return () => window.removeEventListener("circles:pwa-update", show);
   }, []);
   return [visible, setVisible] as const;
@@ -115,5 +121,6 @@ function usePwaUpdateNotice() {
 declare global {
   interface Window {
     __circlesUpdateSW?: (reloadPage?: boolean) => Promise<void>;
+    __circlesUpdatePending?: boolean;
   }
 }

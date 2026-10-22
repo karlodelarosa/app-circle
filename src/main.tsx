@@ -9,6 +9,7 @@ import './styles.css'
 window.__circlesUpdateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
+    window.__circlesUpdatePending = true
     window.dispatchEvent(new Event('circles:pwa-update'))
   },
 })
