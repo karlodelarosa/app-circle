@@ -364,6 +364,10 @@ describe("Circles MVP", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole("heading", { name: "Choose your own password." })).toBeInTheDocument();
+    expect(screen.getByText("At least 10 characters")).toBeInTheDocument();
+    expect(screen.getByText("One uppercase letter")).toBeInTheDocument();
+    expect(screen.getByText("One lowercase letter")).toBeInTheDocument();
+    expect(screen.getByText("One number")).toBeInTheDocument();
   });
   it("shows the persistent dashboard return while browsing public pages", async () => {
     renderApp("/ministry-lens-church?browse=1");

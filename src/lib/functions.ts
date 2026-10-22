@@ -17,3 +17,25 @@ export async function invokeAuthenticatedFunction(
     },
   });
 }
+
+export async function getFunctionErrorMessage(
+  result: { data?: { error?: string } | null; error?: unknown },
+  fallback: string,
+) {
+  if (result.data?.error) return result.data.error;
+  const functionError = result.error as {
+    message?: string;
+    context?: Response;
+  } | null;
+  if (functionError?.context instanceof Response) {
+    try {
+      const payload = await functionError.context.clone().json() as {
+        error?: string;
+      };
+      if (payload.error) return payload.error;
+    } catch {
+      // Fall back to the SDK message when the response is not JSON.
+    }
+  }
+  return functionError?.message || fallback;
+}
