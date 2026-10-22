@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import { AppProvider } from "./AppContext";
@@ -27,6 +27,45 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("link", { name: "Find a gathering" }),
     ).toHaveAttribute("href", "/ministry-lens-church/gatherings");
+    screen.getAllByRole("link", { name: "Join a Circle" }).forEach((link) =>
+      expect(link).toHaveAttribute("href", "/ministry-lens-church/circles"),
+    );
+  });
+  it("lets visitors learn about a Circle before opening the interest form", async () => {
+    renderApp("/ministry-lens-church/circles/grace-and-ground");
+    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "I’m interested in joining" }));
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
+    expect(screen.getByText(/does not create an account/i)).toBeInTheDocument();
+  });
+  it("wraps routed content in the shared fade and resets scrolling", () => {
+    const { container } = renderApp("/gatherings");
+    expect(container.querySelector(".route-reveal")).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "auto" });
+  });
+  it("provides Back and Dashboard controls on nested standalone PWA screens", () => {
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    });
+    renderApp("/gatherings/meeting-1");
+    expect(screen.getByRole("navigation", { name: "App navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "App navigation" }).querySelector('a[href="/"]')).toHaveTextContent("Dashboard");
+    Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+  });
+  it("shows a user-controlled notice when a PWA update is ready", () => {
+    renderApp("/");
+    act(() => window.dispatchEvent(new Event("circles:pwa-update")));
+    expect(screen.getByText("A new version of Circles is ready.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Later" }));
+    expect(screen.queryByText("A new version of Circles is ready.")).not.toBeInTheDocument();
   });
   it("stages a public guest RSVP without creating an account", async () => {
     renderApp("/ministry-lens-church/gatherings/rooted-in-grace");

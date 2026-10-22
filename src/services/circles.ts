@@ -13,6 +13,7 @@ import type {
   GuestConnection,
   Gallery,
   ContactPreference,
+  CirclePublicListing,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -75,14 +76,29 @@ export async function loadAppData(
     announcements: [],
     testimonies: [],
     galleries: [],
+    publicCircleListings: [],
     currentUser,
     connectionAttentionCount: 0,
   };
-  const attentionResult = await client.rpc(
-    "get_circle_connection_attention_count",
-  );
+  const [attentionResult, listingsResult] = await Promise.all([
+    client.rpc("get_circle_connection_attention_count"),
+    client
+      .from("circle_public_listings")
+      .select("id,organization_id,cell_group_id,public_slug,description,cover_url,is_published")
+      .eq("organization_id", context.organization.id),
+  ]);
   if (!attentionResult.error)
     base.connectionAttentionCount = Number(attentionResult.data ?? 0);
+  if (listingsResult.error) throw listingsResult.error;
+  base.publicCircleListings = (listingsResult.data ?? []).map((row: any) => ({
+    id: row.id,
+    organizationId: row.organization_id,
+    groupId: row.cell_group_id,
+    slug: row.public_slug,
+    description: row.description ?? "",
+    coverUrl: row.cover_url ?? undefined,
+    isPublished: Boolean(row.is_published),
+  }));
   if (!group) return base;
 
   const [membersResult, gatheringsResult, prayersResult] = await Promise.all([
@@ -414,6 +430,67 @@ export async function cancelMeeting(client: SupabaseClient, id: string) {
     .from("circle_gatherings")
     .update({ status: "cancelled" })
     .eq("id", id);
+  if (error) throw error;
+}
+
+export async function saveCirclePublicListing(
+  client: SupabaseClient,
+  organizationId: string,
+  group: Group,
+  input: {
+    description: string;
+    coverFile?: File;
+    current?: CirclePublicListing;
+  },
+) {
+  let coverUrl = input.current?.coverUrl ?? null;
+  let uploadedPath: string | null = null;
+  if (input.coverFile) {
+    const cover = await optimizeGatheringCover(input.coverFile);
+    uploadedPath = `${organizationId}/circles/${group.id}/cover-${crypto.randomUUID()}.webp`;
+    const upload = await client.storage
+      .from("circle-public-media")
+      .upload(uploadedPath, cover, { contentType: "image/webp" });
+    if (upload.error) throw upload.error;
+    coverUrl = client.storage
+      .from("circle-public-media")
+      .getPublicUrl(uploadedPath).data.publicUrl;
+  }
+  const slug =
+    input.current?.slug ||
+    `${group.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "circle"}-${group.id.slice(0, 8)}`;
+  const { error } = await client.from("circle_public_listings").upsert(
+    {
+      organization_id: organizationId,
+      cell_group_id: group.id,
+      public_slug: slug,
+      description: input.description.trim(),
+      cover_url: coverUrl,
+      is_published: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "cell_group_id" },
+  );
+  if (error) {
+    if (uploadedPath)
+      await client.storage.from("circle-public-media").remove([uploadedPath]);
+    throw error;
+  }
+  if (uploadedPath && input.current?.coverUrl) {
+    const oldPath = publicStoragePath(input.current.coverUrl);
+    if (oldPath?.startsWith(`${organizationId}/circles/`))
+      await client.storage.from("circle-public-media").remove([oldPath]);
+  }
+}
+
+export async function unpublishCirclePublicListing(
+  client: SupabaseClient,
+  listingId: string,
+) {
+  const { error } = await client
+    .from("circle_public_listings")
+    .update({ is_published: false, updated_at: new Date().toISOString() })
+    .eq("id", listingId);
   if (error) throw error;
 }
 

@@ -10,9 +10,10 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "./Avatar";
+import { RouteOutlet, StandaloneRouteBar } from "./RouteExperience";
 
 export function Brand() {
   return (
@@ -126,6 +127,7 @@ function AccountMenu({
 
 export function AppShell() {
   const { data, demoMode, signOut, toast } = useCircles();
+  const { pathname } = useLocation();
   if (!data) return null;
   const base = "/";
   const canLead =
@@ -148,6 +150,14 @@ export function AppShell() {
         ]
       : []),
   ];
+  const topLevel = ["/", "/circles", "/gatherings", "/connections", "/content"];
+  const standaloneFallback = pathname.startsWith("/gatherings/")
+    ? "/gatherings"
+    : pathname.startsWith("/circles/")
+      ? "/circles"
+      : pathname.startsWith("/connections/")
+        ? "/connections"
+        : "/";
   return (
     <div className="min-h-screen bg-parchment text-ink">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-paper/95 px-6 py-7 lg:flex lg:flex-col">
@@ -200,8 +210,14 @@ export function AppShell() {
             />
           </div>
         </header>
+        <StandaloneRouteBar
+          homeTo="/"
+          homeLabel="Dashboard"
+          fallbackTo={standaloneFallback}
+          hidden={topLevel.includes(pathname)}
+        />
         <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
-          <Outlet />
+          <RouteOutlet />
         </main>
       </div>
       <nav

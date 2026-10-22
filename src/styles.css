@@ -13,6 +13,7 @@
 }
 
 @layer components {
+  .route-reveal { animation: route-reveal 180ms ease-out both; }
   .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted transition-colors; }
   .nav-link:hover { @apply bg-parchment text-ink; }
   .nav-link-active { @apply bg-olive text-paper shadow-sm; }
@@ -102,7 +103,13 @@
   .public-hero h1 { @apply mt-4 max-w-2xl font-display text-6xl leading-[.96] sm:text-8xl; }
 }
 
+@keyframes route-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .route-reveal { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
 

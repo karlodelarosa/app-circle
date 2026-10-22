@@ -6,7 +6,12 @@ import App from './App'
 import { AppProvider } from './AppContext'
 import './styles.css'
 
-registerSW({ immediate: true })
+window.__circlesUpdateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    window.dispatchEvent(new Event('circles:pwa-update'))
+  },
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><BrowserRouter><AppProvider><App /></AppProvider></BrowserRouter></React.StrictMode>

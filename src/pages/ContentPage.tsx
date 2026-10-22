@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, ChevronRight, Images, Megaphone, Plus, Quote, X } from "lucide-react";
+import { CalendarDays, ChevronRight, Images, Megaphone, Plus, Quote, UsersRound, X } from "lucide-react";
 import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
+import { saveCirclePublicListing, unpublishCirclePublicListing } from "../services/circles";
+import type { Group } from "../types";
 
 type Composer = "testimony" | "gallery" | "announcement" | null;
 const slugify = (value: string) =>
@@ -24,11 +26,59 @@ export function ContentPage() {
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [circleEditor, setCircleEditor] = useState<Group | null>(null);
+  const [circleDescription, setCircleDescription] = useState("");
+  const [circleCover, setCircleCover] = useState<File | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (composer && !dialogRef.current?.open) dialogRef.current?.showModal();
   }, [composer]);
   if (!data) return null;
+  const editCircleProfile = (group: Group) => {
+    const listing = data.publicCircleListings.find((item) => item.groupId === group.id);
+    setCircleDescription(listing?.description || group.description || "");
+    setCircleCover(null);
+    setMessage("");
+    setCircleEditor(group);
+  };
+  const publishCircleProfile = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!circleEditor) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      if (!demoMode && supabase) {
+        await saveCirclePublicListing(supabase, data.organization.id, circleEditor, {
+          description: circleDescription,
+          coverFile: circleCover || undefined,
+          current: data.publicCircleListings.find((item) => item.groupId === circleEditor.id),
+        });
+        await refresh();
+      }
+      setCircleEditor(null);
+      setMessage(`${circleEditor.name} is published in Join a Circle.`);
+    } catch (cause) {
+      setMessage(getErrorMessage(cause, "The Circle profile could not be published."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const unpublishCircleProfile = async (group: Group) => {
+    const listing = data.publicCircleListings.find((item) => item.groupId === group.id);
+    if (!listing || !window.confirm(`Remove ${group.name} from Join a Circle? Existing interest records will be kept.`)) return;
+    setBusy(true);
+    try {
+      if (!demoMode && supabase) {
+        await unpublishCirclePublicListing(supabase, listing.id);
+        await refresh();
+      }
+      setMessage(`${group.name} is no longer public.`);
+    } catch (cause) {
+      setMessage(getErrorMessage(cause, "The Circle profile could not be unpublished."));
+    } finally {
+      setBusy(false);
+    }
+  };
   const publishSpace = async () => {
     if (demoMode || !supabase) {
       setMessage("Public community page is published in demo mode.");
@@ -155,6 +205,46 @@ export function ContentPage() {
         >
           {message}
         </p>
+      )}
+      {data.currentUser.role === "admin" && (
+        <section className="mt-10 border-t border-line pt-8">
+          <div className="section-heading">
+            <div>
+              <h2>Circle profiles</h2>
+              <p>Choose which Circles visitors may learn about and contact.</p>
+            </div>
+          </div>
+          <div className="divide-y divide-line border-y border-line">
+            {data.groups.map((group) => {
+              const listing = data.publicCircleListings.find((item) => item.groupId === group.id);
+              return (
+                <div key={group.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-sage text-olive"><UsersRound size={19} /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-display text-2xl">{group.name}</h3>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] ${listing?.isPublished ? "bg-sage text-olive" : "bg-paper text-muted"}`}>
+                        {listing?.isPublished ? "Public" : "Private"}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted">{listing?.description || group.description || "Add a public description before publishing."}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {listing?.isPublished && (
+                      <a className="secondary-button" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/circles/${listing.slug}?browse=1`}>View</a>
+                    )}
+                    <button type="button" className="primary-button" onClick={() => editCircleProfile(group)} disabled={busy}>
+                      {listing?.isPublished ? "Edit profile" : "Publish profile"}
+                    </button>
+                    {listing?.isPublished && (
+                      <button type="button" className="secondary-button" onClick={() => void unpublishCircleProfile(group)} disabled={busy}>Unpublish</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
       <div className="mt-9 grid gap-5 md:grid-cols-2">
         <ContentCard
@@ -348,6 +438,32 @@ export function ContentPage() {
             </footer>
           </form>
         </dialog>
+      )}
+      {circleEditor && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCircleEditor(null); }}>
+          <form role="dialog" aria-modal="true" aria-labelledby="circle-profile-title" onSubmit={publishCircleProfile} className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-[1.75rem] border border-line bg-paper text-ink shadow-quiet">
+            <header className="flex items-start justify-between border-b border-line px-6 py-5 sm:px-8">
+              <div>
+                <p className="text-xs text-muted">Join a Circle</p>
+                <h2 id="circle-profile-title" className="mt-1 font-display text-3xl">{circleEditor.name}</h2>
+              </div>
+              <button type="button" className="icon-button" aria-label="Close" onClick={() => setCircleEditor(null)}><X size={19} /></button>
+            </header>
+            <div className="space-y-5 px-6 py-6 sm:px-8">
+              <p className="text-sm leading-6 text-muted">Only this public description, cover, Circle name, and location will be shown. Member details remain private.</p>
+              <label className="field-label">Public description
+                <textarea className="field min-h-32" required maxLength={1200} value={circleDescription} onChange={(event) => setCircleDescription(event.target.value)} />
+              </label>
+              <label className="field-label">Cover photo (optional)
+                <input className="field" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setCircleCover(event.target.files?.[0] || null)} />
+              </label>
+            </div>
+            <footer className="flex justify-end gap-3 border-t border-line px-6 py-4 sm:px-8">
+              <button type="button" className="secondary-button" onClick={() => setCircleEditor(null)} disabled={busy}>Cancel</button>
+              <button className="primary-button" disabled={busy}>{busy ? "Publishing…" : "Publish profile"}</button>
+            </footer>
+          </form>
+        </div>
       )}
       <section className="mt-12 border-t border-line pt-8">
         <div className="section-heading">

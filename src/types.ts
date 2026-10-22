@@ -38,6 +38,16 @@ export interface Group {
   isPublic?: boolean;
 }
 
+export interface CirclePublicListing {
+  id: string;
+  organizationId: string;
+  groupId: string;
+  slug: string;
+  description: string;
+  coverUrl?: string;
+  isPublished: boolean;
+}
+
 export interface GuestConnectionActivity {
   id: string;
   type:
@@ -209,6 +219,7 @@ export interface AppData {
   announcements: Announcement[];
   testimonies: Testimony[];
   galleries: Gallery[];
+  publicCircleListings: CirclePublicListing[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
 }

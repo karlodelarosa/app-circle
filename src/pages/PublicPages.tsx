@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -23,11 +24,13 @@ import {
 import {
   Link,
   NavLink,
-  Outlet,
+  useLocation,
   useParams,
   useSearchParams,
 } from "react-router-dom";
 import { Brand } from "../components/AppShell";
+import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
+import { useStandalone } from "../hooks/useStandalone";
 import { formatDate, formatTime } from "../lib/format";
 import {
   gatheringShareUrl,
@@ -66,9 +69,7 @@ interface InstallPromptEvent extends Event {
 
 function useInstallPrompt() {
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent>();
-  const standalone =
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  const standalone = useStandalone();
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   useEffect(() => {
     const capture = (event: Event) => {
@@ -94,6 +95,7 @@ export function PublicShell() {
   const [space, setSpace] = useState<PublicSpace | null>(null);
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
+  const { pathname } = useLocation();
   useEffect(() => {
     setSpace(null);
     setError("");
@@ -134,8 +136,17 @@ export function PublicShell() {
     ...(space.announcements.length ? [["Updates", `${base}/updates`]] : []),
     ...(space.testimonies.length ? [["Testimonies", `${base}/testimonies`]] : []),
     ...(space.galleries.length ? [["Gallery", `${base}/galleries`]] : []),
-    ...(space.circles.length ? [["Discover Circles", `${base}/circles`]] : []),
+    ...(space.circles.length ? [["Join a Circle", `${base}/circles`]] : []),
   ];
+  const publicFallback = pathname.match(/\/gatherings\/[^/]+$/)
+    ? `${base}/gatherings`
+    : pathname.match(/\/testimonies\/[^/]+$/)
+      ? `${base}/testimonies`
+      : pathname.match(/\/galleries\/[^/]+$/)
+        ? `${base}/galleries`
+        : pathname.match(/\/circles\/[^/]+$/)
+          ? `${base}/circles`
+          : base;
   return (
     <PublicContext.Provider value={{ space, browse, href }}>
       <div className="min-h-screen bg-parchment text-ink">
@@ -206,8 +217,14 @@ export function PublicShell() {
             </nav>
           )}
         </header>
+        <StandaloneRouteBar
+          homeTo={href(base)}
+          homeLabel="Home"
+          fallbackTo={href(publicFallback)}
+          hidden={pathname === base}
+        />
         </div>
-        <Outlet />
+        <RouteOutlet />
         <footer className="border-t border-line bg-paper">
           <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-10 sm:flex-row sm:items-center sm:justify-between lg:px-10">
             <Brand />
@@ -254,7 +271,7 @@ export function PublicHomePage() {
                   className="secondary-button min-h-11 justify-center"
                   to={href(`/${slug}/circles`)}
                 >
-                  Discover Circles
+                  Join a Circle
                 </Link>
               )}
             </div>
@@ -1143,8 +1160,8 @@ export function PublicCirclesPage() {
     );
   return (
     <PublicIndex
-      title="Discover Circles"
-      intro="Find a smaller community where names are remembered and life is shared."
+      title="Join a Circle"
+      intro="Learn about each smaller community, then let a leader know where you would like to belong."
     >
       <div className="grid gap-5 md:grid-cols-2">
         {space.circles.map((group) => (
@@ -1162,7 +1179,7 @@ export function PublicCirclesPage() {
               <h2 className="font-display text-3xl">{group.name}</h2>
               <p className="mt-3 leading-7 text-muted">{group.description}</p>
               <span className="text-link mt-6">
-                Meet this Circle <ChevronRight size={15} />
+                Learn about this Circle <ChevronRight size={15} />
               </span>
             </div>
           </Link>
@@ -1177,8 +1194,10 @@ export function PublicCirclePage() {
   const { circleSlug } = useParams();
   const group = space.circles.find((entry) => entry.slug === circleSlug);
   const [done, setDone] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -1194,6 +1213,13 @@ export function PublicCirclePage() {
         intro="This Circle is not publicly listed."
       />
     );
+  const nextGathering = space.gatherings
+    .filter((item) => item.groupId === group.id)
+    .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
+  const openInterestForm = () => {
+    setFormOpen(true);
+    window.requestAnimationFrame(() => nameRef.current?.focus());
+  };
   return (
     <main className="public-section">
       <div className="grid overflow-hidden rounded-[2rem] border border-line bg-paper lg:grid-cols-2">
@@ -1209,6 +1235,16 @@ export function PublicCirclePage() {
           </h1>
           <p className="mt-5 leading-8 text-muted">{group.description}</p>
           <p className="mt-5 text-sm text-olive">{group.location}</p>
+          {nextGathering && (
+            <Link
+              className="mt-7 block border-y border-line py-5"
+              to={href(`/${space.organization.slug}/gatherings/${nextGathering.slug}`)}
+            >
+              <span className="text-xs text-olive">Next public gathering</span>
+              <strong className="mt-2 block font-display text-2xl font-normal">{nextGathering.title}</strong>
+              <span className="mt-1 block text-sm text-muted">{formatDate(nextGathering.meetingDate)} at {formatTime(nextGathering.meetingDate)}</span>
+            </Link>
+          )}
           {browse ? (
             <div className="mt-10 border-t border-line pt-7">
               <p className="font-display text-3xl">Keep exploring</p>
@@ -1224,10 +1260,20 @@ export function PublicCirclePage() {
               </Link>
             </div>
           ) : done ? (
-            <p className="mt-10 rounded-2xl bg-parchment p-5">
-              Your interest was sent. A leader will follow up using the contact
-              you provided.
-            </p>
+            <div className="mt-10 rounded-2xl bg-parchment p-5" role="status">
+              <p className="font-display text-2xl">Your interest was sent.</p>
+              <p className="mt-2 text-sm leading-6 text-muted">A leader will follow up using the contact you provided.</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link className="primary-button" to={href(`/${space.organization.slug}/gatherings`)}>Upcoming gatherings</Link>
+                <Link className="secondary-button" to={href(`/${space.organization.slug}`)}>Community home</Link>
+              </div>
+            </div>
+          ) : !formOpen ? (
+            <div className="mt-10 border-t border-line pt-7">
+              <h2 className="font-display text-3xl">Could this be your Circle?</h2>
+              <p className="mt-3 text-sm leading-6 text-muted">Tell a leader you would like to learn more. This sends an interest request; it does not create an account or add you as a member.</p>
+              <button type="button" className="primary-button mt-5 w-full" onClick={openInterestForm}>I’m interested in joining</button>
+            </div>
           ) : (
             <form
               className="mt-10 space-y-4"
@@ -1250,10 +1296,12 @@ export function PublicCirclePage() {
                   .finally(() => setBusy(false));
               }}
             >
-              <h2 className="font-display text-3xl">I’m interested</h2>
+              <h2 className="font-display text-3xl">Tell a leader you’re interested</h2>
+              <p className="text-sm leading-6 text-muted">A leader will use these details only to follow up about this Circle. This does not create an account or membership.</p>
               <label className="field-label">
                 Name
                 <input
+                  ref={nameRef}
                   className="field"
                   required
                   value={form.name}

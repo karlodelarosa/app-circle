@@ -8,6 +8,7 @@ import { GatheringDetailPage } from "./pages/GatheringDetailPage";
 import { GatheringsPage } from "./pages/GatheringsPage";
 import { HomePage } from "./pages/HomePage";
 import { SignInPage } from "./pages/SignInPage";
+import { PwaUpdatePrompt, RouteScrollManager } from "./components/RouteExperience";
 import {
   GalleriesPage,
   GalleryPage,
@@ -80,7 +81,10 @@ function ProtectedApp() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <RouteScrollManager />
+      <PwaUpdatePrompt />
+      <Routes>
       <Route path="/sign-in" element={<RootEntry />} />
       <Route element={<ProtectedApp />}>
         <Route path="/" element={<HomePage />} />
@@ -111,6 +115,7 @@ export default function App() {
         <Route path="circles" element={<PublicCirclesPage />} />
         <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 }
