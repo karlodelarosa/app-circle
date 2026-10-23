@@ -385,7 +385,10 @@ function GatheringTile({ item }: { item: PublicSpace["gatherings"][number] }) {
       className="group grid min-h-72 overflow-hidden rounded-[2rem] border border-line bg-paper sm:grid-cols-[.9fr_1.1fr]"
     >
       <div className="p-7">
-        <p className="text-xs text-olive">{formatDate(item.meetingDate)}</p>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-olive">
+          <span>{formatDate(item.meetingDate)}</span>
+          {item.destinationName && <span className="status-badge">{item.destinationName}</span>}
+        </div>
         <h3 className="mt-3 font-display text-3xl leading-tight">
           {item.title}
         </h3>
@@ -428,12 +431,13 @@ function DiscoverySection({
 }: {
   space: PublicSpace;
   gatheringId: string;
-  groupId: string;
+  groupId?: string;
 }) {
   const slug = space.organization.slug;
   const readOnly = (path: string) => withBrowseMode(path, true);
-  const group =
-    space.circles.find((item) => item.id === groupId) ?? space.circles[0];
+  const group = groupId
+    ? space.circles.find((item) => item.id === groupId)
+    : undefined;
   const nextGathering =
     space.gatherings.find(
       (item) => item.id !== gatheringId && item.groupId === groupId,
@@ -645,6 +649,7 @@ export function PublicGatheringPage() {
       .finally(() => setBusy(false));
   };
   const connect = (event: FormEvent) => {
+    if (!item.groupId) return;
     event.preventDefault();
     setConnectBusy(true);
     setConnectError("");
@@ -692,7 +697,10 @@ export function PublicGatheringPage() {
           />
           <div className="grid gap-10 p-6 sm:p-10 lg:grid-cols-[1.2fr_.8fr]">
             <div className="min-w-0">
-              <p className="page-kicker">{formatDate(item.meetingDate)}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="page-kicker">{formatDate(item.meetingDate)}</p>
+                {item.destinationName && <span className="status-badge">{item.destinationName}</span>}
+              </div>
               <h1 className="mt-2 break-words font-display text-5xl leading-none sm:text-7xl">
                 {item.title}
               </h1>
@@ -769,7 +777,7 @@ export function PublicGatheringPage() {
                       See all gatherings and community activities
                     </Link>
                   </div>
-                  <div className="mt-8 border-t border-line pt-6">
+                  {listedCircle && <div className="mt-8 border-t border-line pt-6">
                     {connectDone ? (
                       <div role="status" className="rounded-2xl bg-parchment p-5">
                         <p className="font-display text-2xl">A leader will be in touch.</p>
@@ -840,7 +848,7 @@ export function PublicGatheringPage() {
                         I’d like to connect with this Circle
                       </button>
                     )}
-                  </div>
+                  </div>}
                   <details className="mt-8 border-t border-line pt-6">
                     <summary className="cursor-pointer font-display text-2xl">More ways to stay connected</summary>
                     <p className="mt-2 text-sm leading-6 text-muted">

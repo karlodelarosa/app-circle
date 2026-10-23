@@ -94,7 +94,7 @@ export interface GuestConnectionActivity {
 export interface GuestConnection {
   id: string;
   organizationId: string;
-  groupId: string;
+  groupId?: string;
   groupName: string;
   name: string;
   email: string;
@@ -133,7 +133,10 @@ export interface Organization {
 
 export interface Meeting {
   id: string;
-  groupId: string;
+  groupId?: string;
+  scope?: "circle" | "organization";
+  destinationName?: string;
+  canManage?: boolean;
   title: string;
   meetingDate: string;
   location: string;
@@ -165,6 +168,7 @@ export interface Announcement {
   expiresAt?: string;
   isPublic: boolean;
   assignmentConfirmedAt?: string;
+  destinationName?: string;
 }
 
 export interface Testimony {
@@ -200,6 +204,7 @@ export interface Gallery {
   publishedAt: string;
   photos: GalleryPhoto[];
   assignmentConfirmedAt?: string;
+  destinationName?: string;
 }
 
 export type ContentAssignmentType =
@@ -260,6 +265,7 @@ export interface PrayerRequest {
   createdAt: string;
   prayerCount: number;
   prayedByMe: boolean;
+  destinationName?: string;
 }
 
 export interface AppData {
@@ -268,6 +274,14 @@ export interface AppData {
   group: Group | null;
   members: Member[];
   meetings: Meeting[];
+  accessibleMeetings?: Meeting[];
+  organizationMembers?: Member[];
+  dashboard?: {
+    meetings: Meeting[];
+    prayers: PrayerRequest[];
+    announcements: Announcement[];
+    galleries: Gallery[];
+  };
   prayers: PrayerRequest[];
   announcements: Announcement[];
   testimonies: Testimony[];
@@ -286,7 +300,8 @@ export interface AppData {
 }
 
 export interface MeetingInput {
-  groupId: string;
+  scope: "circle" | "organization";
+  groupId?: string;
   title: string;
   meetingDate: string;
   location: string;

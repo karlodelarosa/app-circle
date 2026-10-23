@@ -24,7 +24,12 @@ export function HomePage() {
   const { data } = useCircles();
   if (!data) return null;
 
-  const upcoming = data.meetings
+  const dashboardMeetings = data.dashboard?.meetings ?? data.accessibleMeetings ?? data.meetings;
+  const dashboardPrayers = data.dashboard?.prayers ?? data.prayers;
+  const dashboardAnnouncements = data.dashboard?.announcements ?? data.announcements;
+  const dashboardGalleries = data.dashboard?.galleries ?? data.galleries;
+  const dashboardMembers = data.organizationMembers ?? data.members;
+  const upcoming = dashboardMeetings
     .filter(
       (meeting) =>
         meeting.status === "scheduled" &&
@@ -32,17 +37,14 @@ export function HomePage() {
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
   const next = upcoming[0];
-  const prayers = data.prayers.filter((prayer) => !prayer.isAnswered).slice(0, 3);
-  const announcement = data.announcements[0];
-  const gallery = data.galleries[0];
-  const circleCover = data.publicCircleListings.find(
-    (listing) => listing.groupId === data.group?.id,
-  )?.coverUrl;
-  const defaultHeroImage = circleCover || "/assets/devotional-table.webp";
+  const prayers = dashboardPrayers.filter((prayer) => !prayer.isAnswered).slice(0, 3);
+  const announcement = dashboardAnnouncements[0];
+  const gallery = dashboardGalleries[0];
+  const defaultHeroImage = data.organization.imageUrl || "/assets/devotional-table.webp";
   const attending = next
     ? Object.entries(next.rsvps)
         .filter(([, status]) => status === "attending")
-        .map(([id]) => data.members.find((member) => member.id === id))
+        .map(([id]) => dashboardMembers.find((member) => member.id === id))
         .filter((member) => member !== undefined)
     : [];
   const visibleAttendees = attending.slice(0, 4);
@@ -63,7 +65,7 @@ export function HomePage() {
             {dayGreeting()}, {data.currentUser.fullName.split(" ")[0]}.
           </h1>
           <p className="mt-3 text-sm text-muted">
-            Here’s what is happening in {data.group?.name || "your community"}.
+            Here’s what is happening across {data.organization.name}.
           </p>
         </div>
         {data.currentUser.role === "admin" && (
@@ -77,8 +79,9 @@ export function HomePage() {
         <DashboardJumbotron
           defaultImage={defaultHeroImage}
           gatherings={upcoming.slice(0, 3)}
-          circleName={data.group?.name}
-          circlePath={data.group ? `/circles/${data.group.id}` : "/circles"}
+          circleName={data.organization.name}
+          circlePath="/circles"
+          ctaLabel="View all Circles"
         />
       </section>
 
@@ -103,7 +106,7 @@ export function HomePage() {
                     <Link to={`/gatherings/${next.id}`} className="hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive">
                       <h3 className="font-display text-2xl sm:text-3xl">{next.title}</h3>
                     </Link>
-                    <p className="mt-1 text-sm text-muted">{data.group?.name}</p>
+                    <p className="mt-1 text-sm text-muted">{next.destinationName || "Everyone"}</p>
                     {next.studyTopic && (
                       <p className="mt-2 font-display text-lg text-olive">{next.studyTopic}</p>
                     )}
@@ -153,7 +156,7 @@ export function HomePage() {
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sage text-olive"><Heart size={17} /></span>
                 <span className="min-w-0">
                   <strong className="block text-sm font-medium">{prayer.title}</strong>
-                  <small className="mt-1 block text-xs text-muted">{prayer.prayerCount} {prayer.prayerCount === 1 ? "person is" : "people are"} praying</small>
+                  <small className="mt-1 block text-xs text-muted">{prayer.destinationName ? `${prayer.destinationName} · ` : ""}{prayer.prayerCount} {prayer.prayerCount === 1 ? "person is" : "people are"} praying</small>
                 </span>
               </Link>
             )) : <p className="py-8 text-sm text-muted">No open requests right now.</p>}
@@ -170,6 +173,7 @@ export function HomePage() {
               <h2 className="mt-5 font-display text-4xl">{announcement.title}</h2>
               <p className="mt-5 max-w-2xl whitespace-pre-line leading-7 text-muted">{announcement.body}</p>
               <p className="mt-6 text-xs text-muted">Shared {formatDate(announcement.publishedAt)}</p>
+              {announcement.destinationName && <p className="mt-2 text-xs text-olive">For {announcement.destinationName}</p>}
             </>
           ) : (
             <div className="py-8"><h2 className="font-display text-3xl">No current announcement</h2><p className="mt-2 text-sm text-muted">Your next community update will appear here.</p></div>
@@ -183,7 +187,7 @@ export function HomePage() {
             <div className="relative mt-auto p-6 sm:p-8">
               <span className="flex items-center gap-2 text-xs text-paper/75"><Images size={15} />From the gallery</span>
               <h2 className="mt-3 font-display text-4xl">{gallery.title}</h2>
-              <p className="mt-3 text-sm text-paper/75">View {gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"}</p>
+              <p className="mt-3 text-sm text-paper/75">{gallery.destinationName ? `${gallery.destinationName} · ` : ""}View {gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"}</p>
             </div>
           </a>
         ) : (

@@ -56,16 +56,20 @@ export function GatheringDetailPage() {
   });
   const [saved, setSaved] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
-  const meeting = data?.meetings.find((item) => item.id === id);
+  const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
+  const attendanceMembers = meeting?.scope === "organization"
+    ? data?.organizationMembers ?? []
+    : data?.members ?? [];
   const attending =
     data && meeting
-      ? data.members.filter(
+      ? attendanceMembers.filter(
           (member) => meeting.rsvps[member.id] === "attending",
         )
       : [];
   const canLead = Boolean(
     data &&
-    (data.currentUser.role === "admin" || data.group?.role === "leader"),
+    meeting &&
+    (meeting.canManage ?? data.currentUser.role !== "member"),
   );
   useEffect(() => {
     if (!meeting) return;
@@ -204,7 +208,9 @@ export function GatheringDetailPage() {
             <p className="text-sm text-[#D9DDCE]">
               {meeting.status === "cancelled"
                 ? "Cancelled gathering"
-                : "Our next gathering"}
+                : meeting.scope === "organization"
+                  ? "Everyone is welcome"
+                  : meeting.destinationName || "Our next gathering"}
             </p>
             <h1 className="mt-2 max-w-4xl font-display text-4xl leading-[1.02] sm:text-6xl lg:text-7xl">
               {meeting.title}
@@ -328,7 +334,7 @@ export function GatheringDetailPage() {
                 </button>
               </div>
               <div className="mt-3 space-y-2">
-                {data.members.map((member) => (
+                {attendanceMembers.map((member) => (
                   <label
                     key={member.id}
                     className="flex items-center gap-3 rounded-xl border border-line p-3 text-sm"

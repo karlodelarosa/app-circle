@@ -19,6 +19,9 @@ export function MeetingForm({
   ) ?? [];
   const hasSingleLeaderDestination =
     data?.currentUser.role !== "admin" && manageableGroups.length === 1;
+  const [scope, setScope] = useState<"circle" | "organization">(
+    meeting?.scope ?? "circle",
+  );
   const [groupId, setGroupId] = useState(
     meeting?.groupId ?? (hasSingleLeaderDestination ? manageableGroups[0].id : ""),
   );
@@ -62,7 +65,8 @@ export function MeetingForm({
     try {
       await saveMeeting(
         {
-          groupId,
+          scope,
+          groupId: scope === "circle" ? groupId : undefined,
           title,
           meetingDate: new Date(meetingDate).toISOString(),
           location,
@@ -87,6 +91,32 @@ export function MeetingForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="rounded-2xl border border-olive/20 bg-parchment p-4">
+        <fieldset disabled={Boolean(meeting)}>
+          <legend className="field-label">Who is this gathering for?</legend>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-4 text-sm ${scope === "organization" ? "border-olive bg-sage text-ink" : "border-line bg-paper text-muted"}`}>
+              <input
+                type="radio"
+                name="gathering-scope"
+                value="organization"
+                checked={scope === "organization"}
+                onChange={() => setScope("organization")}
+              />
+              Entire organization
+            </label>
+            <label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-4 text-sm ${scope === "circle" ? "border-olive bg-sage text-ink" : "border-line bg-paper text-muted"}`}>
+              <input
+                type="radio"
+                name="gathering-scope"
+                value="circle"
+                checked={scope === "circle"}
+                onChange={() => setScope("circle")}
+              />
+              A specific Circle
+            </label>
+          </div>
+        </fieldset>
+        {scope === "circle" && (
         <label className="field-label">
           Destination Circle
           <select
@@ -102,10 +132,13 @@ export function MeetingForm({
             ))}
           </select>
         </label>
+        )}
         <p className="mt-2 text-xs leading-5 text-muted">
           {meeting
             ? "Existing gatherings are reassigned from Publish → Content assignments."
-            : "This gathering will appear only in the selected Circle’s private views."}
+            : scope === "organization"
+              ? "Everyone in the organization can see this gathering. Public access still follows the visibility setting below."
+              : "This gathering will appear only in the selected Circle’s private views."}
         </p>
       </div>
       <label className="field-label">

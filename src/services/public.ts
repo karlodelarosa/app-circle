@@ -73,7 +73,11 @@ export async function loadPublicSpace(
   return {
     ...space,
     announcements: space.announcements ?? [],
-    gatherings: space.gatherings ?? [],
+    gatherings: (space.gatherings ?? []).map((meeting) => ({
+      ...meeting,
+      scope: meeting.scope ?? (meeting.groupId ? "circle" : "organization"),
+      destinationName: meeting.groupId ? meeting.destinationName : "Everyone",
+    })),
     testimonies: space.testimonies ?? [],
     galleries: space.galleries ?? [],
     circles: space.circles ?? [],
@@ -95,8 +99,15 @@ export async function loadPublicGathering(
     p_gathering_slug: gatheringSlug,
   });
   if (error) throw error;
-  return ((data as { gathering?: PublicSpace["gatherings"][number] } | null)
-    ?.gathering || null);
+  const gathering = (data as { gathering?: PublicSpace["gatherings"][number] } | null)
+    ?.gathering || null;
+  return gathering
+    ? {
+        ...gathering,
+        scope: gathering.scope ?? (gathering.groupId ? "circle" : "organization"),
+        destinationName: gathering.groupId ? gathering.destinationName : "Everyone",
+      }
+    : null;
 }
 
 export async function submitGuestRsvp(

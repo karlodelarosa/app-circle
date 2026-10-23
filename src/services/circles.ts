@@ -63,7 +63,11 @@ export async function loadAppData(
       "Circle member",
     email: "",
     avatarUrl: profile.avatarUrl ?? undefined,
-    role: (context.isAdmin ? "admin" : (group?.role ?? "member")) as Role,
+    role: (context.isAdmin
+      ? "admin"
+      : groups.some((item) => item.role === "leader")
+        ? "leader"
+        : "member") as Role,
   };
 
   const base: AppData = {
@@ -95,7 +99,7 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, listingsResult, approvedLeadersResult, assignmentsResult] = await Promise.all([
+  const [attentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
     client
       .from("circle_public_listings")
@@ -107,12 +111,14 @@ export async function loadAppData(
     context.isAdmin
       ? client.rpc("get_circle_content_assignments")
       : Promise.resolve({ data: [], error: null }),
+    client.rpc("get_circle_dashboard"),
   ]);
   if (!attentionResult.error)
     base.connectionAttentionCount = Number(attentionResult.data ?? 0);
   if (listingsResult.error) throw listingsResult.error;
   if (approvedLeadersResult.error) throw approvedLeadersResult.error;
   if (assignmentsResult.error) throw assignmentsResult.error;
+  if (dashboardResult.error) throw dashboardResult.error;
   base.approvedLeaders = (approvedLeadersResult.data ?? []) as ApprovedLeader[];
   base.contentAssignments = (assignmentsResult.data ?? []) as ContentAssignment[];
   base.publicCircleListings = (listingsResult.data ?? []).map((row: any) => ({
@@ -124,6 +130,20 @@ export async function loadAppData(
     coverUrl: row.cover_url ?? undefined,
     isPublished: Boolean(row.is_published),
   }));
+  const dashboard = (dashboardResult.data ?? {}) as any;
+  base.accessibleMeetings = (dashboard.meetings ?? []) as Meeting[];
+  base.organizationMembers = (dashboard.members ?? []).map((member: any) => ({
+    ...member,
+    membershipId: member.membershipId ?? `organization-${member.id}`,
+    role: member.role ?? "member",
+    discipleshipBadge: false,
+  })) as Member[];
+  base.dashboard = {
+    meetings: base.accessibleMeetings,
+    prayers: dashboard.prayers ?? [],
+    announcements: dashboard.announcements ?? [],
+    galleries: dashboard.galleries ?? [],
+  };
   if (!group) return base;
 
   const [membersResult, gatheringsResult, prayersResult, accountStatusesResult, badgesResult] = await Promise.all([
@@ -196,7 +216,10 @@ export async function loadAppData(
   const rsvps = rsvpsResult.data ?? [];
   const meetings: Meeting[] = (gatheringsResult.data ?? []).map((row: any) => ({
     id: row.id,
-    groupId: row.cell_group_id,
+    groupId: row.cell_group_id ?? undefined,
+    scope: row.scope ?? "circle",
+    destinationName: group.name,
+    canManage: currentUser.role === "admin" || group.role === "leader",
     title: row.title,
     meetingDate: row.starts_at,
     location: row.location ?? "",
@@ -432,7 +455,8 @@ export async function saveMeeting(
   }
   const payload = {
     organization_id: organizationId,
-    cell_group_id: input.groupId,
+    cell_group_id: input.scope === "organization" ? null : input.groupId,
+    scope: input.scope,
     leader_person_id: leaderPersonId ?? null,
     title: input.title,
     starts_at: input.meetingDate,
@@ -732,11 +756,13 @@ export async function updateGuestConnection(
   connectionId: string,
   action: "claim" | "unclaim" | "contacted" | "close" | "reopen" | "note",
   note = "",
+  groupId?: string,
 ) {
   const { data, error } = await client.rpc("update_circle_connection", {
     p_connection_id: connectionId,
     p_action: action,
     p_note: note,
+    p_cell_group_id: groupId ?? null,
   });
   if (error) throw error;
   return data as GuestConnection;

@@ -19,6 +19,7 @@ interface DashboardJumbotronProps {
   gatherings: Meeting[];
   circleName?: string;
   circlePath?: string;
+  ctaLabel?: string;
 }
 
 const AUTOPLAY_INTERVAL = 7000;
@@ -32,6 +33,7 @@ export function DashboardJumbotron({
   gatherings,
   circleName = "your Circle",
   circlePath = "/circles",
+  ctaLabel = "View my Circle",
 }: DashboardJumbotronProps) {
   const slides = [
     { id: "welcome", meeting: undefined },
@@ -185,7 +187,7 @@ export function DashboardJumbotron({
                     className="secondary-button mt-6"
                     tabIndex={isActive ? 0 : -1}
                   >
-                    View my Circle
+                    {ctaLabel}
                   </Link>
                 </div>
               </div>

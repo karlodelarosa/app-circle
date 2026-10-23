@@ -32,7 +32,48 @@ const renderApp = (path: string, authenticated = true) =>
     </MemoryRouter>,
   );
 
+const renderWithData = (path: string, data: typeof demoData) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <AppProvider initialData={data} initialSession={testSession}>
+        <App />
+      </AppProvider>
+    </MemoryRouter>,
+  );
+
 describe("Circles MVP", () => {
+  it("presents an organization-wide dashboard with destination labels", async () => {
+    const data = structuredClone(demoData);
+    const organizationMeeting = {
+      ...data.meetings[0],
+      id: "organization-gathering",
+      title: "One church gathering",
+      scope: "organization" as const,
+      groupId: undefined,
+      destinationName: "Everyone",
+      canManage: true,
+    };
+    data.accessibleMeetings = [organizationMeeting];
+    data.organizationMembers = data.members;
+    data.dashboard = {
+      meetings: [organizationMeeting],
+      prayers: [],
+      announcements: [],
+      galleries: [],
+    };
+    renderWithData("/", data);
+    expect(await screen.findByText("Here’s what is happening across Ministry Lens Church.")).toBeInTheDocument();
+    expect(screen.getAllByText("Everyone").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "View all Circles" })).toHaveAttribute("href", "/circles");
+  });
+
+  it("offers organization and Circle destinations when planning a gathering", async () => {
+    renderApp("/gatherings");
+    fireEvent.click(screen.getByRole("button", { name: "Plan a gathering" }));
+    expect(await screen.findByLabelText("Entire organization")).toBeInTheDocument();
+    expect(screen.getByLabelText("A specific Circle")).toBeInTheDocument();
+  });
+
   it("renders an organization-specific public homepage", async () => {
     renderApp("/ministry-lens-church");
     expect(

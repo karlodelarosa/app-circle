@@ -236,6 +236,21 @@ export function AppProvider({
           ? { ...meeting, rsvps: { ...meeting.rsvps, [personId]: status } }
           : meeting,
       ),
+      accessibleMeetings: data.accessibleMeetings?.map((meeting) =>
+        meeting.id === meetingId
+          ? { ...meeting, rsvps: { ...meeting.rsvps, [personId]: status } }
+          : meeting,
+      ),
+      dashboard: data.dashboard
+        ? {
+            ...data.dashboard,
+            meetings: data.dashboard.meetings.map((meeting) =>
+              meeting.id === meetingId
+                ? { ...meeting, rsvps: { ...meeting.rsvps, [personId]: status } }
+                : meeting,
+            ),
+          }
+        : undefined,
     });
     try {
       if (supabase && session)
@@ -343,17 +358,19 @@ export function AppProvider({
   };
 
   const saveMeeting = async (input: MeetingInput, id?: string) => {
-    if (!data?.group) return;
+    if (!data) return;
     if (supabase && session) {
       await api.saveMeeting(
         supabase,
         data.organization.id,
         data.currentUser.id,
-        data.groups.find((group) => group.id === input.groupId)?.leaderId,
+        input.scope === "circle"
+          ? data.groups.find((group) => group.id === input.groupId)?.leaderId
+          : undefined,
         input,
         id,
       );
-      if (input.groupId !== data.group.id && session?.user) {
+      if (input.scope === "circle" && input.groupId !== data.group?.id && input.groupId && session?.user) {
         const next = await api.loadAppData(supabase, session.user.id, input.groupId);
         next.currentUser.email = session.user.email ?? "";
         setData(next);
@@ -411,6 +428,17 @@ export function AppProvider({
       meetings: data.meetings.map((meeting) =>
         meeting.id === id ? { ...meeting, status: "cancelled" } : meeting,
       ),
+      accessibleMeetings: data.accessibleMeetings?.map((meeting) =>
+        meeting.id === id ? { ...meeting, status: "cancelled" } : meeting,
+      ),
+      dashboard: data.dashboard
+        ? {
+            ...data.dashboard,
+            meetings: data.dashboard.meetings.map((meeting) =>
+              meeting.id === id ? { ...meeting, status: "cancelled" } : meeting,
+            ),
+          }
+        : undefined,
     });
     notify("Gathering cancelled.");
   };

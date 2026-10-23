@@ -86,10 +86,11 @@ export function GatheringsPage() {
     data.currentUser.role === "admin" || data.group?.role === "leader";
   const base = "";
   const now = new Date().toISOString();
-  const upcoming = data.meetings
+  const meetings = data.accessibleMeetings ?? data.meetings;
+  const upcoming = meetings
     .filter((item) => item.meetingDate >= now)
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
-  const previous = data.meetings
+  const previous = meetings
     .filter((item) => item.meetingDate < now)
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const copyInvitation = async (meeting: Meeting) => {
@@ -144,6 +145,7 @@ export function GatheringsPage() {
               const attending = Object.values(meeting.rsvps).filter(
                 (status) => status === "attending",
               ).length;
+              const canManage = meeting.canManage ?? data.currentUser.role !== "member";
               return (
                 <article
                   key={meeting.id}
@@ -166,8 +168,11 @@ export function GatheringsPage() {
                         <p className="mt-1 font-display text-lg text-olive">
                           {meeting.studyTopic}
                         </p>
+                        <p className="mt-1 text-xs text-muted">
+                          {meeting.destinationName || (meeting.scope === "organization" ? "Everyone" : "Circle gathering")}
+                        </p>
                       </div>
-                      {isLeader && meeting.status !== "cancelled" && (
+                      {canManage && meeting.status !== "cancelled" && (
                         <div className="relative">
                           <button
                             className="icon-button"
@@ -219,7 +224,7 @@ export function GatheringsPage() {
                         <Users size={15} /> {attending} going
                       </span>
                     </div>
-                    {isLeader &&
+                    {canManage &&
                       meeting.status === "scheduled" &&
                       meeting.visibility === "public" &&
                       meeting.guestRsvpEnabled &&

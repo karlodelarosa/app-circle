@@ -169,6 +169,7 @@ export function ConnectionsPage() {
         demoMode={demoMode}
         currentPersonId={data.currentUser.personId}
         organizationId={data.organization.id}
+        manageableGroups={data.groups.filter((group) => data.currentUser.role === "admin" || group.role === "leader")}
         onChanged={async (next) => {
           setSelected(next);
           await refresh();
@@ -273,6 +274,7 @@ function ConnectionDetail({
   demoMode,
   currentPersonId,
   organizationId,
+  manageableGroups,
   onChanged,
 }: {
   connection?: GuestConnection;
@@ -281,6 +283,7 @@ function ConnectionDetail({
   demoMode: boolean;
   currentPersonId?: string;
   organizationId: string;
+  manageableGroups: { id: string; name: string }[];
   onChanged: (connection: GuestConnection) => Promise<void>;
 }) {
   const navigate = useNavigate();
@@ -288,6 +291,9 @@ function ConnectionDetail({
   const [actionError, setActionError] = useState("");
   const [note, setNote] = useState("");
   const [convertOpen, setConvertOpen] = useState(false);
+  const [assignmentGroupId, setAssignmentGroupId] = useState(
+    manageableGroups.length === 1 ? manageableGroups[0].id : "",
+  );
   const change = async (
     action: "claim" | "unclaim" | "contacted" | "close" | "reopen" | "note",
     body = "",
@@ -333,7 +339,13 @@ function ConnectionDetail({
             ...(connection.activities ?? []),
           ],
         };
-      } else next = await updateGuestConnection(supabase, connection.id, action, body);
+      } else next = await updateGuestConnection(
+        supabase,
+        connection.id,
+        action,
+        body,
+        action === "claim" ? assignmentGroupId || undefined : undefined,
+      );
       setNote("");
       await onChanged(next);
     } catch (cause) {
@@ -378,12 +390,21 @@ function ConnectionDetail({
       <div className="grid gap-10 py-8 lg:grid-cols-[1fr_.72fr]">
         <section>
           <div className="flex flex-wrap gap-2">
+            {!connection.groupId && !connection.claimedByPersonId && (
+              <label className="field-label w-full max-w-sm">
+                Assign this guest to a Circle before claiming
+                <select className="field" value={assignmentGroupId} onChange={(event) => setAssignmentGroupId(event.target.value)}>
+                  <option value="">Choose a Circle</option>
+                  {manageableGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                </select>
+              </label>
+            )}
             {connection.claimedByPersonId ? (
               <button className="secondary-button min-h-11" disabled={busy} onClick={() => void change("unclaim")}>
                 With {connection.claimedByName || "a leader"} · Unclaim
               </button>
             ) : currentPersonId ? (
-              <button className="secondary-button min-h-11" disabled={busy} onClick={() => void change("claim")}><UserCheck size={16} /> Claim follow-up</button>
+              <button className="secondary-button min-h-11" disabled={busy || (!connection.groupId && !assignmentGroupId)} onClick={() => void change("claim")}><UserCheck size={16} /> Claim follow-up</button>
             ) : null}
             {connection.status === "new" && connection.followUpOptIn && (
               <button className="primary-button min-h-11" disabled={busy} onClick={() => void change("contacted")}><Check size={16} /> Mark contacted</button>
@@ -393,7 +414,7 @@ function ConnectionDetail({
             ) : connection.status !== "connected" ? (
               <button className="secondary-button min-h-11" disabled={busy} onClick={() => void change("close")}>Close</button>
             ) : null}
-            {connection.status !== "connected" && (
+            {connection.status !== "connected" && connection.groupId && (
               <button className="primary-button min-h-11" onClick={() => setConvertOpen(true)}><UserPlus size={16} /> Connect to SheepCount</button>
             )}
           </div>
@@ -487,6 +508,7 @@ function ConvertConnectionModal({ connection, organizationId, demoMode, onClose,
     event?.preventDefault();
     setBusy(true); setError("");
     try {
+      if (!connection.groupId) throw new Error("Assign this guest to a Circle before searching People.");
       setResults(demoMode || !supabase ? [] : await searchPeople(supabase, organizationId, connection.groupId, query));
     } catch (cause) { setError(getErrorMessage(cause, "People search failed.")); }
     finally { setBusy(false); }
