@@ -275,13 +275,20 @@ export function AppProvider({
   };
 
   const addPrayer = async (input: PrayerInput) => {
-    if (!data?.group) return;
+    if (!data) return;
+    if (input.scope === "circle" && !data.group)
+      throw new Error("Select a Circle before sharing with My Circle.");
     const personId = requirePerson();
+    const groupId = input.scope === "circle" ? data.group?.id : undefined;
+    const destinationName =
+      input.scope === "organization"
+        ? "Entire organization"
+        : data.group?.name;
     if (supabase && session) {
       await api.createPrayer(
         supabase,
         data.organization.id,
-        data.group.id,
+        groupId,
         personId,
         input,
       );
@@ -292,9 +299,10 @@ export function AppProvider({
         prayers: [
           {
             id: crypto.randomUUID(),
-            groupId: data.group.id,
+            groupId,
             userId: personId,
             authorName: data.currentUser.fullName,
+            destinationName,
             ...input,
             isAnswered: false,
             createdAt: new Date().toISOString(),
@@ -305,7 +313,7 @@ export function AppProvider({
         ],
       });
     }
-    notify("Prayer shared with your circle.");
+    notify(`Prayer shared with ${destinationName}.`);
   };
 
   const togglePrayer = async (prayerId: string) => {

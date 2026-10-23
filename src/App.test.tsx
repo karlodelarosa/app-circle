@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import App from "./App";
@@ -201,6 +201,67 @@ describe("Circles MVP", () => {
     expect(
       screen.queryByRole("button", { name: /guest check-in/i }),
     ).not.toBeInTheDocument();
+  });
+  it("shares a prayer with the entire organization and labels its audience", async () => {
+    renderApp("/prayer");
+    fireEvent.click(screen.getByRole("button", { name: "Share a request" }));
+
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
+    expect(
+      screen.getByRole("radio", { name: /my circle.*grace & ground/i }),
+    ).toBeChecked();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /entire organization.*ministry lens church/i,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("What can we pray for?"), {
+      target: { value: "Wisdom for our church" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Share request" }));
+
+    const card = (await screen.findByRole("heading", {
+      name: "Wisdom for our church",
+    })).closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText("Entire organization")).toBeInTheDocument();
+  });
+  it("does not let a Circle leader answer another member's organization prayer", () => {
+    const data = structuredClone(demoData);
+    data.prayers.unshift({
+      id: "organization-prayer",
+      scope: "organization",
+      userId: "member-2",
+      authorName: "Mara Santos",
+      title: "Prayer for every Circle",
+      description: "Please pray for our whole church family.",
+      category: "Spiritual Growth",
+      isAnswered: false,
+      createdAt: new Date().toISOString(),
+      prayerCount: 0,
+      prayedByMe: false,
+      destinationName: "Entire organization",
+    });
+    renderWithData("/prayer", data);
+
+    const card = screen
+      .getByRole("heading", { name: "Prayer for every Circle" })
+      .closest("article");
+    expect(card).not.toBeNull();
+    expect(
+      within(card!).queryByRole("button", { name: "Mark as answered" }),
+    ).not.toBeInTheDocument();
+  });
+  it("lets a Circle leader answer another member's Circle prayer", () => {
+    renderApp("/prayer");
+
+    const card = screen
+      .getByRole("heading", { name: "Wisdom for a new season" })
+      .closest("article");
+    expect(card).not.toBeNull();
+    expect(
+      within(card!).getByRole("button", { name: "Mark as answered" }),
+    ).toBeInTheDocument();
   });
   it("uses clean authenticated URLs and opens content forms in a modal", () => {
     renderApp("/content");

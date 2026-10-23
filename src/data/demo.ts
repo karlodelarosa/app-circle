@@ -69,17 +69,17 @@ export const demoData: AppData = {
   publicCircleListings: [{ id: 'demo-listing', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-and-ground', description: 'A place for honest conversation, shared meals, and growing faith.', coverUrl: '/assets/devotional-table.webp', isPublished: true }],
   prayers: [
     {
-      id: 'prayer-1', groupId: 'demo-group', userId: 'member-2', authorName: 'Mara Santos',
+      id: 'prayer-1', groupId: 'demo-group', scope: 'circle', destinationName: 'Grace & Ground', userId: 'member-2', authorName: 'Mara Santos',
       title: 'Wisdom for a new season', description: 'Please pray for clarity as I consider a new role at work.',
       category: 'Work or School', isAnswered: false, createdAt: addDays(-1, 9), prayerCount: 8, prayedByMe: true
     },
     {
-      id: 'prayer-2', groupId: 'demo-group', userId: 'member-3', authorName: 'Joaquin Reyes',
+      id: 'prayer-2', groupId: 'demo-group', scope: 'circle', destinationName: 'Grace & Ground', userId: 'member-3', authorName: 'Joaquin Reyes',
       title: 'Healing for my father', description: 'He has a procedure on Monday. Pray for peace and a smooth recovery.',
       category: 'Health', isAnswered: false, createdAt: addDays(-2, 14), prayerCount: 12, prayedByMe: false
     },
     {
-      id: 'prayer-3', groupId: 'demo-group', userId: 'demo-user', authorName: 'Karlo de la Rosa',
+      id: 'prayer-3', groupId: 'demo-group', scope: 'circle', destinationName: 'Grace & Ground', userId: 'demo-user', authorName: 'Karlo de la Rosa',
       title: 'A gentle answer', description: 'Thank you for praying with us through a difficult family conversation.',
       category: 'Family', isAnswered: true, answeredNotes: 'God gave us honesty, patience, and a way forward.',
       createdAt: addDays(-5, 11), prayerCount: 6, prayedByMe: true

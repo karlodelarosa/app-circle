@@ -24,6 +24,26 @@ const fullName = (person: any) =>
   [person?.first_name, person?.last_name].filter(Boolean).join(" ") ||
   "Circle member";
 
+const normalizePrayer = (prayer: any): PrayerRequest => ({
+  ...prayer,
+  groupId: prayer.groupId ?? undefined,
+  scope: prayer.scope ?? (prayer.groupId ? "circle" : "organization"),
+  destinationName:
+    prayer.destinationName ??
+    (prayer.scope === "organization" ? "Entire organization" : undefined),
+});
+
+export async function loadPrayerRequests(
+  client: SupabaseClient,
+  groupId?: string,
+): Promise<PrayerRequest[]> {
+  const { data, error } = await client.rpc("get_circle_prayers", {
+    p_cell_group_id: groupId ?? null,
+  });
+  if (error) throw error;
+  return ((data ?? []) as any[]).map(normalizePrayer);
+}
+
 export async function loadAppData(
   client: SupabaseClient,
   userId: string,
@@ -99,7 +119,7 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult] = await Promise.all([
+  const [attentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult, prayers] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
     client
       .from("circle_public_listings")
@@ -112,6 +132,7 @@ export async function loadAppData(
       ? client.rpc("get_circle_content_assignments")
       : Promise.resolve({ data: [], error: null }),
     client.rpc("get_circle_dashboard"),
+    loadPrayerRequests(client, group?.id),
   ]);
   if (!attentionResult.error)
     base.connectionAttentionCount = Number(attentionResult.data ?? 0);
@@ -131,6 +152,18 @@ export async function loadAppData(
     isPublished: Boolean(row.is_published),
   }));
   const dashboard = (dashboardResult.data ?? {}) as any;
+  const dashboardPrayers = (dashboard.prayers ?? []).map(normalizePrayer) as PrayerRequest[];
+  const organizationPrayers = prayers.filter(
+    (prayer) => prayer.scope === "organization" && !prayer.isAnswered,
+  );
+  const combinedDashboardPrayers = Array.from(
+    new Map(
+      [...dashboardPrayers, ...organizationPrayers].map((prayer) => [
+        prayer.id,
+        prayer,
+      ]),
+    ).values(),
+  ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   base.accessibleMeetings = (dashboard.meetings ?? []) as Meeting[];
   base.organizationMembers = (dashboard.members ?? []).map((member: any) => ({
     ...member,
@@ -140,13 +173,14 @@ export async function loadAppData(
   })) as Member[];
   base.dashboard = {
     meetings: base.accessibleMeetings,
-    prayers: dashboard.prayers ?? [],
+    prayers: combinedDashboardPrayers,
     announcements: dashboard.announcements ?? [],
     galleries: dashboard.galleries ?? [],
   };
+  base.prayers = prayers;
   if (!group) return base;
 
-  const [membersResult, gatheringsResult, prayersResult, accountStatusesResult, badgesResult] = await Promise.all([
+  const [membersResult, gatheringsResult, accountStatusesResult, badgesResult] = await Promise.all([
     client
       .from("cell_group_members")
       .select(
@@ -159,39 +193,22 @@ export async function loadAppData(
       .eq("cell_group_id", group.id)
       .not("assignment_confirmed_at", "is", null)
       .order("starts_at"),
-    client
-      .from("circle_prayer_requests")
-      .select(
-        "*, people!circle_prayer_requests_person_id_fkey(first_name, last_name)",
-      )
-      .eq("cell_group_id", group.id)
-      .order("created_at", { ascending: false }),
     currentUser.role === "admin" || group.role === "leader"
       ? client.rpc("get_circle_member_account_statuses", { p_cell_group_id: group.id })
       : Promise.resolve({ data: [], error: null }),
     client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
   ]);
-  for (const result of [membersResult, gatheringsResult, prayersResult, accountStatusesResult, badgesResult])
+  for (const result of [membersResult, gatheringsResult, accountStatusesResult, badgesResult])
     if (result.error) throw result.error;
 
   const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
-  const prayerIds = (prayersResult.data ?? []).map((row: any) => row.id);
-  const [rsvpsResult, clicksResult] = await Promise.all([
-    gatheringIds.length
-      ? client
-          .from("circle_gathering_rsvps")
-          .select("gathering_id, person_id, status")
-          .in("gathering_id", gatheringIds)
-      : Promise.resolve({ data: [], error: null }),
-    prayerIds.length
-      ? client
-          .from("circle_prayer_clicks")
-          .select("prayer_id, person_id")
-          .in("prayer_id", prayerIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const rsvpsResult = gatheringIds.length
+    ? await client
+        .from("circle_gathering_rsvps")
+        .select("gathering_id, person_id, status")
+        .in("gathering_id", gatheringIds)
+    : { data: [], error: null };
   if (rsvpsResult.error) throw rsvpsResult.error;
-  if (clicksResult.error) throw clicksResult.error;
 
   const accountStatuses = new Map((accountStatusesResult.data ?? []).map((item: any) => [item.personId, item]));
   const badges = new Map((badgesResult.data ?? []).map((item: any) => [item.personId, item]));
@@ -244,33 +261,6 @@ export async function loadAppData(
     guestRsvpEnabled: Boolean(row.guest_rsvp_enabled),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
   }));
-  const clicks = clicksResult.data ?? [];
-  const prayers: PrayerRequest[] = (prayersResult.data ?? []).map(
-    (row: any) => {
-      const prayerClicks = clicks.filter(
-        (click: any) => click.prayer_id === row.id,
-      );
-      return {
-        id: row.id,
-        groupId: row.cell_group_id,
-        userId: row.person_id,
-        authorName: fullName(one(row.people)),
-        title: row.title,
-        description: row.description ?? "",
-        category: row.category,
-        isAnswered: row.is_answered,
-        answeredNotes: row.answered_notes ?? undefined,
-        createdAt: row.created_at,
-        prayerCount: prayerClicks.length,
-        prayedByMe: Boolean(
-          context.personId &&
-          prayerClicks.some(
-            (click: any) => click.person_id === context.personId,
-          ),
-        ),
-      };
-    },
-  );
   const [announcementsResult, testimoniesResult, galleriesResult] = await Promise.all([
     client
       .from("circle_announcements")
@@ -377,13 +367,14 @@ export async function saveRsvp(
 export async function createPrayer(
   client: SupabaseClient,
   organizationId: string,
-  groupId: string,
+  groupId: string | undefined,
   personId: string,
   input: PrayerInput,
 ) {
   const { error } = await client.from("circle_prayer_requests").insert({
     organization_id: organizationId,
-    cell_group_id: groupId,
+    cell_group_id: input.scope === "circle" ? groupId : null,
+    scope: input.scope,
     person_id: personId,
     title: input.title,
     description: input.description,

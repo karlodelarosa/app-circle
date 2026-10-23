@@ -10,6 +10,7 @@ export type ConnectionStatus =
 export type ContactPreference = "email" | "phone" | "either";
 export type PrayerCategory =
   "Family" | "Work or School" | "Health" | "Spiritual Growth" | "Other";
+export type PrayerScope = "circle" | "organization";
 
 export interface Profile {
   id: string;
@@ -254,7 +255,8 @@ export interface PersonSearchResult {
 
 export interface PrayerRequest {
   id: string;
-  groupId: string;
+  groupId?: string;
+  scope: PrayerScope;
   userId: string;
   authorName: string;
   title: string;
@@ -319,4 +321,5 @@ export interface PrayerInput {
   title: string;
   description: string;
   category: PrayerCategory;
+  scope: PrayerScope;
 }

@@ -23,6 +23,9 @@ DECLARE
   v_group_id UUID := (v_context->'groups'->0->>'id')::UUID;
   v_suffix TEXT := replace(gen_random_uuid()::text, '-', '');
   v_gallery_id UUID;
+  v_person_id UUID := (v_context->>'personId')::UUID;
+  v_circle_prayer_id UUID;
+  v_organization_prayer_id UUID;
 BEGIN
   IF v_organization_id IS NULL OR v_group_id IS NULL THEN
     RAISE EXCEPTION 'Smoke test requires an active admin organization with a Circle';
@@ -69,6 +72,32 @@ BEGIN
     'Test location', '', '', 'Rolled back automatically.', 'public', true,
     'smoke-' || v_suffix, now(), auth.uid()
   );
+
+  IF v_person_id IS NOT NULL THEN
+    INSERT INTO public.circle_prayer_requests (
+      organization_id, cell_group_id, person_id, scope, title, description, category
+    ) VALUES (
+      v_organization_id, v_group_id, v_person_id, 'circle',
+      'Circle prayer smoke test', 'Rolled back automatically.', 'Other'
+    ) RETURNING id INTO v_circle_prayer_id;
+
+    INSERT INTO public.circle_prayer_requests (
+      organization_id, cell_group_id, person_id, scope, title, description, category
+    ) VALUES (
+      v_organization_id, NULL, v_person_id, 'organization',
+      'Organization prayer smoke test', 'Rolled back automatically.', 'Other'
+    ) RETURNING id INTO v_organization_prayer_id;
+
+    IF NOT (
+      public.get_circle_prayers(v_group_id) @>
+      jsonb_build_array(
+        jsonb_build_object('id', v_circle_prayer_id),
+        jsonb_build_object('id', v_organization_prayer_id)
+      )
+    ) THEN
+      RAISE EXCEPTION 'Scoped prayer read contract did not return both audiences';
+    END IF;
+  END IF;
 END;
 $$;
 
