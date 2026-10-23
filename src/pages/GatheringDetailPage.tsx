@@ -15,6 +15,7 @@ import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
 import { getErrorMessage } from "../lib/errors";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringCoverImage } from "../lib/images";
 import { gatheringShareUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
 import { supabase } from "../lib/supabase";
@@ -199,7 +200,7 @@ export function GatheringDetailPage() {
       <article className="overflow-hidden rounded-[1.75rem] border border-line bg-paper">
         <header className="relative flex min-h-[20rem] items-end overflow-hidden border-b border-line p-6 sm:min-h-[24rem] sm:p-10">
           <img
-            src={meeting.coverUrl || "/assets/devotional-table.webp"}
+            src={gatheringCoverImage(meeting.slug || meeting.id, meeting.coverUrl)}
             alt=""
             className="absolute inset-0 h-full w-full object-cover object-center"
           />

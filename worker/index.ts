@@ -35,7 +35,15 @@ const escapeHtml = (value: unknown) =>
 
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
-const socialPreviewVersion = "2";
+const socialPreviewVersion = "3";
+
+function gatheringPlaceholder(seed: string) {
+  const hash = [...seed].reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return `/assets/gathering-placeholder-${(hash % 2) + 1}.webp`;
+}
 
 function routeParts(pathname: string) {
   const match = pathname.match(gatheringRoute);
@@ -182,7 +190,9 @@ async function gatheringImage(request: Request, env: WorkerEnv) {
         };
       })
     : await env.ASSETS.fetch(
-        new Request(new URL("/assets/devotional-table.webp", request.url)),
+        new Request(
+          new URL(gatheringPlaceholder(gathering), request.url),
+        ),
       );
   if (!source.ok || !source.body) return null;
   const headers = new Headers(source.headers);

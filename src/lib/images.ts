@@ -1,5 +1,18 @@
 const SUPPORTED_COVER_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export const MAX_COVER_BYTES = 10 * 1024 * 1024;
+export const GATHERING_PLACEHOLDERS = [
+  "/assets/gathering-placeholder-1.webp",
+  "/assets/gathering-placeholder-2.webp",
+] as const;
+
+export function gatheringCoverImage(id: string, coverUrl?: string) {
+  if (coverUrl) return coverUrl;
+  const hash = [...id].reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return GATHERING_PLACEHOLDERS[hash % GATHERING_PLACEHOLDERS.length];
+}
 
 export function validateGatheringCover(file: File) {
   if (!SUPPORTED_COVER_TYPES.includes(file.type))

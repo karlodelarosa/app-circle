@@ -41,6 +41,11 @@
   .quick-icon { @apply grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#E4E5D8] text-olive; }
   .quick-icon svg { @apply h-[18px] w-[18px]; }
 
+  .dashboard-date-block { @apply flex h-[5.5rem] w-[4.5rem] shrink-0 flex-col items-center justify-center rounded-2xl bg-olive text-center text-paper shadow-sm; }
+  .dashboard-date-block span { @apply text-[11px] font-medium leading-none text-paper/80; }
+  .dashboard-date-block strong { @apply mt-1 font-display text-3xl font-medium leading-none; }
+  .dashboard-date-block small { @apply mt-1 text-[10px] leading-none text-paper/70; }
+
   .rsvp-button { @apply min-h-10 rounded-full border border-line bg-paper px-4 py-2 text-xs font-medium text-muted transition-colors hover:border-sage hover:text-ink; }
   .rsvp-button-active { @apply border-olive bg-olive text-paper hover:text-paper; }
   .prayer-preview { @apply min-h-52 border-t-2 border-sage bg-paper px-5 py-6; }
@@ -63,6 +68,11 @@
   .choice-chip { @apply rounded-full border border-line px-3 py-2 text-xs text-muted transition-colors; }
   .choice-chip-active { @apply border-olive bg-olive text-paper; }
   .form-error { @apply rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800; }
+
+  .content-composer-dialog,
+  .content-composer-form {
+    max-height: calc(100dvh - 2rem);
+  }
 
   .gathering-card { @apply grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 rounded-3xl border border-line bg-paper p-5 sm:gap-x-6 sm:p-7; }
   .gathering-card h3 { @apply font-display text-2xl leading-tight sm:text-3xl; }
@@ -124,6 +134,17 @@
 
 @media (max-width: 639px) {
   input, select, textarea { font-size: 16px; }
+  .content-composer-dialog {
+    width: calc(100% - 1rem);
+    max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
+    margin-top: max(.5rem, env(safe-area-inset-top));
+    margin-bottom: max(.5rem, env(safe-area-inset-bottom));
+    border-radius: 1.5rem;
+  }
+  .content-composer-form { max-height: inherit; }
+  .content-composer-footer {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
   .gathering-card-body { grid-column: 1 / -1; }
   .hero-cover img { object-position: 66% center; }
   .public-hero > img { object-position: 65% center; opacity: .48; }

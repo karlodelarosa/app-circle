@@ -4,7 +4,7 @@ import { handleRequest, type WorkerEnv } from "./index";
 const shell = `<!doctype html><html><head><meta name="description" content="Default"><title>Circles</title></head><body><div id="root"></div></body></html>`;
 
 const assets = {
-  fetch: vi.fn(async () =>
+  fetch: vi.fn(async (_request: Request) =>
     new Response(shell, {
       headers: { "content-type": "text/html; charset=UTF-8" },
     }),
@@ -49,11 +49,11 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.headers.get("cache-control")).toContain("s-maxage=300");
     expect(html).toContain("Lunch &lt;Together&gt; | ELGC &amp; Friends");
     expect(html).toContain(
-      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch&amp;v=2"',
+      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch&amp;v=3"',
     );
     expect(html).toContain('property="og:image:type" content="image/jpeg"');
     expect(html).toContain(
-      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=2"',
+      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=3"',
     );
     expect(html).not.toContain('content="Default"');
   });
@@ -98,6 +98,30 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.headers.get("cache-control")).toContain("max-age=86400");
     expect(response.headers.get("x-robots-tag")).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses a supplied gathering banner when the gathering has no cover", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          organization: { name: "ELGC" },
+          gathering: { slug: "lunch", title: "Lunch" },
+        }),
+      ),
+    );
+
+    await handleRequest(
+      new Request(
+        "https://circles.example/__share/gathering-image?organization=elgc&gathering=lunch",
+      ),
+      env,
+    );
+
+    const assetRequest = assets.fetch.mock.calls.at(-1)?.[0] as Request;
+    expect(assetRequest.url).toMatch(
+      /\/assets\/gathering-placeholder-[12]\.webp$/,
+    );
   });
 
   it("falls back to the SPA when preview data is unavailable", async () => {

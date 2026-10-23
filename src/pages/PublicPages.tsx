@@ -32,6 +32,7 @@ import { Brand } from "../components/AppShell";
 import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
 import { useStandalone } from "../hooks/useStandalone";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringCoverImage } from "../lib/images";
 import {
   gatheringShareUrl,
   LAST_PUBLIC_ORG_KEY,
@@ -400,7 +401,7 @@ function GatheringTile({ item }: { item: PublicSpace["gatherings"][number] }) {
         </span>
       </div>
       <img
-        src={item.coverUrl || "/assets/devotional-table.webp"}
+        src={gatheringCoverImage(item.slug || item.id, item.coverUrl)}
         alt=""
         className="h-full min-h-52 w-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.02]"
       />
@@ -691,7 +692,7 @@ export function PublicGatheringPage() {
         </Link>
         <div className="mt-7 overflow-hidden rounded-[2rem] border border-line bg-paper sm:rounded-[2.25rem]">
           <img
-            src={item.coverUrl || "/assets/devotional-table.webp"}
+            src={gatheringCoverImage(item.slug || item.id, item.coverUrl)}
             alt=""
             className="h-64 w-full object-cover object-[72%_center] sm:h-96 sm:object-center"
           />

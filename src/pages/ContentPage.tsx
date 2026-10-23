@@ -335,7 +335,7 @@ export function ContentPage() {
         <dialog
           ref={dialogRef}
           aria-labelledby="content-composer-title"
-          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(42rem,calc(100%-2rem))] overflow-hidden rounded-[1.75rem] border border-line bg-paper p-0 text-ink shadow-quiet backdrop:bg-ink/55 backdrop:backdrop-blur-sm"
+          className="content-composer-dialog m-auto w-[min(42rem,calc(100%-2rem))] overflow-hidden rounded-[1.75rem] border border-line bg-paper p-0 text-ink shadow-quiet backdrop:bg-ink/55 backdrop:backdrop-blur-sm"
           onCancel={(event) => {
             event.preventDefault();
             if (!busy) setComposer(null);
@@ -347,9 +347,9 @@ export function ContentPage() {
         >
           <form
             onSubmit={submit}
-            className="flex max-h-[calc(100dvh-2rem)] flex-col"
+            className="content-composer-form flex flex-col"
           >
-            <header className="flex items-start justify-between border-b border-line px-6 py-5 sm:px-8">
+            <header className="shrink-0 flex items-start justify-between border-b border-line px-6 py-5 sm:px-8">
               <div>
                 <p className="text-xs text-muted">Community publishing</p>
                 <h2
@@ -369,7 +369,7 @@ export function ContentPage() {
                 <X size={19} />
               </button>
             </header>
-            <div className="space-y-4 overflow-y-auto px-6 py-6 sm:px-8">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-6 sm:px-8">
               {message && (
                 <p role="alert" className="form-error">
                   {message}
@@ -479,7 +479,7 @@ export function ContentPage() {
                 </>
               )}
             </div>
-            <footer className="flex justify-end gap-3 border-t border-line px-6 py-4 sm:px-8">
+            <footer className="content-composer-footer shrink-0 flex justify-end gap-3 border-t border-line bg-paper px-6 py-4 sm:px-8">
               <button
                 type="button"
                 className="secondary-button"

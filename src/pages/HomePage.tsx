@@ -78,6 +78,7 @@ export function HomePage() {
       <section className="py-6">
         <DashboardJumbotron
           defaultImage={defaultHeroImage}
+          welcomeImage="/assets/welcome-table.webp"
           gatherings={upcoming.slice(0, 3)}
           circleName={data.organization.name}
           circlePath="/circles"
@@ -96,10 +97,15 @@ export function HomePage() {
           </div>
           {next ? (
             <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-4 sm:gap-5">
-              <div className="date-block">
+              <time
+                className="dashboard-date-block"
+                dateTime={next.meetingDate}
+                aria-label={formatDate(next.meetingDate)}
+              >
                 <span>{formatDate(next.meetingDate, { month: "short" })}</span>
                 <strong>{new Date(next.meetingDate).getDate()}</strong>
-              </div>
+                <small>{formatDate(next.meetingDate, { weekday: "short" })}</small>
+              </time>
               <div className="min-w-0">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">

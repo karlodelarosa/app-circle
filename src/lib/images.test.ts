@@ -1,4 +1,9 @@
-import { MAX_COVER_BYTES, validateGatheringCover } from "./images";
+import {
+  GATHERING_PLACEHOLDERS,
+  MAX_COVER_BYTES,
+  gatheringCoverImage,
+  validateGatheringCover,
+} from "./images";
 
 describe("gathering cover validation", () => {
   it("accepts supported image files", () => {
@@ -24,6 +29,21 @@ describe("gathering cover validation", () => {
     );
     expect(() => validateGatheringCover(oversized)).toThrow(
       "The cover image must be 10 MB or smaller.",
+    );
+  });
+});
+
+describe("gathering cover fallback", () => {
+  it("keeps an uploaded cover and otherwise assigns a stable placeholder", () => {
+    expect(gatheringCoverImage("gathering-1", "/uploaded.webp")).toBe(
+      "/uploaded.webp",
+    );
+    expect(gatheringCoverImage("gathering-1")).toBe(
+      gatheringCoverImage("gathering-1"),
+    );
+    expect(GATHERING_PLACEHOLDERS).toContain(gatheringCoverImage("gathering-1"));
+    expect(gatheringCoverImage("gathering-1")).not.toBe(
+      gatheringCoverImage("gathering-2"),
     );
   });
 });

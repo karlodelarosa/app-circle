@@ -13,9 +13,11 @@ import {
 import { Link } from "react-router-dom";
 import type { Meeting } from "../types";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringCoverImage } from "../lib/images";
 
 interface DashboardJumbotronProps {
   defaultImage: string;
+  welcomeImage?: string;
   gatherings: Meeting[];
   circleName?: string;
   circlePath?: string;
@@ -30,6 +32,7 @@ const reducedMotionPreference = () =>
 
 export function DashboardJumbotron({
   defaultImage,
+  welcomeImage = defaultImage,
   gatherings,
   circleName = "your Circle",
   circlePath = "/circles",
@@ -169,9 +172,9 @@ export function DashboardJumbotron({
                 role="group"
               >
                 <img
-                  src={defaultImage}
+                  src={welcomeImage}
                   alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="absolute inset-0 h-full w-full object-cover object-center"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
                 <div className={`relative mt-auto max-w-4xl p-6 sm:p-8 ${slides.length > 1 ? "pb-24" : "pb-8 lg:pb-9"}`}>
@@ -203,7 +206,7 @@ export function DashboardJumbotron({
               tabIndex={isActive ? 0 : -1}
             >
               <img
-                src={meeting.coverUrl || defaultImage}
+                src={gatheringCoverImage(meeting.slug || meeting.id, meeting.coverUrl)}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
               />
@@ -228,26 +231,26 @@ export function DashboardJumbotron({
       </div>
 
       {slides.length > 1 && (
-        <div className="absolute inset-x-4 bottom-4 z-10 flex items-center justify-between gap-3 sm:inset-x-6 sm:bottom-6">
-          <div className="flex items-center gap-1 rounded-full border border-paper/20 bg-ink/35 p-1 backdrop-blur-md">
+        <div className="absolute inset-x-4 bottom-4 z-10 flex items-center justify-end gap-2 sm:inset-x-6 sm:bottom-6">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="grid h-11 w-11 place-items-center rounded-full text-paper hover:bg-paper/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper"
+              className="grid h-10 w-10 place-items-center rounded-full border border-paper/20 bg-ink/35 text-paper backdrop-blur-md hover:bg-ink/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper"
               onClick={() => goTo(activeIndex - 1)}
               aria-label="Previous slide"
             >
-              <ChevronLeft size={19} />
+              <ChevronLeft size={17} />
             </button>
             <button
               type="button"
-              className="grid h-11 w-11 place-items-center rounded-full text-paper hover:bg-paper/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper"
+              className="grid h-10 w-10 place-items-center rounded-full border border-paper/20 bg-ink/35 text-paper backdrop-blur-md hover:bg-ink/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper"
               onClick={() => goTo(activeIndex + 1)}
               aria-label="Next slide"
             >
-              <ChevronRight size={19} />
+              <ChevronRight size={17} />
             </button>
           </div>
-          <div className="flex min-h-11 items-center gap-1.5 rounded-full border border-paper/20 bg-ink/35 px-3 backdrop-blur-md">
+          <div className="flex min-h-10 items-center gap-1.5 rounded-full border border-paper/20 bg-ink/35 px-3 backdrop-blur-md">
             {slides.map((slide, index) => (
               <button
                 key={slide.id}

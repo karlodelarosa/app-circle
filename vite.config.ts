@@ -19,6 +19,9 @@ export default defineConfig(({ mode }) => {
         registerType: "prompt",
         includeAssets: [
           "assets/devotional-table.webp",
+          "assets/welcome-table.webp",
+          "assets/gathering-placeholder-1.webp",
+          "assets/gathering-placeholder-2.webp",
           "circles-icon-192.png",
           "circles-icon-512.png",
         ],
@@ -45,7 +48,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: "/index.html",
-          globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+          globPatterns: ["**/*.{js,css,html,svg,png,webp,woff2}"],
         },
       }),
     ],
