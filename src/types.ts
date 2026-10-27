@@ -202,6 +202,17 @@ export interface Meeting {
   assignmentConfirmedAt?: string;
 }
 
+export interface GatheringReflection {
+  id: string;
+  gatheringId: string;
+  organizationId: string;
+  authorPersonId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Announcement {
   id: string;
   organizationId: string;

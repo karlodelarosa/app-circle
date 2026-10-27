@@ -6,9 +6,134 @@ import {
   loadCellGroupSignups,
   loadGuestRsvpCounts,
   loadPrayerRequests,
+  loadGatheringReflections,
+  loadGatheringReflectionActivity,
+  createGatheringReflection,
+  updateGatheringReflection,
+  deleteGatheringReflection,
   placeCellGroupSignup,
   setGatheringCompletion,
 } from "./circles";
+
+describe("Gathering reflections", () => {
+  it("loads a bounded reflection summary for a Circle page", async () => {
+    const limit = vi.fn().mockResolvedValue({
+      data: [{ people: { first_name: "Mara", last_name: "Santos" } }],
+      count: 7,
+      error: null,
+    });
+    const order = vi.fn().mockReturnValue({ limit });
+    const eq = vi.fn().mockReturnValue({ order });
+    const select = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ select });
+
+    const activity = await loadGatheringReflectionActivity(
+      { from } as unknown as SupabaseClient,
+      "gathering-1",
+    );
+
+    expect(select).toHaveBeenCalledWith(
+      "people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
+      { count: "exact" },
+    );
+    expect(order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(activity).toEqual({ count: 7, authorName: "Mara Santos" });
+  });
+
+  it("loads reflections in chronological order and maps author names", async () => {
+    const limit = vi.fn().mockResolvedValue({
+      data: [{
+        id: "reflection-1",
+        gathering_id: "gathering-1",
+        organization_id: "organization-1",
+        author_person_id: "person-1",
+        body: "Grace meets us in ordinary moments.",
+        created_at: "2026-10-28T09:00:00.000Z",
+        updated_at: "2026-10-28T09:00:00.000Z",
+        people: { first_name: "Mara", last_name: "Santos" },
+      }],
+      error: null,
+    });
+    const order = vi.fn().mockReturnValue({ limit });
+    const eq = vi.fn().mockReturnValue({ order });
+    const select = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ select });
+
+    const reflections = await loadGatheringReflections(
+      { from } as unknown as SupabaseClient,
+      "gathering-1",
+    );
+
+    expect(from).toHaveBeenCalledWith("circle_gathering_reflections");
+    expect(eq).toHaveBeenCalledWith("gathering_id", "gathering-1");
+    expect(order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(limit).toHaveBeenCalledWith(200);
+    expect(reflections[0]).toEqual(expect.objectContaining({
+      id: "reflection-1",
+      authorName: "Mara Santos",
+      body: "Grace meets us in ordinary moments.",
+    }));
+  });
+
+  it("trims a reflection before creating it", async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    await createGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      "organization-1",
+      "gathering-1",
+      "person-1",
+      "  What stayed with me.  ",
+    );
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      body: "What stayed with me.",
+      author_person_id: "person-1",
+    }));
+  });
+
+  it.each(["   ", "x".repeat(2001)])("rejects an invalid reflection body", async (body) => {
+    const from = vi.fn();
+    await expect(createGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      "organization-1",
+      "gathering-1",
+      "person-1",
+      body,
+    )).rejects.toThrow(/between 1 and 2,000 characters/i);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("updates only the requested reflection with trimmed text", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ update });
+
+    await updateGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      "reflection-1",
+      "  A clearer reflection.  ",
+    );
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ body: "A clearer reflection." }));
+    expect(eq).toHaveBeenCalledWith("id", "reflection-1");
+  });
+
+  it("deletes only the requested reflection", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const remove = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ delete: remove });
+
+    await deleteGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      "reflection-1",
+    );
+
+    expect(eq).toHaveBeenCalledWith("id", "reflection-1");
+  });
+});
 
 describe("loadGuestRsvpCounts", () => {
   it("groups guest responses by gathering and RSVP status", async () => {

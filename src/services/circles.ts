@@ -17,6 +17,7 @@ import type {
   ApprovedLeader,
   ContentAssignment,
   CellGroupSignup,
+  GatheringReflection,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -33,6 +34,98 @@ const normalizePrayer = (prayer: any): PrayerRequest => ({
     prayer.destinationName ??
     (prayer.scope === "organization" ? "Entire organization" : undefined),
 });
+
+const reflectionBody = (body: string) => {
+  const value = body.trim();
+  if (!value || value.length > 2000)
+    throw new Error("A reflection must be between 1 and 2,000 characters.");
+  return value;
+};
+
+export async function loadGatheringReflections(
+  client: SupabaseClient,
+  gatheringId: string,
+): Promise<GatheringReflection[]> {
+  const { data, error } = await client
+    .from("circle_gathering_reflections")
+    .select("id,gathering_id,organization_id,author_person_id,body,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)")
+    .eq("gathering_id", gatheringId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    gatheringId: row.gathering_id,
+    organizationId: row.organization_id,
+    authorPersonId: row.author_person_id,
+    authorName: fullName(one(row.people)),
+    body: row.body,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  })).reverse();
+}
+
+export async function loadGatheringReflectionActivity(
+  client: SupabaseClient,
+  gatheringId: string,
+): Promise<{ count: number; authorName?: string }> {
+  const { data, count, error } = await client
+    .from("circle_gathering_reflections")
+    .select(
+      "people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
+      { count: "exact" },
+    )
+    .eq("gathering_id", gatheringId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const latest = data?.[0] as any;
+  return {
+    count: count ?? 0,
+    authorName: latest ? fullName(one(latest.people)) : undefined,
+  };
+}
+
+export async function createGatheringReflection(
+  client: SupabaseClient,
+  organizationId: string,
+  gatheringId: string,
+  authorPersonId: string,
+  body: string,
+) {
+  const value = reflectionBody(body);
+  const { error } = await client.from("circle_gathering_reflections").insert({
+    organization_id: organizationId,
+    gathering_id: gatheringId,
+    author_person_id: authorPersonId,
+    body: value,
+  });
+  if (error) throw error;
+}
+
+export async function updateGatheringReflection(
+  client: SupabaseClient,
+  reflectionId: string,
+  body: string,
+) {
+  const value = reflectionBody(body);
+  const { error } = await client
+    .from("circle_gathering_reflections")
+    .update({ body: value, updated_at: new Date().toISOString() })
+    .eq("id", reflectionId);
+  if (error) throw error;
+}
+
+export async function deleteGatheringReflection(
+  client: SupabaseClient,
+  reflectionId: string,
+) {
+  const { error } = await client
+    .from("circle_gathering_reflections")
+    .delete()
+    .eq("id", reflectionId);
+  if (error) throw error;
+}
 
 export async function loadGuestRsvpCounts(
   client: SupabaseClient,
