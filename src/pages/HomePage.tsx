@@ -49,6 +49,8 @@ export function HomePage() {
     : [];
   const visibleAttendees = attending.slice(0, 4);
   const additionalAttendees = Math.max(attending.length - visibleAttendees.length, 0);
+  const guestAttendingCount = next?.guestRsvpCounts?.attending ?? 0;
+  const confirmedCount = attending.length + guestAttendingCount;
 
   return (
     <div>
@@ -129,6 +131,10 @@ export function HomePage() {
                         </span>
                       )}
                     </div>
+                  ) : guestAttendingCount ? (
+                    <p className="shrink-0 text-xs text-muted">
+                      {guestAttendingCount} {guestAttendingCount === 1 ? "guest" : "guests"} confirmed
+                    </p>
                   ) : (
                     <p className="shrink-0 text-xs text-muted">No one confirmed yet</p>
                   )}
@@ -136,7 +142,7 @@ export function HomePage() {
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
                   <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(next.meetingDate)}</span>
                   <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{next.location}</span>
-                  <span className="inline-flex items-center gap-1.5"><Users size={14} />{attending.length} going</span>
+                  <span className="inline-flex items-center gap-1.5"><Users size={14} />{confirmedCount} going</span>
                 </div>
                 <Link to={`/gatherings/${next.id}`} className="text-link mt-5">
                   View gathering <ChevronRight size={14} />

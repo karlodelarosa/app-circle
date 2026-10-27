@@ -2,6 +2,7 @@ import {
   CalendarDays,
   ChevronDown,
   CircleUserRound,
+  ClipboardList,
   FileText,
   Home,
   HeartHandshake,
@@ -156,6 +157,7 @@ export function AppShell() {
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
     { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
     { to: "/connections", label: "Guest connections", mobileLabel: "Guests", icon: HeartHandshake, badge: data.connectionAttentionCount },
+    { to: "/signups", label: "Cell Group signups", mobileLabel: "Signups", icon: ClipboardList, badge: data.signupAttentionCount },
     { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
   ];
   const memberLinks: NavigationItem[] = [
@@ -166,7 +168,7 @@ export function AppShell() {
   ];
   const links = isMember ? memberLinks : leaderLinks;
   const mobileLinks: NavigationItem[] = isMember ? memberLinks : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
-  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/content", "/more"];
+  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/signups", "/content", "/more"];
   const standaloneFallback = pathname.startsWith("/gatherings/")
     ? "/gatherings"
     : pathname.startsWith("/circles/")

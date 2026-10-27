@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  CellGroupSignupInput,
+  CellGroupSignupResult,
   ContactPreference,
   Gallery,
   GuestRsvpInput,
@@ -125,6 +127,30 @@ export async function submitGuestRsvp(
   });
   if (error) throw error;
   return data as { ok: boolean; id: string; connectionId: string };
+}
+
+export async function submitCellGroupSignup(
+  client: SupabaseClient | null,
+  organizationSlug: string,
+  input: CellGroupSignupInput,
+): Promise<CellGroupSignupResult> {
+  if (
+    !client ||
+    (import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get("demo") === "1")
+  ) return { ok: true };
+  const { data, error } = await client.rpc("submit_circle_group_signup", {
+    p_org_slug: organizationSlug,
+    p_first_name: input.firstName.trim(),
+    p_last_name: input.lastName.trim(),
+    p_birthdate: input.birthdate,
+    p_phone: input.phone.trim(),
+    p_facebook_contact: input.facebookContact.trim(),
+    p_consent: input.consent,
+    p_guest_rsvp_id: input.guestRsvpId ?? null,
+  });
+  if (error) throw error;
+  return data as CellGroupSignupResult;
 }
 
 export async function requestCircleConnection(

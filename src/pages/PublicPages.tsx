@@ -275,6 +275,12 @@ export function PublicHomePage() {
                   Join a Circle
                 </Link>
               )}
+              <Link
+                className="secondary-button min-h-11 justify-center"
+                to={`/${slug}/cell-group-signup`}
+              >
+                Sign up for a Cell Group
+              </Link>
             </div>
           </div>
         </div>
@@ -755,9 +761,23 @@ export function PublicGatheringPage() {
                     We look forward to welcoming you.
                   </p>
                   <div className="mt-7 grid gap-3">
+                    <Link
+                      className="primary-button min-h-11 w-full justify-center text-center"
+                      to={`/${space.organization.slug}/cell-group-signup`}
+                      state={{
+                        signupPrefill: {
+                          firstName: form.name.trim().split(/\s+/)[0] || "",
+                          lastName: form.name.trim().split(/\s+/).slice(1).join(" "),
+                          phone: form.phone,
+                          guestRsvpId: rsvpId,
+                        },
+                      }}
+                    >
+                      Sign up for a Cell Group
+                    </Link>
                     {listedCircle ? (
                       <button
-                        className="primary-button min-h-11 w-full justify-center"
+                        className="secondary-button min-h-11 w-full justify-center"
                         onClick={() =>
                           document.getElementById("circle-life")?.scrollIntoView({
                             behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
@@ -1172,6 +1192,15 @@ export function PublicCirclesPage() {
       title="Join a Circle"
       intro="Learn about each smaller community, then let a leader know where you would like to belong."
     >
+      <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-2xl text-sm leading-6 text-muted">
+          Ready to be placed in a Cell Group? Complete the official signup for
+          the shared leader placement list.
+        </p>
+        <Link className="primary-button shrink-0" to={`/${space.organization.slug}/cell-group-signup`}>
+          Sign up for a Cell Group
+        </Link>
+      </div>
       <div className="grid gap-5 md:grid-cols-2">
         {space.circles.map((group) => (
           <Link
@@ -1282,6 +1311,9 @@ export function PublicCirclePage() {
               <h2 className="font-display text-3xl">Could this be your Circle?</h2>
               <p className="mt-3 text-sm leading-6 text-muted">Tell a leader you would like to learn more. This sends an interest request; it does not create an account or add you as a member.</p>
               <button type="button" className="primary-button mt-5 w-full" onClick={openInterestForm}>I’m interested in joining</button>
+              <Link className="secondary-button mt-3 w-full justify-center text-center" to={`/${space.organization.slug}/cell-group-signup`}>
+                Sign up for a Cell Group
+              </Link>
             </div>
           ) : (
             <form

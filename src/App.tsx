@@ -13,6 +13,8 @@ import { PrayerPage } from "./pages/PrayerPage";
 import { MemberTestimonyPage } from "./pages/MemberTestimonyPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MorePage } from "./pages/MorePage";
+import { CellGroupSignupPage } from "./pages/CellGroupSignupPage";
+import { SignupsPage } from "./pages/SignupsPage";
 import { PwaUpdatePrompt, RouteScrollManager } from "./components/RouteExperience";
 import {
   GalleriesPage,
@@ -132,6 +134,7 @@ export default function App() {
         <Route path="/content" element={<LeaderOnly><ContentPage /></LeaderOnly>} />
         <Route path="/connections" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
         <Route path="/connections/:connectionId" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
+        <Route path="/signups" element={<LeaderOnly><SignupsPage /></LeaderOnly>} />
       </Route>
       <Route path="/app/*" element={<Navigate to="/" replace />} />
       <Route path="/:orgSlug" element={<PublicShell />}>
@@ -148,6 +151,7 @@ export default function App() {
         <Route path="galleries/:gallerySlug" element={<GalleryPage />} />
         <Route path="circles" element={<PublicCirclesPage />} />
         <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
+        <Route path="cell-group-signup" element={<CellGroupSignupPage />} />
       </Route>
       </Routes>
     </>

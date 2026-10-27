@@ -1,6 +1,6 @@
 export type Role = "admin" | "leader" | "member";
 export type RsvpStatus = "attending" | "tentative" | "declined";
-export type MeetingStatus = "scheduled" | "cancelled";
+export type MeetingStatus = "scheduled" | "completed" | "cancelled";
 export type ConnectionStatus =
   | "new"
   | "contacted"
@@ -8,6 +8,11 @@ export type ConnectionStatus =
   | "connected"
   | "closed";
 export type ContactPreference = "email" | "phone" | "either";
+export type CellGroupSignupStatus = "unassigned" | "placed";
+export type CellGroupSignupSource =
+  | "public"
+  | "guest_self"
+  | "leader_conversion";
 export type PrayerCategory =
   "Family" | "Work or School" | "Health" | "Spiritual Growth" | "Other";
 export type PrayerScope = "circle" | "organization";
@@ -123,6 +128,43 @@ export interface GuestConnection {
   activities?: GuestConnectionActivity[];
 }
 
+export interface CellGroupSignup {
+  id: string;
+  organizationId: string;
+  personId: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  birthdate: string;
+  birthdateDiscrepancy?: string | null;
+  phone: string;
+  facebookContact: string;
+  status: CellGroupSignupStatus;
+  source: CellGroupSignupSource;
+  sourceGuestConnectionId?: string;
+  consentedAt: string;
+  placedGroupId?: string;
+  placedGroupName?: string;
+  placedByPersonId?: string;
+  placedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CellGroupSignupInput {
+  firstName: string;
+  lastName: string;
+  birthdate: string;
+  phone: string;
+  facebookContact: string;
+  consent: boolean;
+  guestRsvpId?: string;
+}
+
+export interface CellGroupSignupResult {
+  ok: boolean;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -149,6 +191,7 @@ export interface Meeting {
   checkinCode?: string;
   checkinClosesAt?: string;
   rsvps: Record<string, RsvpStatus>;
+  guestRsvpCounts?: Partial<Record<RsvpStatus, number>>;
   organizationId?: string;
   slug?: string;
   summary?: string;
@@ -293,6 +336,7 @@ export interface AppData {
   contentAssignments: ContentAssignment[];
   currentUser: Profile & { role: Role };
   connectionAttentionCount: number;
+  signupAttentionCount: number;
   account: {
     kind?: "existing" | "generated";
     loginId?: string;
@@ -322,4 +366,5 @@ export interface PrayerInput {
   description: string;
   category: PrayerCategory;
   scope: PrayerScope;
+  groupId?: string;
 }

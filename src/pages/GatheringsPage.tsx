@@ -144,7 +144,7 @@ export function GatheringsPage() {
             {upcoming.map((meeting, index) => {
               const attending = Object.values(meeting.rsvps).filter(
                 (status) => status === "attending",
-              ).length;
+              ).length + (meeting.guestRsvpCounts?.attending ?? 0);
               const canManage = meeting.canManage ?? data.currentUser.role !== "member";
               return (
                 <article

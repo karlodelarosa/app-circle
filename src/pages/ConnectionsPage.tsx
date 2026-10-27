@@ -17,6 +17,7 @@ import { getErrorMessage } from "../lib/errors";
 import { formatDate } from "../lib/format";
 import { supabase } from "../lib/supabase";
 import {
+  convertGuestConnectionToSignup,
   loadGuestConnection,
   loadGuestConnections,
   resolveGuestConnection,
@@ -291,6 +292,7 @@ function ConnectionDetail({
   const [actionError, setActionError] = useState("");
   const [note, setNote] = useState("");
   const [convertOpen, setConvertOpen] = useState(false);
+  const [signupConvertOpen, setSignupConvertOpen] = useState(false);
   const [assignmentGroupId, setAssignmentGroupId] = useState(
     manageableGroups.length === 1 ? manageableGroups[0].id : "",
   );
@@ -417,6 +419,9 @@ function ConnectionDetail({
             {connection.status !== "connected" && connection.groupId && (
               <button className="primary-button min-h-11" onClick={() => setConvertOpen(true)}><UserPlus size={16} /> Connect to SheepCount</button>
             )}
+            {connection.status !== "connected" && (
+              <button className="secondary-button min-h-11" onClick={() => setSignupConvertOpen(true)}><UsersRound size={16} /> Convert to Cell Group signup</button>
+            )}
           </div>
           {actionError && <p className="form-error mt-5" role="alert">{actionError}</p>}
           <form
@@ -487,8 +492,73 @@ function ConnectionDetail({
           }}
         />
       )}
+      {signupConvertOpen && (
+        <ConvertToSignupModal
+          connection={connection}
+          demoMode={demoMode}
+          onClose={() => setSignupConvertOpen(false)}
+          onConverted={async () => {
+            setSignupConvertOpen(false);
+            await onChanged(connection);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function ConvertToSignupModal({ connection, demoMode, onClose, onConverted }: {
+  connection: GuestConnection;
+  demoMode: boolean;
+  onClose: () => void;
+  onConverted: () => Promise<void>;
+}) {
+  const nameParts = connection.name.trim().split(/\s+/);
+  const [form, setForm] = useState({
+    firstName: nameParts[0] || "",
+    lastName: nameParts.slice(1).join(" "),
+    birthdate: "",
+    phone: connection.phone,
+    facebookContact: "",
+    consentConfirmed: false,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!form.phone.trim() && !form.facebookContact.trim()) {
+      setError("Add a mobile number or Facebook contact.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      if (!demoMode && supabase) await convertGuestConnectionToSignup(supabase, connection.id, form);
+      await onConverted();
+    } catch (cause) {
+      setError(getErrorMessage(cause, "This guest could not be converted to a Cell Group signup."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Modal title="Convert to Cell Group signup" onClose={onClose}>
+    <p className="text-sm leading-6 text-muted">This creates or matches a SheepCount Prospect and adds them to the unassigned placement list. It does not place them in this Circle.</p>
+    <form className="mt-5 space-y-4" onSubmit={(event) => void submit(event)}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="field-label">First name<input className="field" required maxLength={80} value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></label>
+        <label className="field-label">Last name<input className="field" required maxLength={80} value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></label>
+      </div>
+      <label className="field-label">Birthday<input className="field" type="date" required min="1900-01-01" max={today} value={form.birthdate} onChange={(event) => setForm({ ...form, birthdate: event.target.value })} /></label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="field-label">Mobile number<input className="field" type="tel" maxLength={40} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label className="field-label">Facebook link or username<input className="field" maxLength={300} value={form.facebookContact} onChange={(event) => setForm({ ...form, facebookContact: event.target.value })} /></label>
+      </div>
+      <label className="flex items-start gap-3 text-sm leading-6 text-muted"><input className="mt-1 h-4 w-4 shrink-0" type="checkbox" required checked={form.consentConfirmed} onChange={(event) => setForm({ ...form, consentConfirmed: event.target.checked })} />I have confirmed their consent to store these details and contact them about Cell Group placement.</label>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button className="primary-button min-h-11 w-full" disabled={busy || !form.consentConfirmed}>{busy ? "Converting…" : "Create official signup"}</button>
+    </form>
+  </Modal>;
 }
 
 function ConvertConnectionModal({ connection, organizationId, demoMode, onClose, onConverted }: {

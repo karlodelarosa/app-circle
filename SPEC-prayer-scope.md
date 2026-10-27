@@ -4,13 +4,14 @@ Module id: `prayer-scope`
 
 ## Objective
 
-Allow an authenticated Circles member to choose whether a new prayer request is shared with their currently selected Circle or with every active member of their organization.
+Allow an authenticated Circles member to choose whether a new prayer request is shared privately with an eligible Circle or with every active member of their organization. Regular members use their active Circle; leaders and organization administrators may choose any Circle they can access.
 
 The feature must preserve the private nature of the prayer wall while making the selected audience clear at creation time and wherever a prayer is displayed.
 
 ### User stories
 
-- As an authenticated member, I can share a prayer with only my currently selected Circle.
+- As a regular member, I can share a prayer with only my currently selected Circle.
+- As a leader or organization administrator, I can choose any accessible Circle for a private prayer.
 - As an authenticated member, I can share a prayer with my entire organization.
 - As a prayer-wall participant, I can tell whether a prayer belongs to a Circle or the whole organization.
 - As an eligible viewer, I can pray for a request and see its praise report.
@@ -20,7 +21,7 @@ The feature must preserve the private nature of the prayer wall while making the
 
 | Prayer scope | Creation target | Who can view and pray | Who can mark answered |
 | --- | --- | --- | --- |
-| Circle | The member's currently selected Circle | Active members of that Circle, its leader, and organization administrators | The author, that Circle's leader, and organization administrators |
+| Circle | Active Circle for a regular member; chosen accessible Circle for a leader or administrator | Active members of that Circle, its leader, and organization administrators | The author, that Circle's leader, and organization administrators |
 | Organization | The member's current organization | Active members of the organization | The author and organization administrators |
 
 - Prayer requests remain authenticated, private application content. They must never be returned by public-space or public-gathering APIs.
@@ -28,9 +29,10 @@ The feature must preserve the private nature of the prayer wall while making the
 - A Circle-scoped prayer must have a Circle id belonging to the same organization.
 - An organization-scoped prayer must not be assigned to a Circle.
 - Existing prayer requests are treated as Circle-scoped and retain their existing Circle assignment.
-- The initial audience selection is **My Circle** to preserve current behavior and reduce accidental broad sharing.
+- The initial audience selection is the active Circle to preserve current behavior and reduce accidental broad sharing.
 - A member must explicitly choose **Entire organization** before submitting an organization-wide prayer.
 - A member without a currently selected Circle may create an organization-wide prayer, but cannot create a Circle-scoped prayer until a Circle is selected.
+- A successful post to a different Circle makes that Circle active so the author can immediately see the new prayer.
 
 ## Tech Stack
 
@@ -88,6 +90,7 @@ export interface PrayerInput {
   description: string;
   category: PrayerCategory;
   scope: PrayerScope;
+  groupId?: string;
 }
 
 const destinationLabel =
@@ -102,11 +105,13 @@ Follow the repository's existing two-space indentation and component/service sep
 
 ### Creating a prayer
 
-- The prayer form presents an audience choice between **My Circle** and **Entire organization**.
-- **My Circle** shows the selected Circle's name so the destination is unambiguous.
-- The form defaults to **My Circle** when a Circle is selected.
+- The prayer form presents an audience choice between a private Circle and **Entire organization**.
+- A regular member sees the active Circle as a fixed destination.
+- Leaders and organization administrators see a labeled dropdown containing every Circle in their accessible Circle list.
+- The form defaults to the active Circle when one is selected.
 - If no Circle is selected, **My Circle** is unavailable and the form defaults to **Entire organization**.
-- Submission stores the chosen scope and its valid destination.
+- Circle submission requires an accessible Circle id; organization submission omits the Circle id.
+- A successful cross-Circle submission opens the chosen Circle, while a failed submission leaves the current context and form state unchanged.
 - Success feedback names the destination: the selected Circle or the organization.
 - Existing title, description, category, and length validation remains unchanged.
 
@@ -141,6 +146,9 @@ Use Vitest and Testing Library for application behavior and SQL smoke/policy tes
 ### Component and application tests
 
 - The form defaults to the selected Circle and clearly displays its name.
+- Regular members cannot choose a different Circle in the composer.
+- Leaders and administrators can choose every Circle they can access.
+- A successful cross-Circle post opens its destination; a failure does not switch context.
 - A member can explicitly select the organization audience.
 - With no selected Circle, Circle scope is unavailable and organization scope is selected.
 - Submitted input contains the selected scope.
@@ -175,7 +183,8 @@ All existing tests must remain green. Verification requires both `npm test` and 
 ### Ask first
 
 - Changing the approved audience or mark-answered authorization matrix.
-- Allowing prayer authors to select a Circle other than the current Circle.
+- Allowing regular members to select a Circle other than the current Circle.
+- Restricting leaders to fewer destinations than the Circles they can already access.
 - Adding moderation, deletion, editing, anonymous posting, or notifications.
 - Adding a dependency or changing deployment/CI configuration.
 - Exposing any prayer content through public pages or unauthenticated APIs.
@@ -190,7 +199,8 @@ All existing tests must remain green. Verification requires both `npm test` and 
 
 ## Success Criteria
 
-- An authenticated member can create a prayer for their selected Circle or their entire organization.
+- A regular member can create a prayer for their selected Circle or their entire organization.
+- A leader or administrator can create a private prayer for any accessible Circle.
 - The form defaults safely and makes the destination explicit before submission.
 - Eligible members see the correct combined prayer wall for their context.
 - Every prayer card identifies its audience.

@@ -16,6 +16,7 @@ import type {
   CirclePublicListing,
   ApprovedLeader,
   ContentAssignment,
+  CellGroupSignup,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -32,6 +33,28 @@ const normalizePrayer = (prayer: any): PrayerRequest => ({
     prayer.destinationName ??
     (prayer.scope === "organization" ? "Entire organization" : undefined),
 });
+
+export async function loadGuestRsvpCounts(
+  client: SupabaseClient,
+  gatheringIds: string[],
+): Promise<Record<string, Partial<Record<RsvpStatus, number>>>> {
+  if (!gatheringIds.length) return {};
+  const { data, error } = await client
+    .from("circle_guest_rsvps")
+    .select("gathering_id,status")
+    .in("gathering_id", gatheringIds);
+  if (error) throw error;
+  return (data ?? []).reduce<Record<string, Partial<Record<RsvpStatus, number>>>>(
+    (counts, row: any) => {
+      const gatheringCounts = counts[row.gathering_id] ?? {};
+      const status = row.status as RsvpStatus;
+      gatheringCounts[status] = (gatheringCounts[status] ?? 0) + 1;
+      counts[row.gathering_id] = gatheringCounts;
+      return counts;
+    },
+    {},
+  );
+}
 
 export async function loadPrayerRequests(
   client: SupabaseClient,
@@ -112,6 +135,7 @@ export async function loadAppData(
     contentAssignments: [],
     currentUser,
     connectionAttentionCount: 0,
+    signupAttentionCount: 0,
     account: {
       kind: accountResult.data?.kind,
       loginId: accountResult.data?.loginId ?? undefined,
@@ -119,8 +143,11 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult, prayers] = await Promise.all([
+  const [attentionResult, signupAttentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult, prayers] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
+    client.rpc("get_circle_group_signup_attention_count", {
+      p_organization_id: context.organization.id,
+    }),
     client
       .from("circle_public_listings")
       .select("id,organization_id,cell_group_id,public_slug,description,cover_url,is_published")
@@ -136,6 +163,8 @@ export async function loadAppData(
   ]);
   if (!attentionResult.error)
     base.connectionAttentionCount = Number(attentionResult.data ?? 0);
+  if (!signupAttentionResult.error)
+    base.signupAttentionCount = Number(signupAttentionResult.data ?? 0);
   if (listingsResult.error) throw listingsResult.error;
   if (approvedLeadersResult.error) throw approvedLeadersResult.error;
   if (assignmentsResult.error) throw assignmentsResult.error;
@@ -164,7 +193,15 @@ export async function loadAppData(
       ]),
     ).values(),
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  base.accessibleMeetings = (dashboard.meetings ?? []) as Meeting[];
+  const dashboardMeetings = (dashboard.meetings ?? []) as Meeting[];
+  const managedGatheringIds = dashboardMeetings
+    .filter((meeting) => meeting.canManage)
+    .map((meeting) => meeting.id);
+  const guestRsvpCounts = await loadGuestRsvpCounts(client, managedGatheringIds);
+  base.accessibleMeetings = dashboardMeetings.map((meeting) => ({
+    ...meeting,
+    guestRsvpCounts: guestRsvpCounts[meeting.id] ?? {},
+  }));
   base.organizationMembers = (dashboard.members ?? []).map((member: any) => ({
     ...member,
     membershipId: member.membershipId ?? `organization-${member.id}`,
@@ -242,7 +279,10 @@ export async function loadAppData(
     location: row.location ?? "",
     studyTopic: row.study_topic ?? "",
     notes: row.notes ?? "",
-    status: row.status === "cancelled" ? "cancelled" : "scheduled",
+    status:
+      row.status === "completed" || row.status === "cancelled"
+        ? row.status
+        : "scheduled",
     createdBy: row.created_by,
     assignedLeaderId: row.leader_person_id ?? undefined,
     checkinCode: row.checkin_code ?? undefined,
@@ -718,6 +758,33 @@ export async function recordAttendance(
   return data as string;
 }
 
+export async function loadGatheringAttendance(
+  client: SupabaseClient,
+  gatheringId: string,
+) {
+  const { data, error } = await client.rpc("get_circle_gathering_attendance", {
+    p_gathering_id: gatheringId,
+  });
+  if (error) throw error;
+  return data as {
+    saved: boolean;
+    personIds: string[];
+    guestRsvpIds: string[];
+  };
+}
+
+export async function setGatheringCompletion(
+  client: SupabaseClient,
+  gatheringId: string,
+  completed: boolean,
+) {
+  const { error } = await client.rpc("set_circle_gathering_completion", {
+    p_gathering_id: gatheringId,
+    p_completed: completed,
+  });
+  if (error) throw error;
+}
+
 export async function loadGuestConnections(
   client: SupabaseClient,
   groupId?: string,
@@ -729,6 +796,59 @@ export async function loadGuestConnections(
   });
   if (error) throw error;
   return (data ?? []) as GuestConnection[];
+}
+
+export async function loadCellGroupSignups(
+  client: SupabaseClient,
+  organizationId: string,
+  status: "unassigned" | "placed" = "unassigned",
+): Promise<CellGroupSignup[]> {
+  const { data, error } = await client.rpc("get_circle_group_signups", {
+    p_organization_id: organizationId,
+    p_status: status,
+  });
+  if (error) throw error;
+  return (data ?? []) as CellGroupSignup[];
+}
+
+export async function placeCellGroupSignup(
+  client: SupabaseClient,
+  signupId: string,
+  groupId: string,
+) {
+  const { error } = await client.rpc("place_circle_group_signup", {
+    p_signup_id: signupId,
+    p_cell_group_id: groupId,
+  });
+  if (error) throw error;
+}
+
+export async function convertGuestConnectionToSignup(
+  client: SupabaseClient,
+  connectionId: string,
+  input: {
+    firstName: string;
+    lastName: string;
+    birthdate: string;
+    phone: string;
+    facebookContact: string;
+    consentConfirmed: boolean;
+  },
+) {
+  const { data, error } = await client.rpc(
+    "convert_guest_connection_to_group_signup",
+    {
+      p_connection_id: connectionId,
+      p_first_name: input.firstName.trim(),
+      p_last_name: input.lastName.trim(),
+      p_birthdate: input.birthdate,
+      p_phone: input.phone.trim(),
+      p_facebook_contact: input.facebookContact.trim(),
+      p_consent_confirmed: input.consentConfirmed,
+    },
+  );
+  if (error) throw error;
+  return data as { ok: boolean };
 }
 
 export async function loadGuestConnection(

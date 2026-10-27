@@ -276,14 +276,17 @@ export function AppProvider({
 
   const addPrayer = async (input: PrayerInput) => {
     if (!data) return;
-    if (input.scope === "circle" && !data.group)
-      throw new Error("Select a Circle before sharing with My Circle.");
+    const targetGroup = input.scope === "circle"
+      ? data.groups.find((group) => group.id === input.groupId)
+      : undefined;
+    if (input.scope === "circle" && !targetGroup)
+      throw new Error("Choose a Circle you can access before sharing this prayer.");
     const personId = requirePerson();
-    const groupId = input.scope === "circle" ? data.group?.id : undefined;
+    const groupId = targetGroup?.id;
     const destinationName =
       input.scope === "organization"
         ? "Entire organization"
-        : data.group?.name;
+        : targetGroup?.name;
     if (supabase && session) {
       await api.createPrayer(
         supabase,
@@ -292,18 +295,30 @@ export function AppProvider({
         personId,
         input,
       );
-      await refresh();
+      if (targetGroup && targetGroup.id !== data.group?.id) {
+        const next = await api.loadAppData(
+          supabase,
+          session.user.id,
+          targetGroup.id,
+        );
+        next.currentUser.email = session.user.email ?? "";
+        setData(next);
+        setSelectedGroupId(next.group?.id);
+      } else {
+        await refresh();
+      }
     } else {
       setData({
         ...data,
+        group: targetGroup ?? data.group,
         prayers: [
           {
             id: crypto.randomUUID(),
-            groupId,
             userId: personId,
             authorName: data.currentUser.fullName,
             destinationName,
             ...input,
+            groupId,
             isAnswered: false,
             createdAt: new Date().toISOString(),
             prayerCount: 0,
@@ -312,6 +327,7 @@ export function AppProvider({
           ...data.prayers,
         ],
       });
+      if (targetGroup) setSelectedGroupId(targetGroup.id);
     }
     notify(`Prayer shared with ${destinationName}.`);
   };

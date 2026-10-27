@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { findAvailableMemberId } from "../_shared/member-id.ts";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -26,8 +27,7 @@ const randomPassword = () => {
   }
   return characters.join("");
 };
-const slug = (value: string) => value.toLowerCase().normalize("NFKD")
-  .replace(/[^a-z0-9]+/g, ".").replace(/^\.|\.$/g, "").slice(0, 32) || "member";
+const memberLoginDomain = "members.circles.elgchurch.com";
 
 const findUserByEmail = async (service: SupabaseClient, email: string) => {
   for (let page = 1; page <= 100; page++) {
@@ -39,6 +39,15 @@ const findUserByEmail = async (service: SupabaseClient, email: string) => {
   }
   return undefined;
 };
+
+const createMemberId = (service: SupabaseClient, firstName: string) =>
+  findAvailableMemberId(firstName, async (candidate) => {
+    const existingLink = await service.from("circle_user_links").select("id")
+      .eq("login_id", candidate).maybeSingle();
+    if (existingLink.error) throw existingLink.error;
+    if (existingLink.data) return false;
+    return !(await findUserByEmail(service, `${candidate}@${memberLoginDomain}`));
+  });
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -75,17 +84,10 @@ Deno.serve(async (request) => {
     if (action === "replace") {
       if (!current || current.account_kind !== "existing")
         return json({ error: "Only a SheepCount-linked Circles login can be replaced here." }, 400);
-      let loginId: string | null = null;
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 4);
-        const candidate = `${slug(`${person.first_name}.${person.last_name}`)}-${suffix}`;
-        const exists = await service.from("circle_user_links").select("id").eq("login_id", candidate).maybeSingle();
-        if (!exists.data) { loginId = candidate; break; }
-      }
-      if (!loginId) throw new Error("A unique Member ID could not be generated.");
+      const loginId = await createMemberId(service, person.first_name);
       const temporaryPassword = randomPassword();
       const created = await service.auth.admin.createUser({
-        email: `${loginId}@members.circles.elgchurch.com`,
+        email: `${loginId}@${memberLoginDomain}`,
         password: temporaryPassword,
         email_confirm: true,
         user_metadata: {
@@ -194,16 +196,10 @@ Deno.serve(async (request) => {
     let createdUser = false;
     if (!userId) {
       kind = "generated";
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 4);
-        const candidate = `${slug(`${person.first_name}.${person.last_name}`)}-${suffix}`;
-        const exists = await service.from("circle_user_links").select("id").eq("login_id", candidate).maybeSingle();
-        if (!exists.data) { loginId = candidate; break; }
-      }
-      if (!loginId) throw new Error("A unique Member ID could not be generated.");
+      loginId = await createMemberId(service, person.first_name);
       temporaryPassword = randomPassword();
       const created = await service.auth.admin.createUser({
-        email: `${loginId}@members.circles.elgchurch.com`, password: temporaryPassword,
+        email: `${loginId}@${memberLoginDomain}`, password: temporaryPassword,
         email_confirm: true,
         user_metadata: { first_name: person.first_name, last_name: person.last_name, circles_member_id: loginId },
       });

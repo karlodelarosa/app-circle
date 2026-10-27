@@ -106,7 +106,9 @@ directly; the Edge Function only keeps previously shared links working.
 
 Circle leaders can give app access to an active person who is already part of
 their Circle. Existing SheepCount accounts are linked automatically. People
-without an account receive a Member ID and a one-time temporary password.
+without an account receive a Member ID and a one-time temporary password. New
+Member IDs use a short first-name-and-digits format such as `john-4827`.
+Previously issued Member IDs remain valid and are not renamed.
 
 Account access is managed from **My Circles → open a Circle → Our people →
 Manage access**. Organization administrators can record a Discipleship badge

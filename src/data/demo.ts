@@ -33,6 +33,7 @@ export const demoData: AppData = {
     role: 'leader'
   },
   connectionAttentionCount: 1,
+  signupAttentionCount: 1,
   account: { kind: 'existing', mustChangePassword: false, status: 'active' },
   approvedLeaders: [{ personId: 'demo-user', fullName: 'Karlo de la Rosa', email: 'karlo@example.com' }],
   contentAssignments: [],

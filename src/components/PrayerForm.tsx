@@ -10,12 +10,18 @@ export function PrayerForm({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<PrayerCategory>('Spiritual Growth')
   const [scope, setScope] = useState<PrayerScope>(data?.group ? 'circle' : 'organization')
+  const [groupId, setGroupId] = useState(data?.group?.id ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const canChooseCircle = data?.currentUser.role === 'leader' || data?.currentUser.role === 'admin'
+  const chooseCircle = () => {
+    setScope('circle')
+    setGroupId((current) => current || data?.group?.id || data?.groups[0]?.id || '')
+  }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setBusy(true); setError('')
-    try { await addPrayer({ title, description, category, scope }); onDone() }
+    try { await addPrayer({ title, description, category, scope, groupId: scope === 'circle' ? groupId : undefined }); onDone() }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Prayer could not be shared.') }
     finally { setBusy(false) }
   }
@@ -26,20 +32,34 @@ export function PrayerForm({ onDone }: { onDone: () => void }) {
       <fieldset>
         <legend className="field-label">Who should see this prayer?</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <label className={`rounded-2xl border p-4 ${data?.group ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'} ${scope === 'circle' ? 'border-olive bg-parchment' : 'border-line'}`}>
-            <span className="flex items-center gap-2 text-sm font-medium">
+          <div className={`rounded-2xl border p-4 ${data?.group ? '' : 'opacity-60'} ${scope === 'circle' ? 'border-olive bg-parchment' : 'border-line'}`}>
+            <label className={`flex items-center gap-2 text-sm font-medium ${data?.group ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
               <input
                 type="radio"
                 name="prayer-scope"
                 value="circle"
                 checked={scope === 'circle'}
                 disabled={!data?.group}
-                onChange={() => setScope('circle')}
+                onChange={chooseCircle}
               />
-              My Circle — {data?.group?.name ?? 'select a Circle first'}
-            </span>
+              {canChooseCircle ? 'A Circle' : `My Circle — ${data?.group?.name ?? 'select a Circle first'}`}
+            </label>
+            {canChooseCircle && data?.group && (
+              <label className="mt-3 block text-xs font-medium text-muted" htmlFor="prayer-circle">
+                Choose Circle
+                <select
+                  id="prayer-circle"
+                  className="field mt-1 bg-paper text-sm"
+                  value={groupId}
+                  disabled={scope !== 'circle'}
+                  onChange={(event) => { setScope('circle'); setGroupId(event.target.value) }}
+                >
+                  {data.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                </select>
+              </label>
+            )}
             <span className="mt-2 block text-xs leading-5 text-muted">Only members of this Circle can see it.</span>
-          </label>
+          </div>
           <label className={`cursor-pointer rounded-2xl border p-4 ${scope === 'organization' ? 'border-olive bg-parchment' : 'border-line'}`}>
             <span className="flex items-center gap-2 text-sm font-medium">
               <input
@@ -47,7 +67,7 @@ export function PrayerForm({ onDone }: { onDone: () => void }) {
                 name="prayer-scope"
                 value="organization"
                 checked={scope === 'organization'}
-                onChange={() => setScope('organization')}
+                onChange={() => { setScope('organization'); setGroupId('') }}
               />
               Entire organization — {data?.organization.name}
             </span>

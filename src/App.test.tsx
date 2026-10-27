@@ -87,6 +87,9 @@ describe("Circles MVP", () => {
     screen.getAllByRole("link", { name: "Join a Circle" }).forEach((link) =>
       expect(link).toHaveAttribute("href", "/ministry-lens-church/circles"),
     );
+    expect(
+      screen.getByRole("link", { name: "Sign up for a Cell Group" }),
+    ).toHaveAttribute("href", "/ministry-lens-church/cell-group-signup");
   });
   it("lets visitors learn about a Circle before opening the interest form", async () => {
     renderApp("/ministry-lens-church/circles/grace-and-ground");
@@ -95,6 +98,45 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "I’m interested in joining" }));
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
     expect(screen.getByText(/does not create an account/i)).toBeInTheDocument();
+  });
+  it("offers a separate official Cell Group signup form", async () => {
+    renderApp("/ministry-lens-church/cell-group-signup");
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign up for a Cell Group" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("First name")).toBeRequired();
+    expect(screen.getByLabelText("Last name")).toBeRequired();
+    expect(screen.getByLabelText("Birthday")).toBeRequired();
+    expect(screen.getByLabelText("Mobile number")).toBeInTheDocument();
+    expect(screen.getByLabelText("Facebook link or username")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /store these details/i })).toBeRequired();
+    expect(screen.getByText(/does not reserve a seat or limit who may attend/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Jamie" } });
+    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Rivera" } });
+    fireEvent.change(screen.getByLabelText("Birthday"), { target: { value: "1998-06-14" } });
+    fireEvent.change(screen.getByLabelText("Facebook link or username"), { target: { value: "jamie.rivera" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /store these details/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit my signup" }));
+    expect(await screen.findByRole("heading", { name: "Your signup was received." })).toBeInTheDocument();
+  });
+  it("gives leaders a separate official signup placement queue", async () => {
+    renderApp("/signups");
+
+    expect(
+      await screen.findByRole("heading", { name: "Cell Group signups" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Jamie Rivera")).toBeInTheDocument();
+    expect(screen.getByLabelText("Place Jamie Rivera in")).toHaveValue("demo-group");
+    expect(screen.getByRole("button", { name: "Place in Circle" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Cell Group signups/ }),
+    ).toHaveAttribute("href", "/signups");
+
+    fireEvent.click(screen.getByRole("button", { name: "Place in Circle" }));
+    expect(await screen.findByText(/was placed in Grace & Ground/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Jamie Rivera" })).not.toBeInTheDocument();
   });
   it("wraps routed content in the shared fade and resets scrolling", () => {
     const { container } = renderApp("/gatherings");
@@ -154,6 +196,9 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("heading", { name: "Life in Grace & Ground" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Sign up for a Cell Group" }),
+    ).toHaveAttribute("href", "/ministry-lens-church/cell-group-signup");
     fireEvent.click(
       screen.getByRole("button", {
         name: "I’d like to connect with this Circle",
@@ -179,6 +224,49 @@ describe("Circles MVP", () => {
     fireEvent.click(maybe);
     await waitFor(() => expect(maybe).toHaveAttribute("aria-pressed", "true"));
     expect(going).toHaveAttribute("aria-pressed", "false");
+  });
+  it("explains who appears in Who’s coming when no member has confirmed", () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].rsvps = {};
+
+    renderWithData("/gatherings/meeting-1", data);
+
+    expect(
+      screen.getByText("No members have said they’re going yet."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Guest RSVPs appear in the leader attendance list below/i),
+    ).toBeInTheDocument();
+  });
+  it("keeps edited attendance selections when the leader changes their RSVP", async () => {
+    renderApp("/gatherings/meeting-1");
+    const mara = screen.getByRole("checkbox", { name: /Mara Santos/ });
+    expect(mara).toBeChecked();
+
+    fireEvent.click(mara);
+    expect(mara).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Maybe" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Maybe" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(mara).not.toBeChecked();
+  });
+  it("separates saving attendance from completing a future gathering", () => {
+    renderApp("/gatherings/meeting-1");
+
+    expect(
+      screen.getByRole("button", { name: "Save attendance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Completing becomes available when the gathering begins/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Complete gathering" }),
+    ).not.toBeInTheDocument();
   });
   it("redirects an unauthenticated dashboard visit to SheepCount sign-in", async () => {
     renderApp("/", false);
@@ -208,8 +296,9 @@ describe("Circles MVP", () => {
 
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
     expect(
-      screen.getByRole("radio", { name: /my circle.*grace & ground/i }),
+      screen.getByRole("radio", { name: "A Circle" }),
     ).toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Choose Circle" })).toHaveValue("demo-group");
     fireEvent.click(
       screen.getByRole("radio", {
         name: /entire organization.*ministry lens church/i,
@@ -363,6 +452,33 @@ describe("Circles MVP", () => {
     expect(screen.getByText("Colossians 2:6–7")).toBeInTheDocument();
     expect(screen.getByText("3 going")).toBeInTheDocument();
     expect(screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/)).toBeInTheDocument();
+  });
+  it("includes attending guest RSVPs in dashboard and gathering totals", () => {
+    const data = structuredClone(demoData);
+    const meeting = data.meetings[0] as (typeof data.meetings)[number] & {
+      guestRsvpCounts?: { attending?: number };
+    };
+    meeting.guestRsvpCounts = { attending: 1 };
+
+    const dashboard = renderWithData("/", data);
+    expect(screen.getByText("4 going")).toBeInTheDocument();
+    dashboard.unmount();
+
+    renderWithData("/gatherings", data);
+    expect(screen.getByText("4 going")).toBeInTheDocument();
+  });
+  it("shows a guest-only confirmation without rendering an empty avatar group", () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].rsvps = {};
+    const meeting = data.meetings[0] as (typeof data.meetings)[number] & {
+      guestRsvpCounts?: { attending?: number };
+    };
+    meeting.guestRsvpCounts = { attending: 1 };
+
+    renderWithData("/", data);
+
+    expect(screen.getByText("1 guest confirmed")).toBeInTheDocument();
+    expect(screen.getByText("1 going")).toBeInTheDocument();
   });
   it("summarizes extra attendees and explains when no one is confirmed", () => {
     const fullData = structuredClone(demoData);
@@ -635,5 +751,13 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("button", { name: "Connect to SheepCount" }),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Convert to Cell Group signup" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Convert to Cell Group signup" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Birthday")).toBeRequired();
+    expect(screen.getByRole("checkbox", { name: /confirmed their consent/i })).toBeRequired();
   });
 });

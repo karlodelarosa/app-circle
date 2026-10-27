@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -19,7 +19,12 @@ import { gatheringCoverImage } from "../lib/images";
 import { gatheringShareUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
 import { supabase } from "../lib/supabase";
-import { recordAttendance, stageWalkIn } from "../services/circles";
+import {
+  loadGatheringAttendance,
+  recordAttendance,
+  setGatheringCompletion,
+  stageWalkIn,
+} from "../services/circles";
 import type { ContactPreference, RsvpStatus } from "../types";
 
 const rsvpOptions: { value: RsvpStatus; label: string }[] = [
@@ -30,7 +35,7 @@ const rsvpOptions: { value: RsvpStatus; label: string }[] = [
 
 export function GatheringDetailPage() {
   const { id } = useParams();
-  const { data, demoMode, setRsvp } = useCircles();
+  const { data, demoMode, refresh, setRsvp } = useCircles();
   const [guests, setGuests] = useState<
     {
       id: string;
@@ -39,6 +44,7 @@ export function GatheringDetailPage() {
       email: string;
       phone: string;
       converted_person_id?: string;
+      attended_at?: string;
     }[]
   >([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -56,7 +62,15 @@ export function GatheringDetailPage() {
     consent: false,
   });
   const [saved, setSaved] = useState(false);
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [rsvpError, setRsvpError] = useState("");
+  const [attendanceBusy, setAttendanceBusy] = useState(false);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [guestLoadError, setGuestLoadError] = useState("");
+  const [completionBusy, setCompletionBusy] = useState(false);
+  const [completionError, setCompletionError] = useState("");
   const [shareStatus, setShareStatus] = useState("");
+  const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
   const attendanceMembers = meeting?.scope === "organization"
     ? data?.organizationMembers ?? []
@@ -74,18 +88,49 @@ export function GatheringDetailPage() {
   );
   useEffect(() => {
     if (!meeting) return;
+    if (attendanceInitializedFor.current === meeting.id) return;
+    attendanceInitializedFor.current = meeting.id;
     setSelected(
       Object.entries(meeting.rsvps)
         .filter(([, status]) => status === "attending")
         .map(([personId]) => personId),
     );
-    if (!demoMode && supabase && canLead)
-      void supabase
+    setGuestSelected([]);
+    setSaved(false);
+  }, [meeting]);
+  useEffect(() => {
+    if (!meeting || demoMode || !supabase || !canLead) return;
+    let active = true;
+    setGuestLoadError("");
+    void Promise.all([
+      loadGatheringAttendance(supabase, meeting.id),
+      supabase
         .from("circle_guest_rsvps")
-        .select("id,guest_name,status,email,phone,converted_person_id")
-        .eq("gathering_id", meeting.id)
-        .then(({ data: rows }) => setGuests(rows ?? []));
-  }, [meeting, canLead, demoMode]);
+        .select("id,guest_name,status,email,phone,converted_person_id,attended_at")
+        .eq("gathering_id", meeting.id),
+    ])
+        .then(([attendance, { data: rows, error }]) => {
+          if (!active) return;
+          if (error) {
+            setGuestLoadError(getErrorMessage(error, "Guest RSVPs could not be loaded."));
+            return;
+          }
+          setGuests(rows ?? []);
+          if (attendance.saved) {
+            setSelected(attendance.personIds);
+            setGuestSelected(attendance.guestRsvpIds);
+          }
+        })
+        .catch((cause) => {
+          if (active)
+            setGuestLoadError(
+              getErrorMessage(cause, "Attendance and guest RSVPs could not be loaded."),
+            );
+        });
+    return () => {
+      active = false;
+    };
+  }, [meeting?.id, canLead, demoMode]);
   if (!data) return null;
   const base = "";
   if (!meeting)
@@ -99,9 +144,53 @@ export function GatheringDetailPage() {
       </div>
     );
   const saveAttendance = async () => {
-    if (!demoMode && supabase)
-      await recordAttendance(supabase, meeting.id, selected, guestSelected);
-    setSaved(true);
+    setAttendanceBusy(true);
+    setAttendanceError("");
+    setSaved(false);
+    try {
+      if (!demoMode && supabase)
+        await recordAttendance(supabase, meeting.id, selected, guestSelected);
+      setSaved(true);
+    } catch (cause) {
+      setAttendanceError(
+        getErrorMessage(cause, "Attendance could not be saved."),
+      );
+    } finally {
+      setAttendanceBusy(false);
+    }
+  };
+  const chooseRsvp = async (status: RsvpStatus) => {
+    setRsvpBusy(true);
+    setRsvpError("");
+    try {
+      await setRsvp(meeting.id, status);
+    } catch (cause) {
+      setRsvpError(getErrorMessage(cause, "Your RSVP could not be saved."));
+    } finally {
+      setRsvpBusy(false);
+    }
+  };
+  const changeCompletion = async (completed: boolean) => {
+    if (
+      completed &&
+      !window.confirm(
+        "Complete this gathering? It will move out of Upcoming gatherings, but you can reopen it later.",
+      )
+    )
+      return;
+    setCompletionBusy(true);
+    setCompletionError("");
+    try {
+      if (!demoMode && supabase)
+        await setGatheringCompletion(supabase, meeting.id, completed);
+      await refresh();
+    } catch (cause) {
+      setCompletionError(
+        getErrorMessage(cause, "The gathering status could not be changed."),
+      );
+    } finally {
+      setCompletionBusy(false);
+    }
   };
   const addWalkIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -209,6 +298,8 @@ export function GatheringDetailPage() {
             <p className="text-sm text-[#D9DDCE]">
               {meeting.status === "cancelled"
                 ? "Cancelled gathering"
+                : meeting.status === "completed"
+                  ? "Completed gathering"
                 : meeting.scope === "organization"
                   ? "Everyone is welcome"
                   : meeting.destinationName || "Our next gathering"}
@@ -273,23 +364,35 @@ export function GatheringDetailPage() {
               <UsersRound size={20} /> Who’s coming
             </h2>
             <div className="mt-4 space-y-3">
-              {attending.map((member) => (
-                <div key={member.id} className="flex items-center gap-3">
-                  <Avatar person={member} />
-                  <span className="text-sm">{member.fullName}</span>
-                </div>
-              ))}
+              {attending.length ? (
+                attending.map((member) => (
+                  <div key={member.id} className="flex items-center gap-3">
+                    <Avatar person={member} />
+                    <span className="text-sm">{member.fullName}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted">
+                  No members have said they’re going yet.
+                </p>
+              )}
             </div>
+            <p className="mt-5 text-xs leading-5 text-muted">
+              This list shows confirmed Circle members. {canLead
+                ? "Guest RSVPs appear in the leader attendance list below."
+                : "Guest RSVPs are visible to gathering leaders."}
+            </p>
           </div>
         </div>
-        {meeting.status !== "cancelled" && data.currentUser.personId && (
+        {meeting.status === "scheduled" && data.currentUser.personId && (
           <footer className="border-t border-line px-6 py-5 sm:px-10">
             <p className="mb-3 text-xs text-muted">Can you make it?</p>
             <div className="flex flex-wrap gap-2">
               {rsvpOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => void setRsvp(meeting.id, option.value)}
+                  onClick={() => void chooseRsvp(option.value)}
+                  disabled={rsvpBusy}
                   aria-pressed={meeting.rsvps[data.currentUser.personId!] === option.value}
                   className={`rsvp-button ${meeting.rsvps[data.currentUser.personId!] === option.value ? "rsvp-button-active" : ""}`}
                 >
@@ -297,6 +400,11 @@ export function GatheringDetailPage() {
                 </button>
               ))}
             </div>
+            {rsvpError && (
+              <p className="form-error mt-3" role="alert">
+                {rsvpError}
+              </p>
+            )}
           </footer>
         )}
       </article>
@@ -316,7 +424,7 @@ export function GatheringDetailPage() {
             {saved && (
               <span className="flex items-center gap-2 text-sm text-olive">
                 <Check size={16} />
-                Recorded
+                Saved
               </span>
             )}
           </div>
@@ -363,7 +471,9 @@ export function GatheringDetailPage() {
             <div>
               <h3 className="font-medium">Guest RSVPs</h3>
               <div className="mt-3 space-y-2">
-                {guests.length ? (
+                {guestLoadError ? (
+                  <p className="form-error" role="alert">{guestLoadError}</p>
+                ) : guests.length ? (
                   guests.map((guest) => (
                     <label
                       key={guest.id}
@@ -400,12 +510,63 @@ export function GatheringDetailPage() {
               {walkInNotice}
             </p>
           )}
-          <button
-            className="primary-button mt-7"
-            onClick={() => void saveAttendance()}
-          >
-            Record attendance
-          </button>
+          <div className="mt-7 border-t border-line pt-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                className="primary-button"
+                onClick={() => void saveAttendance()}
+                disabled={attendanceBusy}
+              >
+                {attendanceBusy ? "Saving…" : "Save attendance"}
+              </button>
+              {meeting.status === "completed" ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => void changeCompletion(false)}
+                  disabled={completionBusy}
+                >
+                  {completionBusy ? "Reopening…" : "Reopen gathering"}
+                </button>
+              ) : new Date(meeting.meetingDate) <= new Date() ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => void changeCompletion(true)}
+                  disabled={completionBusy}
+                >
+                  {completionBusy ? "Completing…" : "Complete gathering"}
+                </button>
+              ) : null}
+            </div>
+            {meeting.status === "scheduled" &&
+              new Date(meeting.meetingDate) > new Date() && (
+              <p className="mt-3 text-xs leading-5 text-muted">
+                You can prepare and save the roster now. Completing becomes
+                available when the gathering begins.
+              </p>
+            )}
+            {meeting.status === "scheduled" &&
+              new Date(meeting.meetingDate) <= new Date() && (
+                <p className="mt-3 text-xs leading-5 text-muted">
+                  Complete the gathering only when it is finished. It will move
+                  from Upcoming to Previous gatherings.
+                </p>
+              )}
+            {saved && (
+              <p className="mt-3 text-sm text-olive" role="status">
+                Attendance saved. This gathering is still {meeting.status}.
+              </p>
+            )}
+            {attendanceError && (
+              <p className="form-error mt-3" role="alert">
+                {attendanceError}
+              </p>
+            )}
+            {completionError && (
+              <p className="form-error mt-3" role="alert">
+                {completionError}
+              </p>
+            )}
+          </div>
         </section>
       )}
       {walkInOpen && (
