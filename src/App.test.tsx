@@ -268,6 +268,20 @@ describe("Circles MVP", () => {
       screen.queryByRole("button", { name: "Complete gathering" }),
     ).not.toBeInTheDocument();
   });
+  it("opens private reflections after a gathering is completed", () => {
+    const data = structuredClone(demoData);
+    data.meetings[2].status = "completed";
+
+    renderWithData("/gatherings/meeting-3", data);
+
+    expect(screen.getByRole("heading", { name: "After the gathering" })).toBeInTheDocument();
+    expect(screen.getByLabelText("What stayed with you?")).toBeInTheDocument();
+  });
+  it("does not expose reflections before a gathering is completed", () => {
+    renderApp("/gatherings/meeting-1");
+
+    expect(screen.queryByRole("heading", { name: "After the gathering" })).not.toBeInTheDocument();
+  });
   it("redirects an unauthenticated dashboard visit to SheepCount sign-in", async () => {
     renderApp("/", false);
     expect(
@@ -427,6 +441,18 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("link", { name: /Grace & Ground/ }),
     ).toHaveAttribute("href", "/circles/demo-group");
+  });
+  it("surfaces the latest completed gathering on a Circle page", () => {
+    const data = structuredClone(demoData);
+    data.meetings[2].status = "completed";
+
+    renderWithData("/circles/demo-group", data);
+
+    expect(screen.getByRole("heading", { name: "Continue the gathering" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue Carrying one another/i })).toHaveAttribute(
+      "href",
+      "/gatherings/meeting-3",
+    );
   });
   it("uses the gathering cover on the dashboard", () => {
     const { container } = renderApp("/");
@@ -607,6 +633,7 @@ describe("Circles MVP", () => {
     renderApp("/ministry-lens-church/gatherings/carrying-one-another");
     expect(await screen.findByText("This gathering has ended.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save my RSVP" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "After the gathering" })).not.toBeInTheDocument();
   });
   it("explains announcement audiences and keeps galleries discoverable in Publish", () => {
     renderApp("/content");

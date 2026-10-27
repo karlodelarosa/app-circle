@@ -9,6 +9,7 @@ import {
   Plus,
   Images,
   Megaphone,
+  MessageCircle,
   Quote,
   UserPlus,
   UsersRound,
@@ -22,6 +23,7 @@ import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
 import { getErrorMessage } from "../lib/errors";
 import { getFunctionErrorMessage, invokeAuthenticatedFunction } from "../lib/functions";
+import { loadGatheringReflectionActivity } from "../services/circles";
 import type { Member } from "../types";
 import { PeoplePage } from "./PeoplePage";
 
@@ -40,12 +42,33 @@ export function CirclePage() {
   const [circleBusy,setCircleBusy]=useState(false);
   const [circleError,setCircleError]=useState("");
   const [circleForm,setCircleForm]=useState({name:"",description:"",location:"",leaderPersonId:""});
+  const [reflectionActivity,setReflectionActivity]=useState<{count:number;authorName?:string}>({count:0});
+  const latestCompletedMeeting = data?.meetings
+    .filter((meeting) => meeting.groupId === data.group?.id && meeting.status === "completed")
+    .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate))[0];
   useEffect(() => {
     if (circleId && data?.group?.id !== circleId) {
       const found = data?.groups.find((group) => group.id === circleId);
       if (found) void selectGroup(found.id);
     }
   }, [circleId, data?.group?.id]);
+  useEffect(() => {
+    if (!circleId || !latestCompletedMeeting || !supabase) {
+      setReflectionActivity({ count: 0 });
+      return;
+    }
+    let active = true;
+    loadGatheringReflectionActivity(supabase, latestCompletedMeeting.id)
+      .then((activity) => {
+        if (active) setReflectionActivity(activity);
+      })
+      .catch(() => {
+        if (active) setReflectionActivity({ count: 0 });
+      });
+    return () => {
+      active = false;
+    };
+  }, [circleId, latestCompletedMeeting?.id]);
   if (!data) return null;
   if (!circleId) {
     if (!data.groups.length)
@@ -327,6 +350,26 @@ export function CirclePage() {
           {nextGathering ? "View gathering" : "View gatherings"} <ChevronRight size={16} />
         </Link>
       </section>
+      {latestCompletedMeeting && (
+        <section className="mt-8 grid gap-5 border-b border-line pb-8 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-sage text-olive">
+            <MessageCircle size={20} />
+          </span>
+          <div>
+            <p className="text-xs uppercase tracking-[0.14em] text-olive">Keep the conversation going</p>
+            <h2 className="mt-2 font-display text-3xl">Continue the gathering</h2>
+            <p className="mt-2 text-sm text-muted">
+              {latestCompletedMeeting.title}
+              {reflectionActivity.count > 0
+                ? ` · ${reflectionActivity.count} ${reflectionActivity.count === 1 ? "reflection" : "reflections"}${reflectionActivity.authorName ? ` · Latest from ${reflectionActivity.authorName}` : ""}`
+                : " · Share what stayed with you."}
+            </p>
+          </div>
+          <Link className="secondary-button justify-center" to={`/gatherings/${latestCompletedMeeting.id}`}>
+            Continue {latestCompletedMeeting.title} <ChevronRight size={16} />
+          </Link>
+        </section>
+      )}
       {latestAnnouncement && (
         <section className="mt-12 border-t border-line pt-8">
           <div className="section-heading"><div><h2>{activeGroup.name} updates</h2><p>Notes shared specifically with this Circle.</p></div></div>

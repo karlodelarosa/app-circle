@@ -12,6 +12,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
+import { GatheringReflections } from "../components/GatheringReflections";
 import { Modal } from "../components/Modal";
 import { getErrorMessage } from "../lib/errors";
 import { formatDate, formatTime } from "../lib/format";
@@ -408,6 +409,9 @@ export function GatheringDetailPage() {
           </footer>
         )}
       </article>
+      {meeting.status === "completed" && (
+        <GatheringReflections meeting={meeting} canModerate={canLead} />
+      )}
       {canLead && (
         <section className="paper-panel mt-7 p-6 sm:p-8">
           <div className="flex items-start justify-between gap-4">
