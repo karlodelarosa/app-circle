@@ -24,30 +24,29 @@ export function gatheringLifecycle(
   return "attendance_pending";
 }
 
-const datePart = (value: string) =>
+const datePart = (value: string, timeZone?: string) =>
   new Intl.DateTimeFormat("en", {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
+    ...(timeZone ? { timeZone } : {}),
   }).format(new Date(value));
 
-const timePart = (value: string) =>
+const timePart = (value: string, timeZone?: string) =>
   new Intl.DateTimeFormat("en", {
     hour: "numeric",
     minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
   }).format(new Date(value));
 
-export function formatGatheringDateTime(startsAt: string, endsAt: string) {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
-  const sameLocalDay =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate();
-  return sameLocalDay
-    ? `${datePart(startsAt)} · ${timePart(startsAt)}–${timePart(endsAt)}`
-    : `${datePart(startsAt)}, ${timePart(startsAt)} – ${datePart(endsAt)}, ${timePart(endsAt)}`;
+export function formatGatheringDateTime(startsAt: string, endsAt: string, timeZone?: string) {
+  const dayKey = (value: string) => new Intl.DateTimeFormat("en-CA", {
+    year: "numeric", month: "2-digit", day: "2-digit", ...(timeZone ? { timeZone } : {}),
+  }).format(new Date(value));
+  return dayKey(startsAt) === dayKey(endsAt)
+    ? `${datePart(startsAt, timeZone)} · ${timePart(startsAt, timeZone)}–${timePart(endsAt, timeZone)}`
+    : `${datePart(startsAt, timeZone)}, ${timePart(startsAt, timeZone)} – ${datePart(endsAt, timeZone)}, ${timePart(endsAt, timeZone)}`;
 }
 
 export function gatheringRelativeStatus(endsAt: string, now = new Date()) {

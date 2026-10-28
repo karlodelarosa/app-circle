@@ -1,13 +1,6 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { findAvailableMemberId } from "../_shared/member-id.ts";
-
-const cors = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
-};
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { ...cors, "content-type": "application/json" },
-});
+import { allowedOrigin, corsHeaders, jsonResponse, readJsonBody, requestId } from "../_shared/http.ts";
 const randomPassword = () => {
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const lower = "abcdefghijkmnopqrstuvwxyz";
@@ -50,7 +43,11 @@ const createMemberId = (service: SupabaseClient, firstName: string) =>
   });
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const id = requestId(request);
+  const origin = allowedOrigin(request);
+  if (!origin) return Response.json({ error: "Request not allowed" }, { status: 403 });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  const json = (body: unknown, status = 200) => jsonResponse(origin, id, body, status);
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const url = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -62,14 +59,37 @@ Deno.serve(async (request) => {
   if (!accessToken) return json({ error: "Authentication required" }, 401);
   const { data: auth, error: authError } = await service.auth.getUser(accessToken);
   if (authError || !auth.user) return json({ error: "Authentication required" }, 401);
+  let auditOrganizationId: string | null = null;
+  let auditAction = "account.unknown";
+  let auditTargetId: string | null = null;
+  const audit = async (result: "success" | "denied" | "failed") => {
+    await service.from("circle_security_audit_events").insert({
+      organization_id: auditOrganizationId,
+      actor_user_id: auth.user.id,
+      action: auditAction,
+      target_type: "person",
+      target_id: auditTargetId,
+      result,
+      request_id: id,
+    });
+  };
   try {
-    const { action, groupId, personId } = await request.json();
-    if (!["provision", "reset", "replace", "promote"].includes(action) || !groupId || !personId)
+    const body = await readJsonBody(request, 8192);
+    const { action, groupId, personId } = body && typeof body === "object"
+      ? body as { action?: unknown; groupId?: unknown; personId?: unknown }
+      : {};
+    if (typeof action !== "string" || !["provision", "reset", "replace", "promote"].includes(action)
+      || typeof groupId !== "string" || typeof personId !== "string" || !groupId || !personId)
       return json({ error: "Invalid request" }, 400);
+    auditAction = `account.${action}`;
+    auditTargetId = String(personId);
     const access = await callerClient.rpc("get_circle_member_account_statuses", {
       p_cell_group_id: groupId,
     });
-    if (access.error) return json({ error: "Leader access required" }, 403);
+    if (access.error) {
+      await audit("denied");
+      return json({ error: "Leader access required" }, 403);
+    }
     const { data: membership } = await service.from("cell_group_members")
       .select("person_id,cell_groups!inner(organization_id),people!inner(first_name,last_name,email,status)")
       .eq("cell_group_id", groupId).eq("person_id", personId).maybeSingle();
@@ -78,6 +98,7 @@ Deno.serve(async (request) => {
     if (!membership || !person || person.status !== "Active")
       return json({ error: "Only active People assigned to this Circle can receive access." }, 400);
     const organizationId = group.organization_id;
+    auditOrganizationId = organizationId;
     const { data: current } = await service.from("circle_user_links").select("*")
       .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
 
@@ -108,6 +129,7 @@ Deno.serve(async (request) => {
         await service.auth.admin.deleteUser(created.data.user.id);
         throw replaced.error;
       }
+      await audit("success");
       return json({
         kind: "generated",
         loginId,
@@ -159,6 +181,7 @@ Deno.serve(async (request) => {
         if (retired.error)
           retirementWarning = "The old Member ID no longer has Circles access, but its auth login could not be disabled automatically.";
       }
+      await audit("success");
       return json({
         kind: "existing",
         email: realEmail,
@@ -179,11 +202,13 @@ Deno.serve(async (request) => {
         must_change_password: true, last_password_reset_at: new Date().toISOString(), status: "active",
       }).eq("id", current.id);
       if (link.error) throw link.error;
+      await audit("success");
       return json({ kind: "generated", loginId: current.login_id, temporaryPassword: password });
     }
 
     if (current) {
       await service.from("circle_user_links").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", current.id);
+      await audit("success");
       return json({ kind: current.account_kind, loginId: current.login_id, alreadyExists: true });
     }
 
@@ -227,8 +252,16 @@ Deno.serve(async (request) => {
       if (createdUser && userId) await service.auth.admin.deleteUser(userId);
       throw error;
     }
+    await audit("success");
     return json({ kind, loginId, temporaryPassword, existingAccount: kind === "existing" });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Account operation failed." }, 400);
+    await audit("failed");
+    console.error(JSON.stringify({
+      event: "member_account_operation_failed",
+      requestId: id,
+      action: auditAction,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    }));
+    return json({ error: "Account operation could not be completed." }, 400);
   }
 });

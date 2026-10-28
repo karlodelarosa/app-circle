@@ -47,6 +47,7 @@ import {
   withBrowseMode,
 } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
+import { downloadGatheringIcs } from "../lib/calendar";
 import { supabase } from "../lib/supabase";
 import {
   galleryBySlug,
@@ -701,6 +702,10 @@ export function PublicGatheringPage() {
       setReturnStatus("The invitation could not be shared.");
     }
   };
+  const saveToCalendar = () => downloadGatheringIcs(
+    item,
+    gatheringShareUrl(space.organization.slug, item.slug || ""),
+  );
   return (
     <main>
       <section className="public-section pb-10">
@@ -719,19 +724,23 @@ export function PublicGatheringPage() {
           <div className="grid gap-10 p-6 sm:p-10 lg:grid-cols-[1.2fr_.8fr]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <p className="page-kicker">{formatDate(item.meetingDate)}</p>
+                <p className="page-kicker">{formatDate(item.meetingDate, undefined, space.organization.timezone)}</p>
                 {item.destinationName && <span className="status-badge">{item.destinationName}</span>}
               </div>
               <h1 className="mt-2 break-words font-display text-5xl leading-none sm:text-7xl">
                 {item.title}
               </h1>
+              <p className="mt-4 text-sm text-muted">Times shown in {space.organization.timezone || "UTC"}.</p>
+              <button type="button" className="secondary-button mt-5" onClick={saveToCalendar}>
+                <CalendarDays size={16} /> Add to calendar
+              </button>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
                 {item.summary || item.notes}
               </p>
               <div className="mt-8 space-y-3 text-sm">
                 <p className="flex gap-3">
                   <CalendarDays className="shrink-0 text-olive" size={18} />
-                  {formatGatheringDateTime(item.meetingDate, item.endsAt)}
+                  {formatGatheringDateTime(item.meetingDate, item.endsAt, space.organization.timezone)}
                 </p>
                 <p className="flex gap-3">
                   <MapPin className="shrink-0 text-olive" size={18} />
@@ -869,6 +878,7 @@ export function PublicGatheringPage() {
                           <input
                             className="mt-1 h-4 w-4 shrink-0"
                             type="checkbox"
+                            aria-label="I agree that a Circle leader may contact me about this community."
                             required
                             checked={connectForm.consent}
                             onChange={(event) =>
@@ -876,6 +886,7 @@ export function PublicGatheringPage() {
                             }
                           />
                           I agree that a Circle leader may contact me about this community.
+                          <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
                         </label>
                         <Turnstile onToken={updateConnectionBotToken} />
                         {connectError && <p className="form-error" role="alert">{connectError}</p>}
@@ -915,12 +926,15 @@ export function PublicGatheringPage() {
                       </button>
                     </div>
                     {install.canInstall && !install.standalone && (
-                      <button
-                        className="secondary-button mt-2 min-h-11 w-full justify-center"
-                        onClick={() => void install.install()}
-                      >
-                        <Smartphone size={16} /> Add Circles to your home screen
-                      </button>
+                      <>
+                        <button
+                          className="secondary-button mt-2 min-h-11 w-full justify-center"
+                          onClick={() => void install.install()}
+                        >
+                          <Smartphone size={16} /> Add Circles to your home screen
+                        </button>
+                        <p className="mt-2 text-xs leading-5 text-muted">Circles is installable but requires an internet connection for current community data and submissions.</p>
+                      </>
                     )}
                     {install.isIos && !install.standalone && (
                       <p className="mt-3 text-xs leading-5 text-muted">
@@ -983,7 +997,7 @@ export function PublicGatheringPage() {
                   </div>
                   <p className="text-xs text-muted">
                     Add an email or phone number so the leader can identify your
-                    RSVP.
+                    RSVP. <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
                   </p>
                   <label className="field-label">
                     Response
@@ -1432,6 +1446,7 @@ export function PublicCirclePage() {
                 <input
                   className="mt-1 h-4 w-4 shrink-0"
                   type="checkbox"
+                  aria-label="I agree that a Circle leader may contact me about this community."
                   required
                   checked={form.consent}
                   onChange={(event) =>
@@ -1439,6 +1454,7 @@ export function PublicCirclePage() {
                   }
                 />
                 I agree that a Circle leader may contact me about this community.
+                <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
               </label>
               <Turnstile onToken={updateBotToken} />
               {error && <p className="form-error" role="alert">{error}</p>}

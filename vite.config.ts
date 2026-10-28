@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: "Circles — Cell Group",
           short_name: "Circles",
-          description: "Gather, pray, and grow together.",
+          description: "Gather, pray, and grow together. Internet connection required for current data.",
           theme_color: "#596047",
           background_color: "#F3EFE5",
           display: "standalone",

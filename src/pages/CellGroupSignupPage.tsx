@@ -149,12 +149,13 @@ export function CellGroupSignupPage() {
                 <input
                   className="mt-1 h-4 w-4 shrink-0"
                   type="checkbox"
+                  aria-label="I agree that the church may store these details and contact me about Cell Group placement."
                   required
                   checked={form.consent}
                   onChange={(event) => setForm({ ...form, consent: event.target.checked })}
                 />
                 I agree that the church may store these details and contact me
-                about Cell Group placement.
+                about Cell Group placement. <Link className="text-link" to={`/${orgSlug}/privacy`}>Privacy details</Link>
               </label>
               <Turnstile onToken={updateBotToken} />
               {error && <p className="form-error" role="alert">{error}</p>}

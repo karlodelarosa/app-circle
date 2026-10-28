@@ -65,6 +65,28 @@ describe("Circles Cloudflare Worker", () => {
     expect(assets.fetch).toHaveBeenCalledWith(request);
   });
 
+  it("adds organization metadata beyond gathering pages", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      organization: { name: "ELGC" },
+      heroTitle: "There is room for you",
+      introduction: "Find a place to gather and grow.",
+      heroImageUrl: "/assets/welcome-table.webp",
+    })));
+    const response = await handleRequest(new Request("https://circles.example/elgc/circles"), env);
+    const html = await response.text();
+    expect(html).toContain("There is room for you | Circles");
+    expect(html).toContain('rel="canonical" href="https://circles.example/elgc/circles"');
+    expect(html).toContain("Find a place to gather and grow.");
+  });
+
+  it("serves crawler discovery files", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(["/elgc", "/elgc/gatherings/lunch"])));
+    const robots = await handleRequest(new Request("https://circles.example/robots.txt"), env);
+    expect(await robots.text()).toContain("Sitemap: https://circles.example/sitemap.xml");
+    const map = await handleRequest(new Request("https://circles.example/sitemap.xml"), env);
+    expect(await map.text()).toContain("<loc>https://circles.example/elgc/gatherings/lunch</loc>");
+  });
+
   it("adds production security and correlation headers to every response", async () => {
     const response = await handleRequest(
       new Request("https://circles.example/sign-in"),
@@ -100,6 +122,14 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("x-request-id")).toBeTruthy();
     expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"client_error"'));
+  });
+
+  it("exposes a dependency-aware uptime endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ version: "healthy" })));
+    const response = await handleRequest(new Request("https://circles.example/healthz"), env);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ ok: true, database: "ok" }));
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   it("proxies the cover with crawler-friendly cache headers", async () => {

@@ -11,3 +11,12 @@ export function reportClientError(error: unknown) {
     keepalive: true,
   }).catch(() => undefined);
 }
+
+export function reportSecurityEvent(event: "auth_failure") {
+  void fetch("/__telemetry/client-error", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ event, errorType: "AuthenticationError", path: window.location.pathname }),
+    keepalive: true,
+  }).catch(() => undefined);
+}

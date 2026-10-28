@@ -18,8 +18,10 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build:e2e && playwright test",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "db:verify:linked": "node scripts/verify-linked-migrations.mjs",
     "test:watch": "vitest",
-    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run build && npm run check:bundle"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

@@ -11,6 +11,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { getErrorMessage } from "./lib/errors";
+import { reportSecurityEvent } from "./lib/telemetry";
 import * as api from "./services/circles";
 import type { AppData, MeetingInput, PrayerInput, RsvpStatus } from "./types";
 
@@ -145,7 +146,10 @@ export function AppProvider({
       email,
       password,
     });
-    if (authError) throw authError;
+    if (authError) {
+      reportSecurityEvent("auth_failure");
+      throw authError;
+    }
     if (!authData.session)
       throw new Error("SheepCount signed in without starting a session.");
     setLoading(true);

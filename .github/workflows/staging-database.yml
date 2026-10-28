@@ -1,0 +1,45 @@
+name: Staging database verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-history-and-rls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Require staging secrets
+        run: test -n "$SUPABASE_ACCESS_TOKEN" && test -n "$SUPABASE_DB_PASSWORD" && test -n "$SUPABASE_PROJECT_ID" && test -n "$STAGING_DATABASE_URL"
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+      - run: npm run db:verify:linked
+      - run: supabase db push --dry-run --linked
+      - name: Run cross-tenant authorization suite
+        run: psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
+      - name: Run authenticated write smoke suite
+        run: psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/remote_write_smoke.sql
+      - name: Create and validate backup
+        run: |
+          pg_dump "$STAGING_DATABASE_URL" --format=custom --no-owner --no-acl --file=/tmp/circles-staging.dump
+          pg_restore --list /tmp/circles-staging.dump >/tmp/circles-staging.contents
+          test -s /tmp/circles-staging.contents
+      - name: Rehearse restore in an isolated Supabase database
+        run: |
+          supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS circles_restore_check' -c 'CREATE DATABASE circles_restore_check'
+          pg_restore --exit-on-error --no-owner --no-acl --dbname=postgresql://postgres:postgres@127.0.0.1:54322/circles_restore_check /tmp/circles-staging.dump
+          psql postgresql://postgres:postgres@127.0.0.1:54322/circles_restore_check -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.organizations'

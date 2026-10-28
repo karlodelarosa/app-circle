@@ -97,8 +97,19 @@ export async function loadPublicSpace(
   if (error) throw error;
   if (!data) throw new Error("This community page is not available.");
   const space = data as PublicSpace;
+  const settings = await client
+    .from("circle_public_organization_settings")
+    .select("timezone,public_metadata")
+    .eq("organization_id", space.organization.id)
+    .maybeSingle();
+  const publicMetadata = settings.data?.public_metadata as { description?: string } | null;
   return {
     ...space,
+    organization: {
+      ...space.organization,
+      timezone: settings.data?.timezone || "UTC",
+      publicDescription: publicMetadata?.description,
+    },
     announcements: space.announcements ?? [],
     gatherings: (space.gatherings ?? []).map((meeting) => ({
       ...meeting,

@@ -23,6 +23,9 @@ interface PublicGathering {
 interface PublicSpaceResponse {
   organization?: { name?: string };
   gathering?: PublicGathering;
+  introduction?: string;
+  heroTitle?: string;
+  heroImageUrl?: string;
 }
 
 const escapeHtml = (value: unknown) =>
@@ -36,6 +39,8 @@ const escapeHtml = (value: unknown) =>
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
 const clientTelemetryRoute = "/__telemetry/client-error";
+const healthRoute = "/healthz";
+const organizationRoute = /^\/([^/]+)(?:\/(?:gatherings|updates|testimonies|galleries|circles|cell-group-signup|privacy))?\/?$/;
 const socialPreviewVersion = "3";
 
 const contentSecurityPolicy = [
@@ -91,11 +96,34 @@ async function recordClientError(request: Request, id: string) {
     const path = typeof value.path === "string" && /^\/[A-Za-z0-9/_-]*$/.test(value.path)
       ? value.path.slice(0, 240)
       : "/";
-    console.error(JSON.stringify({ event: "client_error", requestId: id, errorType, path }));
+    const event = value.event === "auth_failure" ? "auth_failure" : "client_error";
+    console.error(JSON.stringify({ event, requestId: id, errorType, path }));
     return secureResponse(new Response(null, { status: 204 }), id);
   } catch {
     return secureResponse(Response.json({ error: "Invalid report" }, { status: 400 }), id);
   }
+}
+
+async function healthResponse(env: WorkerEnv, id: string) {
+  const started = Date.now();
+  let database = "unconfigured";
+  if (env.SUPABASE_URL && env.SUPABASE_ANON_KEY) {
+    try {
+      const result = await fetch(new URL("/auth/v1/health", env.SUPABASE_URL), {
+        headers: { apikey: env.SUPABASE_ANON_KEY },
+      });
+      database = result.ok ? "ok" : "error";
+    } catch {
+      database = "error";
+    }
+  }
+  const databaseLatencyMs = Date.now() - started;
+  const ok = database === "ok";
+  console.log(JSON.stringify({ event: "dependency_health", requestId: id, database, databaseLatencyMs }));
+  return secureResponse(Response.json({ ok, database, databaseLatencyMs }, {
+    status: ok ? 200 : 503,
+    headers: { "cache-control": "no-store" },
+  }), id);
 }
 
 function gatheringPlaceholder(seed: string) {
@@ -165,6 +193,74 @@ function injectMetadata(
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
     .replace(/\s*<meta\s+name=["']description["'][^>]*>/i, "")
     .replace("</head>", `${metadata}\n  </head>`);
+}
+
+function injectOrganizationMetadata(html: string, request: Request, space: PublicSpaceResponse) {
+  const canonical = new URL(request.url);
+  canonical.search = "";
+  canonical.hash = "";
+  const title = `${space.heroTitle || space.organization?.name || "Community"} | Circles`;
+  const description = String(space.introduction || `Discover gatherings and community life from ${space.organization?.name || "this community"}.`).slice(0, 220);
+  const image = space.heroImageUrl ? new URL(space.heroImageUrl, canonical).href : new URL("/assets/devotional-table.webp", canonical).href;
+  const metadata = `
+    <link rel="canonical" href="${escapeHtml(canonical.href)}" />
+    <meta name="description" content="${escapeHtml(description)}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Circles" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:image" content="${escapeHtml(image)}" />
+    <meta property="og:url" content="${escapeHtml(canonical.href)}" />
+    <meta name="twitter:card" content="summary_large_image" />`;
+  return html
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    .replace(/\s*<meta\s+name=["']description["'][^>]*>/i, "")
+    .replace("</head>", `${metadata}\n  </head>`);
+}
+
+async function loadPublicSpace(slug: string, env: WorkerEnv) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+  const endpoint = new URL("/rest/v1/rpc/get_circle_public_space", env.SUPABASE_URL);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${env.SUPABASE_ANON_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({ p_org_slug: slug }),
+  });
+  return response.ok ? await response.json() as PublicSpaceResponse | null : null;
+}
+
+async function organizationHtml(request: Request, env: WorkerEnv) {
+  const match = new URL(request.url).pathname.match(organizationRoute);
+  if (!match || [
+    "sign-in", "forgot-password", "reset-password", "app", "gatherings", "circles",
+    "prayer", "content", "connections", "signups", "more", "change-password",
+  ].includes(match[1])) return null;
+  const space = await loadPublicSpace(match[1], env);
+  if (!space?.organization) return null;
+  const shell = await env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers }));
+  if (!shell.ok) return null;
+  const headers = new Headers(shell.headers);
+  headers.set("content-type", "text/html; charset=UTF-8");
+  headers.set("cache-control", "public, max-age=0, s-maxage=300");
+  headers.delete("content-length");
+  headers.delete("etag");
+  return new Response(injectOrganizationMetadata(await shell.text(), request, space), { headers });
+}
+
+async function sitemap(request: Request, env: WorkerEnv) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+  const endpoint = new URL("/rest/v1/rpc/get_circle_public_sitemap", env.SUPABASE_URL);
+  const result = await fetch(endpoint, {
+    method: "POST",
+    headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${env.SUPABASE_ANON_KEY}`, "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!result.ok) return null;
+  const paths = await result.json() as string[];
+  const urls = paths.map((path) => `<url><loc>${escapeHtml(new URL(path, request.url).href)}</loc></url>`).join("");
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`, {
+    headers: { "content-type": "application/xml; charset=UTF-8", "cache-control": "public, max-age=300, s-maxage=3600" },
+  });
 }
 
 async function loadPublicGathering(
@@ -276,12 +372,22 @@ export async function handleRequest(
 ) {
   const requestUrl = new URL(request.url);
   const id = requestId(request);
+  if (requestUrl.pathname === healthRoute && request.method === "GET")
+    return healthResponse(env, id);
   if (requestUrl.pathname === clientTelemetryRoute && request.method === "POST")
     return recordClientError(request, id);
+  if (requestUrl.pathname === "/robots.txt" && request.method === "GET")
+    return secureResponse(new Response(`User-agent: *\nAllow: /\nSitemap: ${requestUrl.origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=UTF-8" } }), id);
+  if (requestUrl.pathname === "/sitemap.xml" && request.method === "GET") {
+    const response = await sitemap(request, env);
+    return secureResponse(response || new Response("Sitemap unavailable", { status: 503 }), id);
+  }
   const isImage = requestUrl.pathname === gatheringImageRoute;
+  const isGathering = Boolean(routeParts(requestUrl.pathname));
+  const isOrganization = organizationRoute.test(requestUrl.pathname);
   if (
     request.method !== "GET" ||
-    (!isImage && !routeParts(requestUrl.pathname))
+    (!isImage && !isGathering && !isOrganization)
   )
     return secureResponse(await env.ASSETS.fetch(request), id);
 
@@ -296,7 +402,9 @@ export async function handleRequest(
   try {
     const response = isImage
       ? await gatheringImage(request, env)
-      : await gatheringHtml(request, env);
+      : isGathering
+        ? await gatheringHtml(request, env)
+        : await organizationHtml(request, env);
     if (response) {
       if (edgeCache && context)
         context.waitUntil(edgeCache.put(request, response.clone()));
@@ -306,7 +414,7 @@ export async function handleRequest(
     console.error(JSON.stringify({
       event: "worker_request_failed",
       requestId: id,
-      route: isImage ? gatheringImageRoute : gatheringRoute.source,
+      route: isImage ? gatheringImageRoute : isGathering ? gatheringRoute.source : organizationRoute.source,
       errorType: error instanceof Error ? error.name : "UnknownError",
     }));
     // The SPA still provides its normal not-found and retry experience.

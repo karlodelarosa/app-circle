@@ -39,11 +39,16 @@ function loadTurnstile() {
 
 export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+  const testMode = import.meta.env.MODE === "test";
   const container = useRef<HTMLDivElement>(null);
   const statusId = useId();
-  const [failed, setFailed] = useState(!siteKey);
+  const [failed, setFailed] = useState(!siteKey && !testMode);
 
   useEffect(() => {
+    if (testMode) {
+      onToken("test-token");
+      return () => onToken("");
+    }
     if (!siteKey || !container.current) return;
     let active = true;
     let widgetId: string | undefined;
@@ -70,7 +75,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
       onToken("");
     };
-  }, [onToken, siteKey]);
+  }, [onToken, siteKey, testMode]);
 
   return (
     <div aria-describedby={statusId}>

@@ -15,6 +15,8 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MorePage } from "./pages/MorePage";
 import { CellGroupSignupPage } from "./pages/CellGroupSignupPage";
 import { SignupsPage } from "./pages/SignupsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/AccountRecoveryPages";
 import { PwaUpdatePrompt, RouteScrollManager } from "./components/RouteExperience";
 import {
   GalleriesPage,
@@ -118,6 +120,8 @@ export default function App() {
       <PwaUpdatePrompt />
       <Routes>
       <Route path="/sign-in" element={<RootEntry />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedApp />}>
         <Route path="/" element={<HomeEntry />} />
         <Route path="/circles" element={<CirclePage />} />
@@ -152,6 +156,7 @@ export default function App() {
         <Route path="circles" element={<PublicCirclesPage />} />
         <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
         <Route path="cell-group-signup" element={<CellGroupSignupPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
       </Route>
       </Routes>
     </>

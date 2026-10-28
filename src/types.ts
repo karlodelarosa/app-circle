@@ -172,6 +172,8 @@ export interface Organization {
   subscriptionStatus: string;
   circlesEnabled: boolean;
   slug: string;
+  timezone?: string;
+  publicDescription?: string;
 }
 
 export interface Meeting {
