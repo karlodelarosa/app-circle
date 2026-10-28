@@ -10,6 +10,31 @@ import type {
 import { demoData } from "../data/demo";
 import { gatheringLifecycle } from "../lib/gatheringLifecycle";
 
+export interface PublicSubmissionProof {
+  botToken: string;
+}
+
+interface PublicSubmissionEnvelope<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+
+async function protectedSubmission<T>(
+  client: SupabaseClient,
+  action: string,
+  payload: Record<string, unknown>,
+  proof: PublicSubmissionProof,
+): Promise<T> {
+  const result = await client.functions.invoke<PublicSubmissionEnvelope<T>>(
+    "circle-public-submit",
+    { body: { action, payload, botToken: proof.botToken } },
+  );
+  if (result.error || !result.data?.ok || result.data.data === undefined)
+    throw new Error(result.data?.error || "Submission could not be completed.");
+  return result.data.data;
+}
+
 export function demoPublicSpace(): PublicSpace {
   return {
     organization: demoData.organization,
@@ -116,41 +141,38 @@ export async function submitGuestRsvp(
   client: SupabaseClient | null,
   gatheringId: string,
   input: GuestRsvpInput,
+  proof: PublicSubmissionProof,
 ) {
   if (!client) return { ok: true, id: "demo-rsvp", connectionId: "demo-connection" };
-  const { data, error } = await client.rpc("submit_circle_guest_rsvp", {
-    p_gathering_id: gatheringId,
-    p_name: input.name,
-    p_email: input.email,
-    p_phone: input.phone,
-    p_status: input.status,
-  });
-  if (error) throw error;
-  return data as { ok: boolean; id: string; connectionId: string };
+  return protectedSubmission<{ ok: boolean; id: string; connectionId: string }>(
+    client,
+    "guest_rsvp",
+    { gatheringId, ...input },
+    proof,
+  );
 }
 
 export async function submitCellGroupSignup(
   client: SupabaseClient | null,
   organizationSlug: string,
   input: CellGroupSignupInput,
+  proof: PublicSubmissionProof,
 ): Promise<CellGroupSignupResult> {
   if (
     !client ||
     (import.meta.env.DEV &&
       new URLSearchParams(window.location.search).get("demo") === "1")
   ) return { ok: true };
-  const { data, error } = await client.rpc("submit_circle_group_signup", {
-    p_org_slug: organizationSlug,
-    p_first_name: input.firstName.trim(),
-    p_last_name: input.lastName.trim(),
-    p_birthdate: input.birthdate,
-    p_phone: input.phone.trim(),
-    p_facebook_contact: input.facebookContact.trim(),
-    p_consent: input.consent,
-    p_guest_rsvp_id: input.guestRsvpId ?? null,
-  });
-  if (error) throw error;
-  return data as CellGroupSignupResult;
+  return protectedSubmission<CellGroupSignupResult>(client, "group_signup", {
+    organizationSlug,
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    birthdate: input.birthdate,
+    phone: input.phone.trim(),
+    facebookContact: input.facebookContact.trim(),
+    consent: input.consent,
+    guestRsvpId: input.guestRsvpId ?? null,
+  }, proof);
 }
 
 export async function requestCircleConnection(
@@ -165,36 +187,25 @@ export async function requestCircleConnection(
     message: string;
     consent: boolean;
   },
+  proof: PublicSubmissionProof,
 ) {
   if (!client) return { ok: true, connectionId: "demo-connection" };
-  const { data, error } = await client.rpc("request_circle_connection", {
-    p_cell_group_id: input.groupId,
-    p_guest_rsvp_id: input.guestRsvpId ?? null,
-    p_name: input.name,
-    p_email: input.email,
-    p_phone: input.phone,
-    p_preferred_contact: input.preferredContact,
-    p_message: input.message,
-    p_consent: input.consent,
-  });
-  if (error) throw error;
-  return data as { ok: boolean; connectionId: string; interestId?: string };
+  return protectedSubmission<{ ok: boolean; connectionId: string; interestId?: string }>(
+    client,
+    "circle_connection",
+    { ...input, guestRsvpId: input.guestRsvpId ?? null },
+    proof,
+  );
 }
 
 export async function submitCircleInterest(
   client: SupabaseClient | null,
   listingId: string,
   input: { name: string; contact: string; message: string },
+  proof: PublicSubmissionProof,
 ) {
   if (!client) return { ok: true };
-  const { data, error } = await client.rpc("submit_circle_interest", {
-    p_listing_id: listingId,
-    p_name: input.name,
-    p_contact: input.contact,
-    p_message: input.message,
-  });
-  if (error) throw error;
-  return data;
+  return protectedSubmission(client, "circle_interest", { listingId, ...input }, proof);
 }
 
 export const galleryBySlug = (

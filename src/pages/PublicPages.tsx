@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -30,6 +31,7 @@ import {
 } from "react-router-dom";
 import { Brand } from "../components/AppShell";
 import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
+import { Turnstile } from "../components/Turnstile";
 import { useStandalone } from "../hooks/useStandalone";
 import { formatDate, formatTime } from "../lib/format";
 import {
@@ -583,6 +585,10 @@ export function PublicGatheringPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [returnStatus, setReturnStatus] = useState("");
+  const [rsvpBotToken, setRsvpBotToken] = useState("");
+  const [connectionBotToken, setConnectionBotToken] = useState("");
+  const updateRsvpBotToken = useCallback((token: string) => setRsvpBotToken(token), []);
+  const updateConnectionBotToken = useCallback((token: string) => setConnectionBotToken(token), []);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -648,7 +654,7 @@ export function PublicGatheringPage() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    void submitGuestRsvp(supabase, item.id, form)
+    void submitGuestRsvp(supabase, item.id, form, { botToken: rsvpBotToken })
       .then((result) => {
         setRsvpId(result.id);
         setDone(true);
@@ -675,7 +681,7 @@ export function PublicGatheringPage() {
       email: form.email,
       phone: form.phone,
       ...connectForm,
-    })
+    }, { botToken: connectionBotToken })
       .then(() => setConnectDone(true))
       .catch((cause) =>
         setConnectError(
@@ -871,9 +877,10 @@ export function PublicGatheringPage() {
                           />
                           I agree that a Circle leader may contact me about this community.
                         </label>
+                        <Turnstile onToken={updateConnectionBotToken} />
                         {connectError && <p className="form-error" role="alert">{connectError}</p>}
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                          <button className="primary-button min-h-11" disabled={connectBusy || !connectForm.consent}>
+                          <button className="primary-button min-h-11" disabled={connectBusy || !connectForm.consent || !connectionBotToken}>
                             {connectBusy ? "Sending…" : "Ask a leader to contact me"}
                           </button>
                           <button type="button" className="secondary-button min-h-11" onClick={() => setConnectOpen(false)}>
@@ -995,10 +1002,11 @@ export function PublicGatheringPage() {
                       <option value="declined">Can’t make it</option>
                     </select>
                   </label>
+                  <Turnstile onToken={updateRsvpBotToken} />
                   {error && <p className="form-error">{error}</p>}
                   <button
                     className="primary-button min-h-11 w-full justify-center"
-                    disabled={busy || (!form.email && !form.phone)}
+                    disabled={busy || !rsvpBotToken || (!form.email && !form.phone)}
                   >
                     {busy ? "Saving…" : "Save my RSVP"}
                   </button>
@@ -1252,6 +1260,8 @@ export function PublicCirclePage() {
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [botToken, setBotToken] = useState("");
+  const updateBotToken = useCallback((token: string) => setBotToken(token), []);
   const nameRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
@@ -1342,7 +1352,7 @@ export function PublicCirclePage() {
                 void requestCircleConnection(supabase, {
                   groupId: group.id,
                   ...form,
-                })
+                }, { botToken })
                   .then(() => setDone(true))
                   .catch((cause) =>
                     setError(
@@ -1430,11 +1440,13 @@ export function PublicCirclePage() {
                 />
                 I agree that a Circle leader may contact me about this community.
               </label>
+              <Turnstile onToken={updateBotToken} />
               {error && <p className="form-error" role="alert">{error}</p>}
               <button
                 className="primary-button min-h-11 w-full"
                 disabled={
                   busy ||
+                  !botToken ||
                   !form.consent ||
                   (!form.email && !form.phone) ||
                   (form.preferredContact === "email" && !form.email) ||

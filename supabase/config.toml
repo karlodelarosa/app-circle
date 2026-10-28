@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.circle-change-password]
 verify_jwt = false
+
+[functions.circle-public-submit]
+verify_jwt = false

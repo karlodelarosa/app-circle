@@ -6,12 +6,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const supabaseUrl = mode === "e2e" ? "" : env.VITE_SUPABASE_URL || "";
   const supabaseKey = mode === "e2e" ? "" : env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY || "";
+  const turnstileSiteKey = mode === "e2e" ? "" : env.VITE_TURNSTILE_SITE_KEY || "";
 
   return {
     define: {
       "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
       "import.meta.env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY":
         JSON.stringify(supabaseKey),
+      "import.meta.env.VITE_TURNSTILE_SITE_KEY": JSON.stringify(turnstileSiteKey),
     },
     plugins: [
       react(),

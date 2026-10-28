@@ -1,7 +1,8 @@
 import { Check, UsersRound } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { Turnstile } from "../components/Turnstile";
 import { submitCellGroupSignup } from "../services/public";
 import type { CellGroupSignupInput } from "../types";
 
@@ -29,6 +30,8 @@ export function CellGroupSignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const updateBotToken = useCallback((token: string) => setBotToken(token), []);
   const today = new Date().toISOString().slice(0, 10);
 
   const submit = (event: FormEvent) => {
@@ -39,7 +42,7 @@ export function CellGroupSignupPage() {
     }
     setBusy(true);
     setError("");
-    void submitCellGroupSignup(supabase, orgSlug, form)
+    void submitCellGroupSignup(supabase, orgSlug, form, { botToken })
       .then(() => setDone(true))
       .catch(() => setError("Your signup could not be completed. Please check your details and try again."))
       .finally(() => setBusy(false));
@@ -153,8 +156,9 @@ export function CellGroupSignupPage() {
                 I agree that the church may store these details and contact me
                 about Cell Group placement.
               </label>
+              <Turnstile onToken={updateBotToken} />
               {error && <p className="form-error" role="alert">{error}</p>}
-              <button className="primary-button min-h-11 w-full justify-center" disabled={busy || !form.consent}>
+              <button className="primary-button min-h-11 w-full justify-center" disabled={busy || !form.consent || !botToken}>
                 {busy ? "Submitting…" : "Submit my signup"}
               </button>
             </form>
