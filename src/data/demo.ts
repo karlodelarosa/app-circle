@@ -7,6 +7,8 @@ const addDays = (days: number, hour = 19) => {
   value.setHours(hour, 0, 0, 0)
   return value.toISOString()
 }
+const twoHoursAfter = (value: string) =>
+  new Date(new Date(value).getTime() + 2 * 60 * 60 * 1000).toISOString()
 
 export const demoData: AppData = {
   organization: {
@@ -46,19 +48,19 @@ export const demoData: AppData = {
   ],
   meetings: [
     {
-      id: 'meeting-1', groupId: 'demo-group', title: 'Rooted in grace', meetingDate: addDays(2),
+      id: 'meeting-1', groupId: 'demo-group', title: 'Rooted in grace', meetingDate: addDays(2), endsAt: twoHoursAfter(addDays(2)),
       location: 'The Reyes home · 18 Acacia Street', studyTopic: 'Colossians 2:6–7',
       notes: 'Bring your Bible and one story of grace from this week. Dinner will be served.',
       status: 'scheduled', createdBy: 'demo-user', organizationId: 'demo-org', slug: 'rooted-in-grace', summary: 'Dinner, Scripture, and an unhurried evening together.', visibility: 'public', publishedAt: now.toISOString(), guestRsvpEnabled: true, coverUrl: '/assets/devotional-table.webp',
       rsvps: { 'demo-user': 'attending', 'member-2': 'attending', 'member-3': 'tentative', 'member-4': 'attending' }
     },
     {
-      id: 'meeting-2', groupId: 'demo-group', title: 'A life of prayer', meetingDate: addDays(9),
+      id: 'meeting-2', groupId: 'demo-group', title: 'A life of prayer', meetingDate: addDays(9), endsAt: twoHoursAfter(addDays(9)),
       location: 'The Santos home', studyTopic: 'Matthew 6:5–13', notes: 'We will share a simple meal before the study.',
       status: 'scheduled', createdBy: 'demo-user', organizationId: 'demo-org', slug: 'a-life-of-prayer', summary: 'A simple meal and a conversation about prayer.', visibility: 'public', publishedAt: now.toISOString(), guestRsvpEnabled: true, rsvps: {}
     },
     {
-      id: 'meeting-3', groupId: 'demo-group', title: 'Carrying one another', meetingDate: addDays(-7),
+      id: 'meeting-3', groupId: 'demo-group', title: 'Carrying one another', meetingDate: addDays(-7), endsAt: twoHoursAfter(addDays(-7)),
       location: 'The Cruz home', studyTopic: 'Galatians 6:1–10',
       notes: 'We reflected on practical ways to carry one another’s burdens this month.',
       status: 'scheduled', createdBy: 'demo-user', organizationId: 'demo-org', slug: 'carrying-one-another', summary: 'A completed gathering kept available for people returning to an invitation.', visibility: 'public', publishedAt: now.toISOString(), guestRsvpEnabled: true, rsvps: { 'demo-user': 'attending', 'member-2': 'attending' }

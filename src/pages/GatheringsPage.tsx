@@ -17,6 +17,7 @@ import { useCircles } from "../AppContext";
 import { MeetingForm } from "../components/MeetingForm";
 import { Modal } from "../components/Modal";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringLifecycle, gatheringRelativeStatus } from "../lib/gatheringLifecycle";
 import { gatheringShareUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
 import type { Meeting } from "../types";
@@ -85,13 +86,26 @@ export function GatheringsPage() {
   const isLeader =
     data.currentUser.role === "admin" || data.group?.role === "leader";
   const base = "";
-  const now = new Date().toISOString();
   const meetings = data.accessibleMeetings ?? data.meetings;
   const upcoming = meetings
-    .filter((item) => item.meetingDate >= now)
+    .filter((item) => {
+      const lifecycle = gatheringLifecycle(item);
+      return lifecycle === "upcoming" || lifecycle === "live";
+    })
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
+  const needsAttention = meetings
+    .filter(
+      (item) =>
+        gatheringLifecycle(item) === "attendance_pending" &&
+        (item.canManage ?? data.currentUser.role !== "member"),
+    )
+    .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const previous = meetings
-    .filter((item) => item.meetingDate < now)
+    .filter((item) => {
+      const lifecycle = gatheringLifecycle(item);
+      if (lifecycle === "completed" || lifecycle === "cancelled") return true;
+      return lifecycle === "attendance_pending" && !(item.canManage ?? data.currentUser.role !== "member");
+    })
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const copyInvitation = async (meeting: Meeting) => {
     setShareStatus("");
@@ -142,6 +156,7 @@ export function GatheringsPage() {
         {upcoming.length ? (
           <div className="mt-4 space-y-4">
             {upcoming.map((meeting, index) => {
+              const lifecycle = gatheringLifecycle(meeting);
               const attending = Object.values(meeting.rsvps).filter(
                 (status) => status === "attending",
               ).length + (meeting.guestRsvpCounts?.attending ?? 0);
@@ -163,6 +178,9 @@ export function GatheringsPage() {
                           <h3>{meeting.title}</h3>
                           {meeting.status === "cancelled" && (
                             <span className="status-badge">Cancelled</span>
+                          )}
+                          {lifecycle === "live" && (
+                            <span className="status-badge">Happening now</span>
                           )}
                         </div>
                         <p className="mt-1 font-display text-lg text-olive">
@@ -215,7 +233,7 @@ export function GatheringsPage() {
                   <div className="gathering-card-body">
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted">
                       <span>
-                        <Clock3 size={15} /> {formatTime(meeting.meetingDate)}
+                        <Clock3 size={15} /> {formatTime(meeting.meetingDate)}–{formatTime(meeting.endsAt)}
                       </span>
                       <span>
                         <MapPin size={15} /> {meeting.location}
@@ -278,6 +296,36 @@ export function GatheringsPage() {
           </div>
         )}
       </section>
+      {needsAttention.length > 0 && (
+        <section className="mt-12" aria-labelledby="needs-attention-heading">
+          <div className="section-heading">
+            <div>
+              <h2 id="needs-attention-heading">Needs attention</h2>
+              <p>Review attendance and close out these gatherings.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {needsAttention.map((meeting) => (
+              <article key={meeting.id} className="flex flex-col gap-4 rounded-2xl border border-olive/20 bg-paper p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display text-2xl">{meeting.title}</h3>
+                    <span className="status-badge">Attendance pending</span>
+                  </div>
+                  <p className="mt-1 text-sm text-muted">{gatheringRelativeStatus(meeting.endsAt)}</p>
+                </div>
+                <Link
+                  to={`${base}/gatherings/${meeting.id}`}
+                  className="primary-button justify-center"
+                  aria-label={`Review attendance for ${meeting.title}`}
+                >
+                  Review attendance <ChevronRight size={15} />
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <section className="mt-12">
         <div className="section-heading">
           <div>

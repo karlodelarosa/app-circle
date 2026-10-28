@@ -13,6 +13,7 @@ import {
 import { Link } from "react-router-dom";
 import type { Meeting } from "../types";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringLifecycle } from "../lib/gatheringLifecycle";
 import { gatheringCoverImage } from "../lib/images";
 
 interface DashboardJumbotronProps {
@@ -213,7 +214,7 @@ export function DashboardJumbotron({
               <div className="absolute inset-0 bg-gradient-to-t from-ink/95 via-ink/35 to-ink/5" />
               <div className="relative mt-auto max-w-4xl p-6 pb-24 sm:p-8 sm:pb-24">
                 <p className="text-sm text-paper/75">
-                  Upcoming gathering · {formatDate(meeting.meetingDate)} at {formatTime(meeting.meetingDate)}
+                  {gatheringLifecycle(meeting) === "live" ? "Happening now" : "Upcoming gathering"} · {formatDate(meeting.meetingDate)} at {formatTime(meeting.meetingDate)}
                 </p>
                 <h2 className="mt-3 font-display text-4xl leading-tight sm:text-5xl">
                   {meeting.title}

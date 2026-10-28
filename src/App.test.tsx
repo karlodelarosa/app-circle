@@ -74,6 +74,20 @@ describe("Circles MVP", () => {
     expect(screen.getByLabelText("A specific Circle")).toBeInTheDocument();
   });
 
+  it("defaults a new gathering to two hours and preserves a custom end time", async () => {
+    renderApp("/gatherings");
+    fireEvent.click(screen.getByRole("button", { name: "Plan a gathering" }));
+
+    const startsAt = await screen.findByLabelText("Starts");
+    const endsAt = screen.getByLabelText("Ends");
+    fireEvent.change(startsAt, { target: { value: "2026-11-05T18:00" } });
+    expect(endsAt).toHaveValue("2026-11-05T20:00");
+
+    fireEvent.change(endsAt, { target: { value: "2026-11-05T21:30" } });
+    fireEvent.change(startsAt, { target: { value: "2026-11-05T19:00" } });
+    expect(endsAt).toHaveValue("2026-11-05T21:30");
+  });
+
   it("renders an organization-specific public homepage", async () => {
     renderApp("/ministry-lens-church");
     expect(
@@ -238,13 +252,12 @@ describe("Circles MVP", () => {
       screen.getByText(/Guest RSVPs appear in the leader attendance list below/i),
     ).toBeInTheDocument();
   });
-  it("keeps edited attendance selections when the leader changes their RSVP", async () => {
+  it("shows confirmed RSVPs as suggestions without marking attendance", async () => {
     renderApp("/gatherings/meeting-1");
     const mara = screen.getByRole("checkbox", { name: /Mara Santos/ });
-    expect(mara).toBeChecked();
-
-    fireEvent.click(mara);
     expect(mara).not.toBeChecked();
+    expect(screen.getAllByText("Going").length).toBeGreaterThan(0);
+    fireEvent.click(mara);
     fireEvent.click(screen.getByRole("button", { name: "Maybe" }));
 
     await waitFor(() =>
@@ -253,7 +266,52 @@ describe("Circles MVP", () => {
         "true",
       ),
     );
-    expect(mara).not.toBeChecked();
+    expect(mara).toBeChecked();
+  });
+
+  it("closes RSVPs and opens attendance while a gathering is happening", () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    renderWithData("/gatherings/meeting-1", data);
+
+    expect(screen.getAllByText("Happening now").length).toBeGreaterThan(0);
+    expect(screen.getByText("RSVPs are closed.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I’m going" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save attendance" })).toBeEnabled();
+  });
+
+  it("surfaces ended gatherings that need attendance review", () => {
+    renderApp("/gatherings");
+
+    expect(screen.getByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review attendance.*Carrying one another/i })).toBeInTheDocument();
+  });
+
+  it("requires saved attendance before completing an ended gathering", async () => {
+    renderApp("/gatherings/meeting-3");
+
+    expect(screen.getByText("Attendance needs review")).toBeInTheDocument();
+    const complete = screen.getByRole("button", { name: "Complete gathering" });
+    expect(complete).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save attendance" }));
+    await waitFor(() => expect(complete).toBeEnabled());
+    fireEvent.click(complete);
+    expect(
+      screen.getByRole("dialog", { name: "Complete this gathering?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("makes completed attendance read-only until the gathering is reopened", () => {
+    const data = structuredClone(demoData);
+    data.meetings[2].status = "completed";
+
+    renderWithData("/gatherings/meeting-3", data);
+
+    screen.getAllByRole("checkbox").forEach((checkbox) => expect(checkbox).toBeDisabled());
+    expect(screen.queryByRole("button", { name: "Save attendance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reopen gathering" })).toBeInTheDocument();
   });
   it("separates saving attendance from completing a future gathering", () => {
     renderApp("/gatherings/meeting-1");
@@ -262,7 +320,7 @@ describe("Circles MVP", () => {
       screen.getByRole("button", { name: "Save attendance" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Completing becomes available when the gathering begins/i),
+      screen.getByText(/Attendance becomes available when the gathering begins/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Complete gathering" }),
@@ -703,7 +761,10 @@ describe("Circles MVP", () => {
     expect(screen.getByLabelText("Destination")).toHaveValue("");
   });
   it("registers a new walk-in from gathering attendance", async () => {
-    renderApp("/gatherings/meeting-1");
+    const data = structuredClone(demoData);
+    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    renderWithData("/gatherings/meeting-1", data);
     fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
     fireEvent.change(screen.getByLabelText("First name"), {
       target: { value: "Jamie" },

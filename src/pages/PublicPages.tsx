@@ -32,6 +32,11 @@ import { Brand } from "../components/AppShell";
 import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
 import { useStandalone } from "../hooks/useStandalone";
 import { formatDate, formatTime } from "../lib/format";
+import {
+  formatGatheringDateTime,
+  gatheringLifecycle,
+  gatheringRelativeStatus,
+} from "../lib/gatheringLifecycle";
 import { gatheringCoverImage } from "../lib/images";
 import {
   gatheringShareUrl,
@@ -394,6 +399,7 @@ function GatheringTile({ item }: { item: PublicSpace["gatherings"][number] }) {
       <div className="p-7">
         <div className="flex flex-wrap items-center gap-2 text-xs text-olive">
           <span>{formatDate(item.meetingDate)}</span>
+          {gatheringLifecycle(item) === "live" && <span className="status-badge">Happening now</span>}
           {item.destinationName && <span className="status-badge">{item.destinationName}</span>}
         </div>
         <h3 className="mt-3 font-display text-3xl leading-tight">
@@ -617,7 +623,7 @@ export function PublicGatheringPage() {
         intro="This invitation may have moved or is no longer public."
       />
     );
-  const ended = new Date(item.meetingDate) < new Date();
+  const lifecycle = gatheringLifecycle(item);
   const listedCircle = space.circles.find((circle) => circle.id === item.groupId);
   const communityUrl = publicCommunityUrl(space.organization.slug);
   const saveCommunityLink = async () => {
@@ -717,15 +723,14 @@ export function PublicGatheringPage() {
               <div className="mt-8 space-y-3 text-sm">
                 <p className="flex gap-3">
                   <CalendarDays className="shrink-0 text-olive" size={18} />
-                  {formatDate(item.meetingDate)} at{" "}
-                  {formatTime(item.meetingDate)}
+                  {formatGatheringDateTime(item.meetingDate, item.endsAt)}
                 </p>
                 <p className="flex gap-3">
                   <MapPin className="shrink-0 text-olive" size={18} />
                   {item.location}
                 </p>
               </div>
-              {!ended && (
+              {lifecycle === "upcoming" && (
                 <button
                   className="secondary-button mt-8 min-h-11"
                   onClick={() => void shareInvitation()}
@@ -740,17 +745,27 @@ export function PublicGatheringPage() {
               )}
             </div>
             <div className="border-t border-line pt-8 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
-              {ended ? (
+              {lifecycle === "attendance_pending" ? (
                 <div className="py-4">
                   <p className="font-display text-4xl leading-tight">
                     This gathering has ended.
                   </p>
                   <p className="mt-3 leading-7 text-muted">
-                    This invitation remains available for reference. See what is coming next in the community.
+                    {gatheringRelativeStatus(item.endsAt)}. This invitation remains available for reference. See what is coming next in the community.
                   </p>
                   <Link className="primary-button mt-6" to={href(`/${space.organization.slug}/gatherings`)}>
                     See upcoming gatherings
                   </Link>
+                </div>
+              ) : lifecycle === "live" ? (
+                <div className="py-4">
+                  <span className="status-badge">Happening now</span>
+                  <p className="mt-4 font-display text-4xl leading-tight">
+                    The gathering is underway.
+                  </p>
+                  <p className="mt-3 leading-7 text-muted">
+                    RSVPs are closed, but the invitation details remain available.
+                  </p>
                 </div>
               ) : done ? (
                 <div>
@@ -995,7 +1010,7 @@ export function PublicGatheringPage() {
           </div>
         </div>
       </section>
-      {(done || browse) && !ended && (
+      {(done || browse) && lifecycle !== "attendance_pending" && (
         <DiscoverySection
           space={space}
           gatheringId={item.id}

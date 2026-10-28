@@ -12,6 +12,7 @@ import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
 import { DashboardJumbotron } from "../components/DashboardJumbotron";
 import { formatDate, formatTime } from "../lib/format";
+import { gatheringLifecycle } from "../lib/gatheringLifecycle";
 
 const dayGreeting = () => {
   const hour = new Date().getHours();
@@ -30,10 +31,8 @@ export function HomePage() {
   const dashboardGalleries = data.dashboard?.galleries ?? data.galleries;
   const dashboardMembers = data.organizationMembers ?? data.members;
   const upcoming = dashboardMeetings
-    .filter(
-      (meeting) =>
-        meeting.status === "scheduled" &&
-        new Date(meeting.meetingDate) >= new Date(),
+    .filter((meeting) =>
+      ["upcoming", "live"].includes(gatheringLifecycle(meeting)),
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
   const next = upcoming[0];
@@ -114,6 +113,7 @@ export function HomePage() {
                     <Link to={`/gatherings/${next.id}`} className="hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive">
                       <h3 className="font-display text-2xl sm:text-3xl">{next.title}</h3>
                     </Link>
+                    {gatheringLifecycle(next) === "live" && <span className="status-badge mt-2">Happening now</span>}
                     <p className="mt-1 text-sm text-muted">{next.destinationName || "Everyone"}</p>
                     {next.studyTopic && (
                       <p className="mt-2 font-display text-lg text-olive">{next.studyTopic}</p>
@@ -140,7 +140,7 @@ export function HomePage() {
                   )}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(next.meetingDate)}</span>
+                  <span className="inline-flex items-center gap-1.5"><Clock3 size={14} />{formatTime(next.meetingDate)}–{formatTime(next.endsAt)}</span>
                   <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{next.location}</span>
                   <span className="inline-flex items-center gap-1.5"><Users size={14} />{confirmedCount} going</span>
                 </div>

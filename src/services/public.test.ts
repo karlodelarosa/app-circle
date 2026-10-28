@@ -1,5 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { submitCellGroupSignup } from "./public";
+import { demoData } from "../data/demo";
+import { demoPublicSpace, submitCellGroupSignup } from "./public";
+
+describe("demoPublicSpace gathering lifecycle", () => {
+  it("keeps a public gathering listed while it is happening", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(
+      new Date(demoData.meetings[0].meetingDate).getTime() + 60 * 60 * 1000,
+    );
+    try {
+      expect(demoPublicSpace().gatherings.map((item) => item.id)).toContain(
+        demoData.meetings[0].id,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe("submitCellGroupSignup", () => {
   it("submits the official organization-level signup contract", async () => {

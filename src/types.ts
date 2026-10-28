@@ -182,6 +182,7 @@ export interface Meeting {
   canManage?: boolean;
   title: string;
   meetingDate: string;
+  endsAt: string;
   location: string;
   studyTopic: string;
   notes: string;
@@ -361,6 +362,7 @@ export interface MeetingInput {
   groupId?: string;
   title: string;
   meetingDate: string;
+  endsAt: string;
   location: string;
   studyTopic: string;
   notes: string;

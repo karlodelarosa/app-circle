@@ -8,6 +8,7 @@ import type {
   PublicSpace,
 } from "../types";
 import { demoData } from "../data/demo";
+import { gatheringLifecycle } from "../lib/gatheringLifecycle";
 
 export function demoPublicSpace(): PublicSpace {
   return {
@@ -19,8 +20,7 @@ export function demoPublicSpace(): PublicSpace {
     gatherings: demoData.meetings.filter(
       (item) =>
         item.visibility === "public" &&
-        item.status === "scheduled" &&
-        new Date(item.meetingDate) >= new Date(),
+        ["upcoming", "live"].includes(gatheringLifecycle(item)),
     ),
     testimonies: demoData.testimonies,
     galleries: [

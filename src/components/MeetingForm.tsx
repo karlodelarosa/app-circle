@@ -29,6 +29,10 @@ export function MeetingForm({
   const [meetingDate, setMeetingDate] = useState(
     meeting ? toDateTimeLocal(meeting.meetingDate) : "",
   );
+  const [endsAt, setEndsAt] = useState(
+    meeting ? toDateTimeLocal(meeting.endsAt) : "",
+  );
+  const [endManuallyEdited, setEndManuallyEdited] = useState(Boolean(meeting));
   const [location, setLocation] = useState(meeting?.location ?? "");
   const [studyTopic, setStudyTopic] = useState(meeting?.studyTopic ?? "");
   const [notes, setNotes] = useState(meeting?.notes ?? "");
@@ -63,12 +67,16 @@ export function MeetingForm({
     setBusy(true);
     setError("");
     try {
+      if (new Date(endsAt) <= new Date(meetingDate)) {
+        throw new Error("End time must be after the start time.");
+      }
       await saveMeeting(
         {
           scope,
           groupId: scope === "circle" ? groupId : undefined,
           title,
           meetingDate: new Date(meetingDate).toISOString(),
+          endsAt: new Date(endsAt).toISOString(),
           location,
           studyTopic,
           notes,
@@ -152,16 +160,44 @@ export function MeetingForm({
           placeholder="An evening of grace"
         />
       </label>
-      <label className="field-label">
-        Date and time
-        <input
-          className="field"
-          type="datetime-local"
-          value={meetingDate}
-          onChange={(e) => setMeetingDate(e.target.value)}
-          required
-        />
-      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="field-label">
+          Starts
+          <input
+            className="field"
+            type="datetime-local"
+            value={meetingDate}
+            onChange={(event) => {
+              const nextStart = event.target.value;
+              setMeetingDate(nextStart);
+              if (!endManuallyEdited && nextStart) {
+                setEndsAt(
+                  toDateTimeLocal(
+                    new Date(
+                      new Date(nextStart).getTime() + 2 * 60 * 60 * 1000,
+                    ).toISOString(),
+                  ),
+                );
+              }
+            }}
+            required
+          />
+        </label>
+        <label className="field-label">
+          Ends
+          <input
+            className="field"
+            type="datetime-local"
+            value={endsAt}
+            onChange={(event) => {
+              setEndsAt(event.target.value);
+              setEndManuallyEdited(true);
+            }}
+            min={meetingDate || undefined}
+            required
+          />
+        </label>
+      </div>
       <label className="field-label">
         Location
         <input

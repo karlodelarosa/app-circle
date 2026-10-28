@@ -9,6 +9,7 @@ const gathering: Meeting = {
   groupId: "circle-1",
   title: "Dinner around the table",
   meetingDate: new Date(Date.now() + 86400000).toISOString(),
+  endsAt: new Date(Date.now() + 93600000).toISOString(),
   location: "The Santos home",
   studyTopic: "John 15",
   notes: "",

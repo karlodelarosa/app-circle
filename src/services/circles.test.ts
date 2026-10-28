@@ -12,8 +12,40 @@ import {
   updateGatheringReflection,
   deleteGatheringReflection,
   placeCellGroupSignup,
+  saveMeeting,
   setGatheringCompletion,
 } from "./circles";
+
+describe("saveMeeting", () => {
+  it("persists explicit start and end timestamps", async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    await saveMeeting(
+      { from } as unknown as SupabaseClient,
+      "organization-1",
+      "user-1",
+      "leader-1",
+      {
+        scope: "circle",
+        groupId: "circle-1",
+        title: "Dinner and study",
+        meetingDate: "2026-11-05T10:00:00.000Z",
+        endsAt: "2026-11-05T12:00:00.000Z",
+        location: "Santos home",
+        studyTopic: "John 15",
+        notes: "Bring a Bible.",
+      },
+    );
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        starts_at: "2026-11-05T10:00:00.000Z",
+        ends_at: "2026-11-05T12:00:00.000Z",
+      }),
+    );
+  });
+});
 
 describe("Gathering reflections", () => {
   it("loads a bounded reflection summary for a Circle page", async () => {

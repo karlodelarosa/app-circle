@@ -15,7 +15,12 @@ import { Avatar } from "../components/Avatar";
 import { GatheringReflections } from "../components/GatheringReflections";
 import { Modal } from "../components/Modal";
 import { getErrorMessage } from "../lib/errors";
-import { formatDate, formatTime } from "../lib/format";
+import {
+  formatGatheringDateTime,
+  gatheringLifecycle,
+  gatheringRelativeStatus,
+  rsvpLabel,
+} from "../lib/gatheringLifecycle";
 import { gatheringCoverImage } from "../lib/images";
 import { gatheringShareUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
@@ -70,6 +75,7 @@ export function GatheringDetailPage() {
   const [guestLoadError, setGuestLoadError] = useState("");
   const [completionBusy, setCompletionBusy] = useState(false);
   const [completionError, setCompletionError] = useState("");
+  const [completionConfirmOpen, setCompletionConfirmOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
   const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
@@ -91,11 +97,7 @@ export function GatheringDetailPage() {
     if (!meeting) return;
     if (attendanceInitializedFor.current === meeting.id) return;
     attendanceInitializedFor.current = meeting.id;
-    setSelected(
-      Object.entries(meeting.rsvps)
-        .filter(([, status]) => status === "attending")
-        .map(([personId]) => personId),
-    );
+    setSelected([]);
     setGuestSelected([]);
     setSaved(false);
   }, [meeting]);
@@ -120,6 +122,7 @@ export function GatheringDetailPage() {
           if (attendance.saved) {
             setSelected(attendance.personIds);
             setGuestSelected(attendance.guestRsvpIds);
+            setSaved(true);
           }
         })
         .catch((cause) => {
@@ -144,6 +147,9 @@ export function GatheringDetailPage() {
         </Link>
       </div>
     );
+  const lifecycle = gatheringLifecycle(meeting);
+  const attendanceEditable =
+    meeting.status === "scheduled" && lifecycle !== "upcoming";
   const saveAttendance = async () => {
     setAttendanceBusy(true);
     setAttendanceError("");
@@ -172,18 +178,12 @@ export function GatheringDetailPage() {
     }
   };
   const changeCompletion = async (completed: boolean) => {
-    if (
-      completed &&
-      !window.confirm(
-        "Complete this gathering? It will move out of Upcoming gatherings, but you can reopen it later.",
-      )
-    )
-      return;
     setCompletionBusy(true);
     setCompletionError("");
     try {
       if (!demoMode && supabase)
         await setGatheringCompletion(supabase, meeting.id, completed);
+      setCompletionConfirmOpen(false);
       await refresh();
     } catch (cause) {
       setCompletionError(
@@ -231,6 +231,7 @@ export function GatheringDetailPage() {
           ? ids
           : [...ids, result.guestRsvpId],
       );
+      setSaved(false);
       setWalkInNotice(
         `${fullName} was staged as a guest and selected for attendance. No SheepCount People record was created.`,
       );
@@ -274,7 +275,7 @@ export function GatheringDetailPage() {
   };
   const canShare = Boolean(
     canLead &&
-      meeting.status === "scheduled" &&
+      lifecycle === "upcoming" &&
       meeting.visibility === "public" &&
       meeting.guestRsvpEnabled &&
       meeting.slug,
@@ -301,6 +302,10 @@ export function GatheringDetailPage() {
                 ? "Cancelled gathering"
                 : meeting.status === "completed"
                   ? "Completed gathering"
+                : lifecycle === "live"
+                  ? "Happening now"
+                : lifecycle === "attendance_pending"
+                  ? "This gathering has ended"
                 : meeting.scope === "organization"
                   ? "Everyone is welcome"
                   : meeting.destinationName || "Our next gathering"}
@@ -319,11 +324,10 @@ export function GatheringDetailPage() {
               <p className="flex items-start gap-3">
                 <CalendarDays size={18} className="mt-0.5 text-olive" />
                 <span>
-                  {formatDate(meeting.meetingDate)}
-                  <br />
-                  <span className="text-muted">
-                    {formatTime(meeting.meetingDate)}
-                  </span>
+                  {formatGatheringDateTime(meeting.meetingDate, meeting.endsAt)}
+                  {lifecycle === "attendance_pending" && (
+                    <><br /><span className="text-muted">{gatheringRelativeStatus(meeting.endsAt)}</span></>
+                  )}
                 </span>
               </p>
               <p className="flex items-start gap-3">
@@ -385,7 +389,7 @@ export function GatheringDetailPage() {
             </p>
           </div>
         </div>
-        {meeting.status === "scheduled" && data.currentUser.personId && (
+        {lifecycle === "upcoming" && data.currentUser.personId && (
           <footer className="border-t border-line px-6 py-5 sm:px-10">
             <p className="mb-3 text-xs text-muted">Can you make it?</p>
             <div className="flex flex-wrap gap-2">
@@ -408,12 +412,27 @@ export function GatheringDetailPage() {
             )}
           </footer>
         )}
+        {(lifecycle === "live" || lifecycle === "attendance_pending") &&
+          data.currentUser.personId && (
+            <footer className="border-t border-line px-6 py-5 sm:px-10">
+              <p className="text-sm font-medium">
+                {lifecycle === "live" ? "Happening now" : "This gathering has ended"}
+              </p>
+              <p className="mt-1 text-sm text-muted">RSVPs are closed.</p>
+            </footer>
+          )}
       </article>
       {meeting.status === "completed" && (
         <GatheringReflections meeting={meeting} canModerate={canLead} />
       )}
       {canLead && (
         <section className="paper-panel mt-7 p-6 sm:p-8">
+          {lifecycle === "attendance_pending" && (
+            <div className="mb-7 rounded-xl border border-olive/25 bg-parchment p-4" role="status">
+              <p className="font-medium text-olive">Attendance needs review</p>
+              <p className="mt-1 text-sm text-muted">Save the final roster, then complete this gathering.</p>
+            </div>
+          )}
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="page-kicker">Leader view</p>
@@ -425,7 +444,7 @@ export function GatheringDetailPage() {
                 guests remain staged in Circles.
               </p>
             </div>
-            {saved && (
+            {saved && meeting.status !== "completed" && (
               <span className="flex items-center gap-2 text-sm text-olive">
                 <Check size={16} />
                 Saved
@@ -436,15 +455,17 @@ export function GatheringDetailPage() {
             <div>
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-medium">People</h3>
-                <button
-                  className="text-link"
-                  onClick={() => {
-                    setWalkInError("");
-                    setWalkInOpen(true);
-                  }}
-                >
-                  <UserPlus size={15} /> Add walk-in
-                </button>
+                {attendanceEditable && (
+                  <button
+                    className="text-link"
+                    onClick={() => {
+                      setWalkInError("");
+                      setWalkInOpen(true);
+                    }}
+                  >
+                    <UserPlus size={15} /> Add walk-in
+                  </button>
+                )}
               </div>
               <div className="mt-3 space-y-2">
                 {attendanceMembers.map((member) => (
@@ -455,18 +476,20 @@ export function GatheringDetailPage() {
                     <input
                       type="checkbox"
                       checked={selected.includes(member.id)}
-                      onChange={(e) =>
+                      disabled={!attendanceEditable}
+                      onChange={(event) => {
+                        setSaved(false);
                         setSelected(
-                          e.target.checked
+                          event.target.checked
                             ? [...selected, member.id]
                             : selected.filter((id) => id !== member.id),
-                        )
-                      }
+                        );
+                      }}
                     />
                     <Avatar person={member} size="sm" />
                     {member.fullName}
                     <span className="ml-auto text-xs text-muted">
-                      {meeting.rsvps[member.id] || "No RSVP"}
+                      {rsvpLabel(meeting.rsvps[member.id])}
                     </span>
                   </label>
                 ))}
@@ -486,13 +509,15 @@ export function GatheringDetailPage() {
                       <input
                         type="checkbox"
                         checked={guestSelected.includes(guest.id)}
-                        onChange={(e) =>
+                        disabled={!attendanceEditable}
+                        onChange={(event) => {
+                          setSaved(false);
                           setGuestSelected(
-                            e.target.checked
+                            event.target.checked
                               ? [...guestSelected, guest.id]
                               : guestSelected.filter((id) => id !== guest.id),
-                          )
-                        }
+                          );
+                        }}
                       />
                       <span>{guest.guest_name}</span>
                       <span className="ml-auto text-xs text-muted">
@@ -516,13 +541,15 @@ export function GatheringDetailPage() {
           )}
           <div className="mt-7 border-t border-line pt-6">
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                className="primary-button"
-                onClick={() => void saveAttendance()}
-                disabled={attendanceBusy}
-              >
-                {attendanceBusy ? "Saving…" : "Save attendance"}
-              </button>
+              {meeting.status !== "completed" && (
+                <button
+                  className={saved && lifecycle === "attendance_pending" ? "secondary-button" : "primary-button"}
+                  onClick={() => void saveAttendance()}
+                  disabled={attendanceBusy || !attendanceEditable}
+                >
+                  {attendanceBusy ? "Saving…" : "Save attendance"}
+                </button>
+              )}
               {meeting.status === "completed" ? (
                 <button
                   className="secondary-button"
@@ -531,30 +558,29 @@ export function GatheringDetailPage() {
                 >
                   {completionBusy ? "Reopening…" : "Reopen gathering"}
                 </button>
-              ) : new Date(meeting.meetingDate) <= new Date() ? (
+              ) : lifecycle === "attendance_pending" ? (
                 <button
-                  className="secondary-button"
-                  onClick={() => void changeCompletion(true)}
-                  disabled={completionBusy}
+                  className={saved ? "primary-button" : "secondary-button"}
+                  onClick={() => setCompletionConfirmOpen(true)}
+                  disabled={completionBusy || !saved}
                 >
                   {completionBusy ? "Completing…" : "Complete gathering"}
                 </button>
               ) : null}
             </div>
-            {meeting.status === "scheduled" &&
-              new Date(meeting.meetingDate) > new Date() && (
+            {lifecycle === "upcoming" && (
               <p className="mt-3 text-xs leading-5 text-muted">
-                You can prepare and save the roster now. Completing becomes
-                available when the gathering begins.
+                Attendance becomes available when the gathering begins.
               </p>
             )}
-            {meeting.status === "scheduled" &&
-              new Date(meeting.meetingDate) <= new Date() && (
-                <p className="mt-3 text-xs leading-5 text-muted">
-                  Complete the gathering only when it is finished. It will move
-                  from Upcoming to Previous gatherings.
-                </p>
-              )}
+            {lifecycle === "live" && (
+              <p className="mt-3 text-xs leading-5 text-muted">
+                Record attendance now. Completion becomes available after the gathering ends.
+              </p>
+            )}
+            {lifecycle === "attendance_pending" && !saved && (
+              <p className="mt-3 text-xs leading-5 text-muted">Save attendance before completing this gathering.</p>
+            )}
             {saved && (
               <p className="mt-3 text-sm text-olive" role="status">
                 Attendance saved. This gathering is still {meeting.status}.
@@ -572,6 +598,19 @@ export function GatheringDetailPage() {
             )}
           </div>
         </section>
+      )}
+      {completionConfirmOpen && (
+        <Modal title="Complete this gathering?" onClose={() => setCompletionConfirmOpen(false)}>
+          <p className="leading-7 text-muted">
+            Attendance will become read-only and the gathering will move to Previous gatherings. You can reopen it later to make corrections.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <button className="secondary-button" onClick={() => setCompletionConfirmOpen(false)}>Cancel</button>
+            <button className="primary-button" disabled={completionBusy} onClick={() => void changeCompletion(true)}>
+              {completionBusy ? "Completing…" : "Complete gathering"}
+            </button>
+          </div>
+        </Modal>
       )}
       {walkInOpen && (
         <Modal
