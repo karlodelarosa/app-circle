@@ -987,14 +987,18 @@ export async function stageWalkIn(
 ) {
   const { data, error } = await client.rpc("stage_circle_walk_in", {
     p_gathering_id: gatheringId,
-    p_name: input.name,
+    p_name: input.name.trim(),
     p_email: input.email,
     p_phone: input.phone,
     p_preferred_contact: input.preferredContact,
     p_consent: input.consent,
   });
   if (error) throw error;
-  return data as { ok: boolean; guestRsvpId: string; connectionId: string };
+  return data as {
+    ok: boolean;
+    guestRsvpId: string;
+    connectionId: string | null;
+  };
 }
 
 export async function resolveGuestConnection(

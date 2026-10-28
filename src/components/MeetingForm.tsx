@@ -47,6 +47,12 @@ export function MeetingForm({
   const [removeCover, setRemoveCover] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const isHistorical = Boolean(
+    !meeting &&
+      endsAt &&
+      !Number.isNaN(new Date(endsAt).getTime()) &&
+      new Date(endsAt).getTime() < Date.now(),
+  );
   const coverPreview = useMemo(
     () =>
       coverFile
@@ -198,6 +204,11 @@ export function MeetingForm({
           />
         </label>
       </div>
+      {isHistorical && (
+        <p className="rounded-xl border border-olive/20 bg-parchment p-3 text-sm leading-6 text-muted" role="status">
+          This gathering has already ended. After creating it, review attendance from Needs attention.
+        </p>
+      )}
       <label className="field-label">
         Location
         <input

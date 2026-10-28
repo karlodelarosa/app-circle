@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -14,6 +14,10 @@ import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
 import { GatheringReflections } from "../components/GatheringReflections";
 import { Modal } from "../components/Modal";
+import {
+  WalkInVisitorModal,
+  type WalkInVisitorInput,
+} from "../components/WalkInVisitorModal";
 import { getErrorMessage } from "../lib/errors";
 import {
   formatGatheringDateTime,
@@ -31,7 +35,7 @@ import {
   setGatheringCompletion,
   stageWalkIn,
 } from "../services/circles";
-import type { ContactPreference, RsvpStatus } from "../types";
+import type { RsvpStatus } from "../types";
 
 const rsvpOptions: { value: RsvpStatus; label: string }[] = [
   { value: "attending", label: "I’m going" },
@@ -46,9 +50,10 @@ export function GatheringDetailPage() {
     {
       id: string;
       guest_name: string;
-      status: string;
+      status: RsvpStatus;
       email: string;
       phone: string;
+      entry_source?: "rsvp" | "walk_in";
       converted_person_id?: string;
       attended_at?: string;
     }[]
@@ -59,14 +64,6 @@ export function GatheringDetailPage() {
   const [walkInBusy, setWalkInBusy] = useState(false);
   const [walkInError, setWalkInError] = useState("");
   const [walkInNotice, setWalkInNotice] = useState("");
-  const [walkInForm, setWalkInForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    preferredContact: "either" as ContactPreference,
-    consent: false,
-  });
   const [saved, setSaved] = useState(false);
   const [rsvpBusy, setRsvpBusy] = useState(false);
   const [rsvpError, setRsvpError] = useState("");
@@ -109,7 +106,7 @@ export function GatheringDetailPage() {
       loadGatheringAttendance(supabase, meeting.id),
       supabase
         .from("circle_guest_rsvps")
-        .select("id,guest_name,status,email,phone,converted_person_id,attended_at")
+        .select("id,guest_name,status,email,phone,entry_source,converted_person_id,attended_at")
         .eq("gathering_id", meeting.id),
     ])
         .then(([attendance, { data: rows, error }]) => {
@@ -193,36 +190,48 @@ export function GatheringDetailPage() {
       setCompletionBusy(false);
     }
   };
-  const addWalkIn = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!data.group) return;
+  const addWalkIn = async (input: WalkInVisitorInput) => {
     setWalkInBusy(true);
     setWalkInError("");
     try {
       const result = !demoMode && supabase
         ? await stageWalkIn(supabase, meeting.id, {
-            name: `${walkInForm.firstName} ${walkInForm.lastName}`.trim(),
-            email: walkInForm.email,
-            phone: walkInForm.phone,
-            preferredContact: walkInForm.preferredContact,
-            consent: walkInForm.consent,
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            preferredContact: input.preferredContact,
+            consent: input.consent,
           })
         : {
             guestRsvpId: crypto.randomUUID(),
-            connectionId: crypto.randomUUID(),
+            connectionId:
+              input.email.trim() || input.phone.trim()
+                ? crypto.randomUUID()
+                : null,
           };
-      const fullName = `${walkInForm.firstName} ${walkInForm.lastName}`.trim();
+      const fullName = input.name;
       setGuests((items) =>
         items.some((guest) => guest.id === result.guestRsvpId)
-          ? items
+          ? items.map((guest) =>
+              guest.id === result.guestRsvpId
+                ? {
+                    ...guest,
+                    guest_name: fullName,
+                    email: input.email,
+                    phone: input.phone,
+                    status: "attending",
+                  }
+                : guest,
+            )
           : [
               ...items,
               {
                 id: result.guestRsvpId,
                 guest_name: fullName,
                 status: "attending",
-                email: walkInForm.email,
-                phone: walkInForm.phone,
+                email: input.email,
+                phone: input.phone,
+                entry_source: "walk_in",
               },
             ],
       );
@@ -233,21 +242,14 @@ export function GatheringDetailPage() {
       );
       setSaved(false);
       setWalkInNotice(
-        `${fullName} was staged as a guest and selected for attendance. No SheepCount People record was created.`,
+        `${fullName} was added and selected. Save attendance to record that they came.`,
       );
-      setWalkInForm({
-        firstName: "",
-        lastName: "",
-        email: "",
-        phone: "",
-        preferredContact: "either",
-        consent: false,
-      });
-      setWalkInOpen(false);
+      return true;
     } catch (cause) {
       setWalkInError(
         getErrorMessage(cause, "The walk-in visitor could not be registered."),
       );
+      return false;
     } finally {
       setWalkInBusy(false);
     }
@@ -496,7 +498,7 @@ export function GatheringDetailPage() {
               </div>
             </div>
             <div>
-              <h3 className="font-medium">Guest RSVPs</h3>
+              <h3 className="font-medium">Visitors and guest RSVPs</h3>
               <div className="mt-3 space-y-2">
                 {guestLoadError ? (
                   <p className="form-error" role="alert">{guestLoadError}</p>
@@ -521,7 +523,11 @@ export function GatheringDetailPage() {
                       />
                       <span>{guest.guest_name}</span>
                       <span className="ml-auto text-xs text-muted">
-                        {guest.converted_person_id ? "Matched" : guest.status}
+                        {guest.entry_source === "walk_in"
+                          ? "Visitor"
+                          : guest.converted_person_id
+                            ? "Matched"
+                            : rsvpLabel(guest.status)}
                       </span>
                     </label>
                   ))
@@ -613,108 +619,13 @@ export function GatheringDetailPage() {
         </Modal>
       )}
       {walkInOpen && (
-        <Modal
-          title="Add a walk-in visitor"
+        <WalkInVisitorModal
+          scope={meeting.scope}
+          busy={walkInBusy}
+          error={walkInError}
+          onAdd={addWalkIn}
           onClose={() => setWalkInOpen(false)}
-        >
-          <form onSubmit={addWalkIn} className="grid gap-4 sm:grid-cols-2">
-            <p className="text-sm leading-6 text-muted sm:col-span-2">
-              Record attendance now and review possible SheepCount matches
-              later. This does not create a People record or Circle membership.
-            </p>
-            <label className="field-label">
-              First name
-              <input
-                className="field"
-                required
-                autoFocus
-                value={walkInForm.firstName}
-                onChange={(event) =>
-                  setWalkInForm({
-                    ...walkInForm,
-                    firstName: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="field-label">
-              Last name
-              <input
-                className="field"
-                required
-                value={walkInForm.lastName}
-                onChange={(event) =>
-                  setWalkInForm({ ...walkInForm, lastName: event.target.value })
-                }
-              />
-            </label>
-            <label className="field-label">
-              Email
-              <input
-                className="field"
-                type="email"
-                value={walkInForm.email}
-                onChange={(event) =>
-                  setWalkInForm({ ...walkInForm, email: event.target.value })
-                }
-              />
-            </label>
-            <label className="field-label">
-              Phone
-              <input
-                className="field"
-                value={walkInForm.phone}
-                onChange={(event) =>
-                  setWalkInForm({ ...walkInForm, phone: event.target.value })
-                }
-              />
-            </label>
-            <label className="field-label sm:col-span-2">
-              Preferred contact
-              <select
-                className="field"
-                value={walkInForm.preferredContact}
-                onChange={(event) =>
-                  setWalkInForm({
-                    ...walkInForm,
-                    preferredContact: event.target.value as ContactPreference,
-                  })
-                }
-              >
-                <option value="either">Either email or phone</option>
-                <option value="email">Email</option>
-                <option value="phone">Phone</option>
-              </select>
-            </label>
-            <label className="flex items-start gap-3 text-sm leading-6 text-muted sm:col-span-2">
-              <input
-                type="checkbox"
-                className="mt-1 h-4 w-4 shrink-0"
-                checked={walkInForm.consent}
-                onChange={(event) =>
-                  setWalkInForm({ ...walkInForm, consent: event.target.checked })
-                }
-              />
-              The guest agreed that a Circle leader may contact them after this gathering.
-            </label>
-            {walkInError && (
-              <p className="form-error sm:col-span-2" role="alert">
-                {walkInError}
-              </p>
-            )}
-            <button
-              className="primary-button sm:col-span-2"
-              disabled={
-                walkInBusy ||
-                (!walkInForm.email && !walkInForm.phone) ||
-                (walkInForm.preferredContact === "email" && !walkInForm.email) ||
-                (walkInForm.preferredContact === "phone" && !walkInForm.phone)
-              }
-            >
-              {walkInBusy ? "Saving…" : "Stage guest and select"}
-            </button>
-          </form>
-        </Modal>
+        />
       )}
     </div>
   );

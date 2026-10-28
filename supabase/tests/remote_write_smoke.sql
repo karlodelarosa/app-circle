@@ -29,6 +29,9 @@ DECLARE
   v_gathering_id UUID;
   v_organization_gathering_id UUID;
   v_guest_rsvp_id UUID;
+  v_name_only_walk_in JSONB;
+  v_contact_walk_in JSONB;
+  v_rejected BOOLEAN;
   v_signup_id UUID;
   v_signup_person_id UUID;
   v_signup_phone TEXT := '+639' || lpad((floor(random() * 1000000000))::BIGINT::TEXT, 9, '0');
@@ -71,11 +74,11 @@ BEGIN
   ) RETURNING id INTO v_gallery_id;
 
   INSERT INTO public.circle_gatherings (
-    organization_id, cell_group_id, title, starts_at, location,
+    organization_id, cell_group_id, title, starts_at, ends_at, location,
     study_topic, notes, summary, visibility, guest_rsvp_enabled,
     public_slug, published_at, created_by
   ) VALUES (
-    v_organization_id, v_group_id, 'Circles smoke test', now() + interval '1 day',
+    v_organization_id, v_group_id, 'Circles smoke test', now() + interval '1 day', now() + interval '1 day 2 hours',
     'Test location', '', '', 'Rolled back automatically.', 'public', true,
     'smoke-' || v_suffix, now(), auth.uid()
   ) RETURNING id INTO v_gathering_id;
@@ -141,12 +144,12 @@ BEGIN
   END IF;
 
   INSERT INTO public.circle_gatherings (
-    organization_id, cell_group_id, scope, title, starts_at, location,
+    organization_id, cell_group_id, scope, title, starts_at, ends_at, location,
     study_topic, notes, summary, visibility, guest_rsvp_enabled,
     public_slug, published_at, created_by
   ) VALUES (
     v_organization_id, NULL, 'organization', 'Organization RSVP smoke test',
-    now() + interval '1 day', 'Test location', '', '', 'Rolled back automatically.',
+    now() + interval '1 day', now() + interval '1 day 2 hours', 'Test location', '', '', 'Rolled back automatically.',
     'public', true, 'organization-smoke-' || v_suffix, now(), auth.uid()
   ) RETURNING id INTO v_organization_gathering_id;
 
@@ -196,10 +199,72 @@ BEGIN
     END IF;
   END IF;
 
+  v_rejected:=false;
+  BEGIN
+    PERFORM public.stage_circle_walk_in(
+      v_gathering_id,'Too Early','','','either',false
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_rejected:=true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Upcoming gathering accepted a walk-in';
+  END IF;
+
+  UPDATE public.circle_gatherings
+  SET starts_at=now() - interval '3 hours',
+      ends_at=now() - interval '1 hour'
+  WHERE id=v_gathering_id;
+
+  v_name_only_walk_in:=public.stage_circle_walk_in(
+    v_gathering_id,
+    'Name Only ' || left(v_suffix,8),
+    '',
+    '',
+    'either',
+    false
+  );
+
+  IF (v_name_only_walk_in->>'connectionId') IS NOT NULL OR NOT EXISTS (
+    SELECT 1
+    FROM public.circle_guest_rsvps
+    WHERE id=(v_name_only_walk_in->>'guestRsvpId')::UUID
+      AND entry_source='walk_in'
+      AND connection_id IS NULL
+      AND attended_at IS NULL
+      AND normalized_contact LIKE 'attendance:%'
+  ) THEN
+    RAISE EXCEPTION 'Name-only walk-in was not staged as gathering-only attendance';
+  END IF;
+
+  v_contact_walk_in:=public.stage_circle_walk_in(
+    v_gathering_id,
+    'Contact Visitor ' || left(v_suffix,8),
+    'walk-in-' || v_suffix || '@example.com',
+    '',
+    'email',
+    true
+  );
+
+  IF (v_contact_walk_in->>'connectionId') IS NULL OR NOT EXISTS (
+    SELECT 1
+    FROM public.circle_guest_rsvps
+    WHERE id=(v_contact_walk_in->>'guestRsvpId')::UUID
+      AND entry_source='walk_in'
+      AND connection_id=(v_contact_walk_in->>'connectionId')::UUID
+      AND attended_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Contact-bearing walk-in did not create an unsaved Connection-backed visitor';
+  END IF;
+
   PERFORM public.record_circle_attendance(
     v_gathering_id,
     ARRAY[]::UUID[],
-    ARRAY[v_guest_rsvp_id]
+    ARRAY[
+      v_guest_rsvp_id,
+      (v_name_only_walk_in->>'guestRsvpId')::UUID,
+      (v_contact_walk_in->>'guestRsvpId')::UUID
+    ]
   );
 
   IF (SELECT status FROM public.circle_gatherings WHERE id = v_gathering_id) <> 'scheduled' THEN
@@ -208,6 +273,58 @@ BEGIN
 
   IF NOT COALESCE((public.get_circle_gathering_attendance(v_gathering_id)->>'saved')::BOOLEAN,false) THEN
     RAISE EXCEPTION 'Saved attendance could not be reloaded';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.circle_guest_rsvps
+    WHERE id IN (
+      (v_name_only_walk_in->>'guestRsvpId')::UUID,
+      (v_contact_walk_in->>'guestRsvpId')::UUID
+    ) AND attended_at IS NULL
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.circle_guest_connections
+    WHERE id=(v_contact_walk_in->>'connectionId')::UUID AND status='visited'
+  ) THEN
+    RAISE EXCEPTION 'Saving attendance did not finalize staged visitors';
+  END IF;
+
+  PERFORM public.set_circle_gathering_completion(v_gathering_id,true);
+  IF (SELECT status FROM public.circle_gatherings WHERE id=v_gathering_id)<>'completed' THEN
+    RAISE EXCEPTION 'Ended gathering did not complete after attendance was saved';
+  END IF;
+  v_rejected:=false;
+  BEGIN
+    PERFORM public.stage_circle_walk_in(
+      v_gathering_id,'After Completion','','','either',false
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_rejected:=true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Completed gathering accepted a walk-in';
+  END IF;
+  PERFORM public.set_circle_gathering_completion(v_gathering_id,false);
+  IF (SELECT status FROM public.circle_gatherings WHERE id=v_gathering_id)<>'scheduled' THEN
+    RAISE EXCEPTION 'Completed gathering could not be reopened';
+  END IF;
+
+  UPDATE public.circle_gatherings
+  SET status='cancelled',
+      starts_at=now() - interval '3 hours',
+      ends_at=now() - interval '1 hour'
+  WHERE id=v_organization_gathering_id;
+  v_rejected:=false;
+  BEGIN
+    PERFORM public.stage_circle_walk_in(
+      v_organization_gathering_id,'After Cancellation','','','either',false
+    );
+  EXCEPTION WHEN OTHERS THEN
+    v_rejected:=true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Cancelled gathering accepted a walk-in';
   END IF;
 
   IF v_person_id IS NOT NULL THEN

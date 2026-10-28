@@ -88,6 +88,21 @@ describe("Circles MVP", () => {
     expect(endsAt).toHaveValue("2026-11-05T21:30");
   });
 
+  it("explains where attendance is recorded for a historical gathering", async () => {
+    renderApp("/gatherings");
+    fireEvent.click(screen.getByRole("button", { name: "Plan a gathering" }));
+
+    fireEvent.change(await screen.findByLabelText("Starts"), {
+      target: { value: "2020-01-12T18:00" },
+    });
+
+    expect(
+      screen.getByText(
+        "This gathering has already ended. After creating it, review attendance from Needs attention.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("renders an organization-specific public homepage", async () => {
     renderApp("/ministry-lens-church");
     expect(
@@ -766,24 +781,36 @@ describe("Circles MVP", () => {
     data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     renderWithData("/gatherings/meeting-1", data);
     fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
-    fireEvent.change(screen.getByLabelText("First name"), {
-      target: { value: "Jamie" },
-    });
-    fireEvent.change(screen.getByLabelText("Last name"), {
-      target: { value: "Walkin" },
-    });
-    fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "jamie.walkin@example.com" },
+    fireEvent.change(screen.getByLabelText("Full name"), {
+      target: { value: "Jamie Walkin" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Stage guest and select" }),
+      screen.getByRole("button", { name: "Add visitor" }),
     );
     expect(
       await screen.findByText(
-        "Jamie Walkin was staged as a guest and selected for attendance. No SheepCount People record was created.",
+        "Jamie Walkin was added and selected. Save attendance to record that they came.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Jamie Walkin")).toBeInTheDocument();
+    expect(screen.getByText("Visitor")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Jamie Walkin/ })).toBeChecked();
+  });
+
+  it("quick-adds multiple name-only visitors without closing the dialog", async () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    renderWithData("/gatherings/meeting-1", data);
+    fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
+    const fullName = screen.getByLabelText("Full name");
+    fireEvent.change(fullName, { target: { value: "Alex Visitor" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add another" }));
+
+    expect(await screen.findByText("Alex Visitor")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add a walk-in visitor" })).toBeInTheDocument();
+    expect(fullName).toHaveValue("");
+    expect(fullName).toHaveFocus();
   });
   it("keeps the post-RSVP public journey read-only", async () => {
     renderApp("/ministry-lens-church/gatherings/rooted-in-grace?browse=1");

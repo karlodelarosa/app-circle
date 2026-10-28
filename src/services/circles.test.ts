@@ -14,6 +14,7 @@ import {
   placeCellGroupSignup,
   saveMeeting,
   setGatheringCompletion,
+  stageWalkIn,
 } from "./circles";
 
 describe("saveMeeting", () => {
@@ -44,6 +45,37 @@ describe("saveMeeting", () => {
         ends_at: "2026-11-05T12:00:00.000Z",
       }),
     );
+  });
+});
+
+describe("stageWalkIn", () => {
+  it("allows a name-only visitor and returns no connection", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { guestRsvpId: "guest-1", connectionId: null },
+      error: null,
+    });
+
+    const result = await stageWalkIn(
+      { rpc } as unknown as SupabaseClient,
+      "gathering-1",
+      {
+        name: "  Jamie Walkin  ",
+        email: "",
+        phone: "",
+        preferredContact: "either",
+        consent: false,
+      },
+    );
+
+    expect(rpc).toHaveBeenCalledWith("stage_circle_walk_in", {
+      p_gathering_id: "gathering-1",
+      p_name: "Jamie Walkin",
+      p_email: "",
+      p_phone: "",
+      p_preferred_contact: "either",
+      p_consent: false,
+    });
+    expect(result).toEqual({ guestRsvpId: "guest-1", connectionId: null });
   });
 });
 
