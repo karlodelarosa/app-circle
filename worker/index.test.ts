@@ -65,6 +65,27 @@ describe("Circles Cloudflare Worker", () => {
     expect(assets.fetch).toHaveBeenCalledWith(request);
   });
 
+  it("adds production security and correlation headers to every response", async () => {
+    const response = await handleRequest(
+      new Request("https://circles.example/sign-in"),
+      env,
+    );
+
+    expect(response.headers.get("content-security-policy")).toContain(
+      "frame-ancestors 'none'",
+    );
+    expect(response.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains; preload",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("referrer-policy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+    expect(response.headers.get("permissions-policy")).toContain("camera=()");
+    expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it("proxies the cover with crawler-friendly cache headers", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);

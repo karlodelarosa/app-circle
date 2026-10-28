@@ -37,6 +37,45 @@ const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
 const socialPreviewVersion = "3";
 
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https:",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+].join("; ");
+
+function requestId(request: Request) {
+  const supplied = request.headers.get("x-request-id");
+  return supplied && /^[A-Za-z0-9._-]{1,128}$/.test(supplied)
+    ? supplied
+    : crypto.randomUUID();
+}
+
+function secureResponse(response: Response, id: string) {
+  const headers = new Headers(response.headers);
+  headers.set("content-security-policy", contentSecurityPolicy);
+  headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("x-frame-options", "DENY");
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  headers.set("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  headers.set("cross-origin-opener-policy", "same-origin");
+  headers.set("x-request-id", id);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function gatheringPlaceholder(seed: string) {
   const hash = [...seed].reduce(
     (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
@@ -214,12 +253,13 @@ export async function handleRequest(
   context?: WorkerContext,
 ) {
   const requestUrl = new URL(request.url);
+  const id = requestId(request);
   const isImage = requestUrl.pathname === gatheringImageRoute;
   if (
     request.method !== "GET" ||
     (!isImage && !routeParts(requestUrl.pathname))
   )
-    return env.ASSETS.fetch(request);
+    return secureResponse(await env.ASSETS.fetch(request), id);
 
   const edgeCache = (
     globalThis as typeof globalThis & {
@@ -227,7 +267,7 @@ export async function handleRequest(
     }
   ).caches?.default;
   const cached = await edgeCache?.match(request);
-  if (cached) return cached;
+  if (cached) return secureResponse(cached, id);
 
   try {
     const response = isImage
@@ -236,12 +276,18 @@ export async function handleRequest(
     if (response) {
       if (edgeCache && context)
         context.waitUntil(edgeCache.put(request, response.clone()));
-      return response;
+      return secureResponse(response, id);
     }
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "worker_request_failed",
+      requestId: id,
+      route: isImage ? gatheringImageRoute : gatheringRoute.source,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    }));
     // The SPA still provides its normal not-found and retry experience.
   }
-  return env.ASSETS.fetch(request);
+  return secureResponse(await env.ASSETS.fetch(request), id);
 }
 
 export default { fetch: handleRequest };
