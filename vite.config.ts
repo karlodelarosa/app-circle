@@ -4,8 +4,8 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
-  const supabaseUrl = env.VITE_SUPABASE_URL || "";
-  const supabaseKey = env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY || "";
+  const supabaseUrl = mode === "e2e" ? "" : env.VITE_SUPABASE_URL || "";
+  const supabaseKey = mode === "e2e" ? "" : env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY || "";
 
   return {
     define: {
@@ -52,5 +52,19 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("@supabase")) return "supabase";
+            if (id.includes("react") || id.includes("scheduler")) return "react";
+            if (id.includes("qrcode")) return "qrcode";
+            if (id.includes("lucide-react")) return "icons";
+            return "vendor";
+          },
+        },
+      },
+    },
   };
 });
