@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { AppProvider } from './AppContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import './styles.css'
 
 window.__circlesUpdateSW = registerSW({
@@ -15,5 +16,5 @@ window.__circlesUpdateSW = registerSW({
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><BrowserRouter><AppProvider><App /></AppProvider></BrowserRouter></React.StrictMode>
+  <React.StrictMode><ErrorBoundary><BrowserRouter><AppProvider><App /></AppProvider></BrowserRouter></ErrorBoundary></React.StrictMode>
 )

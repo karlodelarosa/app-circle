@@ -197,13 +197,15 @@ export function PublicShell() {
             <button
               className="icon-button md:hidden"
               onClick={() => setMenu(!menu)}
-              aria-label="Open navigation"
+              aria-label={menu ? "Close navigation" : "Open navigation"}
+              aria-expanded={menu}
+              aria-controls="public-mobile-navigation"
             >
               {menu ? <X /> : <Menu />}
             </button>
           </div>
           {menu && (
-            <nav className="grid gap-1 border-t border-line p-4 md:hidden">
+            <nav id="public-mobile-navigation" aria-label="Public mobile navigation" className="grid gap-1 border-t border-line p-4 md:hidden">
               {links.map(([label, to]) => (
                 <Link
                   key={to}

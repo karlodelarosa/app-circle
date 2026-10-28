@@ -42,6 +42,13 @@ const renderWithData = (path: string, data: typeof demoData) =>
   );
 
 describe("Circles MVP", () => {
+  it("exposes accurate state for the public mobile navigation", async () => {
+    renderApp("/ministry-lens-church", false);
+    const menu = await screen.findByRole("button", { name: "Open navigation" });
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(menu);
+    expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
+  });
   it("presents an organization-wide dashboard with destination labels", async () => {
     const data = structuredClone(demoData);
     const organizationMeeting = {

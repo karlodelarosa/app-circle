@@ -35,6 +35,7 @@ const escapeHtml = (value: unknown) =>
 
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
+const clientTelemetryRoute = "/__telemetry/client-error";
 const socialPreviewVersion = "3";
 
 const contentSecurityPolicy = [
@@ -74,6 +75,26 @@ function secureResponse(response: Response, id: string) {
     statusText: response.statusText,
     headers,
   });
+}
+
+async function recordClientError(request: Request, id: string) {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 8192 || !request.headers.get("content-type")?.includes("application/json"))
+    return secureResponse(Response.json({ error: "Invalid report" }, { status: 400 }), id);
+  const raw = await request.text();
+  if (raw.length > 8192)
+    return secureResponse(Response.json({ error: "Invalid report" }, { status: 400 }), id);
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const errorType = typeof value.errorType === "string" ? value.errorType.slice(0, 80) : "UnknownError";
+    const path = typeof value.path === "string" && /^\/[A-Za-z0-9/_-]*$/.test(value.path)
+      ? value.path.slice(0, 240)
+      : "/";
+    console.error(JSON.stringify({ event: "client_error", requestId: id, errorType, path }));
+    return secureResponse(new Response(null, { status: 204 }), id);
+  } catch {
+    return secureResponse(Response.json({ error: "Invalid report" }, { status: 400 }), id);
+  }
 }
 
 function gatheringPlaceholder(seed: string) {
@@ -254,6 +275,8 @@ export async function handleRequest(
 ) {
   const requestUrl = new URL(request.url);
   const id = requestId(request);
+  if (requestUrl.pathname === clientTelemetryRoute && request.method === "POST")
+    return recordClientError(request, id);
   const isImage = requestUrl.pathname === gatheringImageRoute;
   if (
     request.method !== "GET" ||

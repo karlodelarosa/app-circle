@@ -86,6 +86,22 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("accepts bounded, classified client error reports", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await handleRequest(
+      new Request("https://circles.example/__telemetry/client-error", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "react_error_boundary", errorType: "TypeError", path: "/prayer" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"client_error"'));
+  });
+
   it("proxies the cover with crawler-friendly cache headers", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
