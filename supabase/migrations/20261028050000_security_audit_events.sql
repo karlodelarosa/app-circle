@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS public.circle_security_audit_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES public.organizations(id) ON DELETE SET NULL,
-  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  organization_id UUID,
+  actor_user_id UUID,
   action TEXT NOT NULL CHECK (char_length(action) BETWEEN 1 AND 100),
   target_type TEXT NOT NULL CHECK (char_length(target_type) BETWEEN 1 AND 80),
   target_id TEXT CHECK (target_id IS NULL OR char_length(target_id) <= 160),

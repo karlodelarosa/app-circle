@@ -12,7 +12,7 @@ export function reportClientError(error: unknown) {
   }).catch(() => undefined);
 }
 
-export function reportSecurityEvent(event: "auth_failure") {
+export function reportSecurityEvent(event: "auth_failure" | "authorized_data_export") {
   void fetch("/__telemetry/client-error", {
     method: "POST",
     headers: { "content-type": "application/json" },

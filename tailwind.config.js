@@ -10,7 +10,7 @@ export default {
         olive: '#596047',
         sage: '#AAB09B',
         line: '#DDD7CA',
-        muted: '#716F66'
+        muted: '#66655D'
       },
       fontFamily: {
         display: ['Newsreader', 'Georgia', 'serif'],

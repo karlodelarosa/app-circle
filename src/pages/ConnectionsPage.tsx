@@ -1,6 +1,8 @@
 import {
   ArrowLeft,
   Check,
+  Clock3,
+  Download,
   Mail,
   MessageCircle,
   Phone,
@@ -15,7 +17,9 @@ import { useCircles } from "../AppContext";
 import { Modal } from "../components/Modal";
 import { getErrorMessage } from "../lib/errors";
 import { formatDate } from "../lib/format";
+import { createCsv, downloadCsv } from "../lib/csv";
 import { supabase } from "../lib/supabase";
+import { reportSecurityEvent } from "../lib/telemetry";
 import {
   convertGuestConnectionToSignup,
   loadGuestConnection,
@@ -103,6 +107,9 @@ export function ConnectionsPage() {
   const [selected, setSelected] = useState<GuestConnection>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const canLead = Boolean(
     data &&
       (data.currentUser.role === "admin" ||
@@ -114,7 +121,8 @@ export function ConnectionsPage() {
     setLoading(true);
     setError("");
     try {
-      if (demoMode || !supabase) {
+      const client = supabase;
+      if (demoMode || !client) {
         const visible = demoConnections.filter(
           (item) =>
             (!groupId || item.groupId === groupId) &&
@@ -127,7 +135,7 @@ export function ConnectionsPage() {
         setConnections(visible);
       } else {
         setConnections(
-          await loadGuestConnections(supabase, groupId || undefined, filter),
+          await loadGuestConnections(client, groupId || undefined, filter),
         );
       }
     } catch (cause) {
@@ -184,6 +192,42 @@ export function ConnectionsPage() {
     { id: "connected", label: "Connected" },
     { id: "closed", label: "Closed" },
   ];
+  const visibleConnections = connections.filter((connection) => {
+    const needle = query.trim().toLowerCase();
+    return !needle || [connection.name, connection.email, connection.phone, connection.groupName]
+      .some((value) => value?.toLowerCase().includes(needle));
+  });
+  const exportVisible = () => {
+    reportSecurityEvent("authorized_data_export");
+    downloadCsv(`circle-connections-${new Date().toISOString().slice(0, 10)}.csv`, createCsv(
+      ["Name", "Email", "Phone", "Circle", "Status", "Contact consent", "Last activity"],
+      visibleConnections.map((connection) => [
+        connection.name, connection.email, connection.phone, connection.groupName,
+        connection.status, connection.followUpOptIn ? "Yes" : "No", connection.lastActivityAt,
+      ]),
+    ));
+  };
+  const markSelectedContacted = async () => {
+    const eligible = connections.filter((connection) => selectedIds.includes(connection.id) && connection.status === "new" && connection.followUpOptIn);
+    setBulkBusy(true);
+    setError("");
+    try {
+      const client = supabase;
+      if (demoMode || !client) {
+        setConnections(connections.map((connection) => eligible.some((item) => item.id === connection.id)
+          ? { ...connection, status: "contacted" as const }
+          : connection));
+      } else {
+        await Promise.all(eligible.map((connection) => updateGuestConnection(client, connection.id, "contacted")));
+        await loadQueue();
+      }
+      setSelectedIds([]);
+    } catch (cause) {
+      setError(getErrorMessage(cause, "Selected connections could not be updated."));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
   return (
     <div>
       <div className="page-heading">
@@ -228,21 +272,51 @@ export function ConnectionsPage() {
           </label>
         )}
       </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
+        <label className="relative">
+          <span className="sr-only">Search connections</span>
+          <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
+          <input className="field pl-11" type="search" placeholder="Search name, contact, or Circle" value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <button className="secondary-button min-h-11 justify-center" type="button" disabled={!visibleConnections.length} onClick={exportVisible}>
+          <Download size={16} /> Export authorized results
+        </button>
+      </div>
+      {selectedIds.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper p-4">
+          <p className="text-sm">{selectedIds.length} selected</p>
+          <button className="primary-button min-h-11" type="button" disabled={bulkBusy} onClick={() => void markSelectedContacted()}>
+            {bulkBusy ? "Updating…" : "Mark selected contacted"}
+          </button>
+        </div>
+      )}
       {error && <p className="form-error mt-6" role="alert">{error}</p>}
       {loading ? (
         <p className="mt-8 text-sm text-muted">Loading connections…</p>
-      ) : connections.length ? (
+      ) : visibleConnections.length ? (
         <div className="mt-4 divide-y divide-line">
-          {connections.map((connection) => (
-            <Link
+          {visibleConnections.map((connection) => {
+            const overdue = connection.followUpOptIn && connection.status === "new" &&
+              Date.now() - new Date(connection.lastActivityAt).getTime() > 2 * 86_400_000;
+            return <div
               key={connection.id}
-              to={`/connections/${connection.id}`}
-              className="grid gap-4 py-6 sm:grid-cols-[1fr_auto] sm:items-center"
+              className="grid grid-cols-[auto_1fr] items-start gap-3 py-6"
             >
+              <input
+                className="mt-2 h-5 w-5 accent-olive"
+                type="checkbox"
+                aria-label={`Select ${connection.name}`}
+                checked={selectedIds.includes(connection.id)}
+                onChange={(event) => setSelectedIds(event.target.checked
+                  ? [...selectedIds, connection.id]
+                  : selectedIds.filter((id) => id !== connection.id))}
+              />
+              <Link to={`/connections/${connection.id}`} className="grid min-w-0 gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <h2 className="font-display text-3xl">{connection.name}</h2>
                   <ConnectionStatusLabel status={connection.status} />
+                  {overdue && <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs text-red-800"><Clock3 size={13} /> Follow-up overdue</span>}
                 </div>
                 <p className="mt-2 text-sm text-muted">
                   {connection.groupName} · {connection.preferredContact === "either" ? "Email or phone" : connection.preferredContact}
@@ -254,8 +328,9 @@ export function ConnectionsPage() {
                 </p>
               </div>
               <span className="text-link min-h-11 self-start sm:self-auto">Open connection</span>
-            </Link>
-          ))}
+              </Link>
+            </div>;
+          })}
         </div>
       ) : (
         <div className="empty-state mt-6 border-y border-line">

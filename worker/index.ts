@@ -96,7 +96,11 @@ async function recordClientError(request: Request, id: string) {
     const path = typeof value.path === "string" && /^\/[A-Za-z0-9/_-]*$/.test(value.path)
       ? value.path.slice(0, 240)
       : "/";
-    const event = value.event === "auth_failure" ? "auth_failure" : "client_error";
+    const event = value.event === "auth_failure"
+      ? "auth_failure"
+      : value.event === "authorized_data_export"
+        ? "authorized_data_export"
+        : "client_error";
     console.error(JSON.stringify({ event, requestId: id, errorType, path }));
     return secureResponse(new Response(null, { status: 204 }), id);
   } catch {
