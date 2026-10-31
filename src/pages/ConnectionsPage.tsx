@@ -113,7 +113,7 @@ export function ConnectionsPage() {
   const canLead = Boolean(
     data &&
       (data.currentUser.role === "admin" ||
-        data.groups.some((group) => group.role === "leader")),
+        data.currentUser.isApprovedLeader),
   );
 
   const loadQueue = async () => {

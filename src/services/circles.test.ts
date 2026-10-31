@@ -15,7 +15,30 @@ import {
   saveMeeting,
   setGatheringCompletion,
   stageWalkIn,
+  resolveCurrentUserRole,
 } from "./circles";
+
+describe("resolveCurrentUserRole", () => {
+  it("recognizes an approved leader before they have a Circle", () => {
+    expect(
+      resolveCurrentUserRole({
+        isAdmin: false,
+        isApprovedLeader: true,
+        groups: [],
+      }),
+    ).toBe("leader");
+  });
+
+  it("does not treat approval as leadership of an unrelated Circle", () => {
+    expect(
+      resolveCurrentUserRole({
+        isAdmin: false,
+        isApprovedLeader: false,
+        groups: [{ role: "member" }],
+      }),
+    ).toBe("member");
+  });
+});
 
 describe("saveMeeting", () => {
   it("persists explicit start and end timestamps", async () => {

@@ -48,21 +48,25 @@ export async function loadGatheringReflections(
 ): Promise<GatheringReflection[]> {
   const { data, error } = await client
     .from("circle_gathering_reflections")
-    .select("id,gathering_id,organization_id,author_person_id,body,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)")
+    .select(
+      "id,gathering_id,organization_id,author_person_id,body,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
+    )
     .eq("gathering_id", gatheringId)
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    gatheringId: row.gathering_id,
-    organizationId: row.organization_id,
-    authorPersonId: row.author_person_id,
-    authorName: fullName(one(row.people)),
-    body: row.body,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  })).reverse();
+  return (data ?? [])
+    .map((row: any) => ({
+      id: row.id,
+      gatheringId: row.gathering_id,
+      organizationId: row.organization_id,
+      authorPersonId: row.author_person_id,
+      authorName: fullName(one(row.people)),
+      body: row.body,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+    .reverse();
 }
 
 export async function loadGatheringReflectionActivity(
@@ -137,16 +141,15 @@ export async function loadGuestRsvpCounts(
     .select("gathering_id,status")
     .in("gathering_id", gatheringIds);
   if (error) throw error;
-  return (data ?? []).reduce<Record<string, Partial<Record<RsvpStatus, number>>>>(
-    (counts, row: any) => {
-      const gatheringCounts = counts[row.gathering_id] ?? {};
-      const status = row.status as RsvpStatus;
-      gatheringCounts[status] = (gatheringCounts[status] ?? 0) + 1;
-      counts[row.gathering_id] = gatheringCounts;
-      return counts;
-    },
-    {},
-  );
+  return (data ?? []).reduce<
+    Record<string, Partial<Record<RsvpStatus, number>>>
+  >((counts, row: any) => {
+    const gatheringCounts = counts[row.gathering_id] ?? {};
+    const status = row.status as RsvpStatus;
+    gatheringCounts[status] = (gatheringCounts[status] ?? 0) + 1;
+    counts[row.gathering_id] = gatheringCounts;
+    return counts;
+  }, {});
 }
 
 export async function loadPrayerRequests(
@@ -160,15 +163,30 @@ export async function loadPrayerRequests(
   return ((data ?? []) as any[]).map(normalizePrayer);
 }
 
+export function resolveCurrentUserRole(input: {
+  isAdmin: boolean;
+  isApprovedLeader: boolean;
+  groups: Array<{ role: Role }>;
+}): Role {
+  if (input.isAdmin) return "admin";
+  if (
+    input.isApprovedLeader ||
+    input.groups.some((group) => group.role === "leader")
+  )
+    return "leader";
+  return "member";
+}
+
 export async function loadAppData(
   client: SupabaseClient,
   userId: string,
   preferredGroupId?: string,
 ): Promise<AppData> {
-  const [{ data: rawContext, error: contextError }, accountResult] = await Promise.all([
-    client.rpc("get_my_circle_context"),
-    client.rpc("get_my_circle_account_state"),
-  ]);
+  const [{ data: rawContext, error: contextError }, accountResult] =
+    await Promise.all([
+      client.rpc("get_my_circle_context"),
+      client.rpc("get_my_circle_account_state"),
+    ]);
   if (contextError) throw contextError;
   if (accountResult.error) throw accountResult.error;
   const context = rawContext as any;
@@ -199,11 +217,12 @@ export async function loadAppData(
       "Circle member",
     email: "",
     avatarUrl: profile.avatarUrl ?? undefined,
-    role: (context.isAdmin
-      ? "admin"
-      : groups.some((item) => item.role === "leader")
-        ? "leader"
-        : "member") as Role,
+    role: resolveCurrentUserRole({
+      isAdmin: Boolean(context.isAdmin),
+      isApprovedLeader: Boolean(context.isApprovedLeader),
+      groups,
+    }),
+    isApprovedLeader: Boolean(context.isApprovedLeader),
   };
 
   const base: AppData = {
@@ -236,17 +255,29 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, signupAttentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult, prayers] = await Promise.all([
+  const [
+    attentionResult,
+    signupAttentionResult,
+    listingsResult,
+    approvedLeadersResult,
+    assignmentsResult,
+    dashboardResult,
+    prayers,
+  ] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
     client.rpc("get_circle_group_signup_attention_count", {
       p_organization_id: context.organization.id,
     }),
     client
       .from("circle_public_listings")
-      .select("id,organization_id,cell_group_id,public_slug,description,cover_url,is_published")
+      .select(
+        "id,organization_id,cell_group_id,public_slug,description,cover_url,is_published",
+      )
       .eq("organization_id", context.organization.id),
     context.isAdmin
-      ? client.rpc("get_circle_approved_leaders")
+      ? client.rpc("get_circle_approved_leaders", {
+          p_organization_id: context.organization.id,
+        })
       : Promise.resolve({ data: [], error: null }),
     context.isAdmin
       ? client.rpc("get_circle_content_assignments")
@@ -263,7 +294,8 @@ export async function loadAppData(
   if (assignmentsResult.error) throw assignmentsResult.error;
   if (dashboardResult.error) throw dashboardResult.error;
   base.approvedLeaders = (approvedLeadersResult.data ?? []) as ApprovedLeader[];
-  base.contentAssignments = (assignmentsResult.data ?? []) as ContentAssignment[];
+  base.contentAssignments = (assignmentsResult.data ??
+    []) as ContentAssignment[];
   base.publicCircleListings = (listingsResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -274,7 +306,9 @@ export async function loadAppData(
     isPublished: Boolean(row.is_published),
   }));
   const dashboard = (dashboardResult.data ?? {}) as any;
-  const dashboardPrayers = (dashboard.prayers ?? []).map(normalizePrayer) as PrayerRequest[];
+  const dashboardPrayers = (dashboard.prayers ?? []).map(
+    normalizePrayer,
+  ) as PrayerRequest[];
   const organizationPrayers = prayers.filter(
     (prayer) => prayer.scope === "organization" && !prayer.isAnswered,
   );
@@ -290,7 +324,10 @@ export async function loadAppData(
   const managedGatheringIds = dashboardMeetings
     .filter((meeting) => meeting.canManage)
     .map((meeting) => meeting.id);
-  const guestRsvpCounts = await loadGuestRsvpCounts(client, managedGatheringIds);
+  const guestRsvpCounts = await loadGuestRsvpCounts(
+    client,
+    managedGatheringIds,
+  );
   base.accessibleMeetings = dashboardMeetings.map((meeting) => ({
     ...meeting,
     guestRsvpCounts: guestRsvpCounts[meeting.id] ?? {},
@@ -310,25 +347,33 @@ export async function loadAppData(
   base.prayers = prayers;
   if (!group) return base;
 
-  const [membersResult, gatheringsResult, accountStatusesResult, badgesResult] = await Promise.all([
-    client
-      .from("cell_group_members")
-      .select(
-        "id, person_id, role, people!cell_group_members_person_id_fkey(id, first_name, last_name, email)",
-      )
-      .eq("cell_group_id", group.id),
-    client
-      .from("circle_gatherings")
-      .select("*")
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .order("starts_at"),
-    currentUser.role === "admin" || group.role === "leader"
-      ? client.rpc("get_circle_member_account_statuses", { p_cell_group_id: group.id })
-      : Promise.resolve({ data: [], error: null }),
-    client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
-  ]);
-  for (const result of [membersResult, gatheringsResult, accountStatusesResult, badgesResult])
+  const [membersResult, gatheringsResult, accountStatusesResult, badgesResult] =
+    await Promise.all([
+      client
+        .from("cell_group_members")
+        .select(
+          "id, person_id, role, people!cell_group_members_person_id_fkey(id, first_name, last_name, email)",
+        )
+        .eq("cell_group_id", group.id),
+      client
+        .from("circle_gatherings")
+        .select("*")
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .order("starts_at"),
+      currentUser.role === "admin" || group.role === "leader"
+        ? client.rpc("get_circle_member_account_statuses", {
+            p_cell_group_id: group.id,
+          })
+        : Promise.resolve({ data: [], error: null }),
+      client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
+    ]);
+  for (const result of [
+    membersResult,
+    gatheringsResult,
+    accountStatusesResult,
+    badgesResult,
+  ])
     if (result.error) throw result.error;
 
   const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
@@ -340,8 +385,15 @@ export async function loadAppData(
     : { data: [], error: null };
   if (rsvpsResult.error) throw rsvpsResult.error;
 
-  const accountStatuses = new Map((accountStatusesResult.data ?? []).map((item: any) => [item.personId, item]));
-  const badges = new Map((badgesResult.data ?? []).map((item: any) => [item.personId, item]));
+  const accountStatuses = new Map(
+    (accountStatusesResult.data ?? []).map((item: any) => [
+      item.personId,
+      item,
+    ]),
+  );
+  const badges = new Map(
+    (badgesResult.data ?? []).map((item: any) => [item.personId, item]),
+  );
   const members: Member[] = (membersResult.data ?? []).map((row: any) => {
     const person = one(row.people);
     const badge = badges.get(row.person_id) as any;
@@ -395,37 +447,42 @@ export async function loadAppData(
     guestRsvpEnabled: Boolean(row.guest_rsvp_enabled),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
   }));
-  const [announcementsResult, testimoniesResult, galleriesResult] = await Promise.all([
-    client
-      .from("circle_announcements")
-      .select("*")
-      .eq("organization_id", context.organization.id)
-      .or(`cell_group_id.is.null,cell_group_id.eq.${group.id}`)
-      .not("assignment_confirmed_at", "is", null)
-      .order("published_at", { ascending: false })
-      .limit(12),
-    client
-      .from("circle_testimonies")
-      .select("*")
-      .eq("organization_id", context.organization.id)
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .in("status", ["draft", "published"])
-      .order("created_at", { ascending: false })
-      .limit(6),
-    client
-      .from("circle_galleries")
-      .select("id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,circle_gallery_photos(id,image_url,caption,alt_text)")
-      .eq("organization_id", context.organization.id)
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
-      .limit(6),
-  ]);
+  const [announcementsResult, testimoniesResult, galleriesResult] =
+    await Promise.all([
+      client
+        .from("circle_announcements")
+        .select("*")
+        .eq("organization_id", context.organization.id)
+        .or(`cell_group_id.is.null,cell_group_id.eq.${group.id}`)
+        .not("assignment_confirmed_at", "is", null)
+        .order("published_at", { ascending: false })
+        .limit(12),
+      client
+        .from("circle_testimonies")
+        .select("*")
+        .eq("organization_id", context.organization.id)
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .in("status", ["draft", "published"])
+        .order("created_at", { ascending: false })
+        .limit(6),
+      client
+        .from("circle_galleries")
+        .select(
+          "id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,circle_gallery_photos(id,image_url,caption,alt_text)",
+        )
+        .eq("organization_id", context.organization.id)
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .limit(6),
+    ]);
   const now = Date.now();
   const announcements = (announcementsResult.data ?? [])
-    .filter((row: any) => !row.expires_at || new Date(row.expires_at).getTime() > now)
+    .filter(
+      (row: any) => !row.expires_at || new Date(row.expires_at).getTime() > now,
+    )
     .map((row: any) => ({
       id: row.id,
       organizationId: row.organization_id,
@@ -468,7 +525,15 @@ export async function loadAppData(
     })),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
   }));
-  return { ...base, members, meetings, prayers, announcements, testimonies, galleries };
+  return {
+    ...base,
+    members,
+    meetings,
+    prayers,
+    announcements,
+    testimonies,
+    galleries,
+  };
 }
 
 export async function acceptAccess(client: SupabaseClient) {
@@ -484,17 +549,15 @@ export async function saveRsvp(
   personId: string,
   status: RsvpStatus,
 ) {
-  const { error } = await client
-    .from("circle_gathering_rsvps")
-    .upsert(
-      {
-        organization_id: organizationId,
-        gathering_id: gatheringId,
-        person_id: personId,
-        status,
-      },
-      { onConflict: "gathering_id,person_id" },
-    );
+  const { error } = await client.from("circle_gathering_rsvps").upsert(
+    {
+      organization_id: organizationId,
+      gathering_id: gatheringId,
+      person_id: personId,
+      status,
+    },
+    { onConflict: "gathering_id,person_id" },
+  );
   if (error) throw error;
 }
 
@@ -525,16 +588,14 @@ export async function setPrayerClick(
   prayed: boolean,
 ) {
   const query = prayed
-    ? client
-        .from("circle_prayer_clicks")
-        .upsert(
-          {
-            organization_id: organizationId,
-            prayer_id: prayerId,
-            person_id: personId,
-          },
-          { onConflict: "prayer_id,person_id" },
-        )
+    ? client.from("circle_prayer_clicks").upsert(
+        {
+          organization_id: organizationId,
+          prayer_id: prayerId,
+          person_id: personId,
+        },
+        { onConflict: "prayer_id,person_id" },
+      )
     : client
         .from("circle_prayer_clicks")
         .delete()
@@ -656,7 +717,12 @@ export async function saveCirclePublicListing(
   }
   const slug =
     input.current?.slug ||
-    `${group.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "circle"}-${group.id.slice(0, 8)}`;
+    `${
+      group.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "circle"
+    }-${group.id.slice(0, 8)}`;
   const { error } = await client.from("circle_public_listings").upsert(
     {
       organization_id: organizationId,

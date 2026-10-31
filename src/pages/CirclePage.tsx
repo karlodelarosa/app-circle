@@ -22,29 +22,56 @@ import { Modal } from "../components/Modal";
 import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
 import { getErrorMessage } from "../lib/errors";
-import { getFunctionErrorMessage, invokeAuthenticatedFunction } from "../lib/functions";
+import {
+  getFunctionErrorMessage,
+  invokeAuthenticatedFunction,
+} from "../lib/functions";
 import { loadGatheringReflectionActivity } from "../services/circles";
 import type { Member } from "../types";
 import { PeoplePage } from "./PeoplePage";
 
 export function CirclePage() {
-  const { data, error, selectGroup, createGroup } = useCircles();
+  const { data, error, selectGroup, createGroup, refresh } = useCircles();
   const { circleId } = useParams();
   const [managingPeople, setManagingPeople] = useState(false);
-  const [accountBusy,setAccountBusy]=useState<string|null>(null);
-  const [accessMemberId,setAccessMemberId]=useState<string|null>(null);
-  const [accessMessage,setAccessMessage]=useState("");
-  const [accessMessageKind,setAccessMessageKind]=useState<"success"|"error"|null>(null);
-  const [accessNeedsRefresh,setAccessNeedsRefresh]=useState(false);
-  const [badgeNote,setBadgeNote]=useState("");
-  const [credentials,setCredentials]=useState<{login:string;temporaryPassword:string;kind:"member"|"leader"}|null>(null);
-  const [creatingCircle,setCreatingCircle]=useState(false);
-  const [circleBusy,setCircleBusy]=useState(false);
-  const [circleError,setCircleError]=useState("");
-  const [circleForm,setCircleForm]=useState({name:"",description:"",location:"",leaderPersonId:""});
-  const [reflectionActivity,setReflectionActivity]=useState<{count:number;authorName?:string}>({count:0});
+  const [accountBusy, setAccountBusy] = useState<string | null>(null);
+  const [accessMemberId, setAccessMemberId] = useState<string | null>(null);
+  const [accessMessage, setAccessMessage] = useState("");
+  const [accessMessageKind, setAccessMessageKind] = useState<
+    "success" | "error" | null
+  >(null);
+  const [accessNeedsRefresh, setAccessNeedsRefresh] = useState(false);
+  const [badgeNote, setBadgeNote] = useState("");
+  const [credentials, setCredentials] = useState<{
+    login: string;
+    temporaryPassword: string;
+    kind: "member" | "leader";
+  } | null>(null);
+  const [creatingCircle, setCreatingCircle] = useState(false);
+  const [circleBusy, setCircleBusy] = useState(false);
+  const [circleError, setCircleError] = useState("");
+  const [circleForm, setCircleForm] = useState({
+    name: "",
+    description: "",
+    location: "",
+    leaderPersonId: "",
+  });
+  const [leaderAccessBusy, setLeaderAccessBusy] = useState<string | null>(null);
+  const [leaderAccessMessage, setLeaderAccessMessage] = useState("");
+  const [leaderAccessError, setLeaderAccessError] = useState(false);
+  const [leaderCredentials, setLeaderCredentials] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
+  const [reflectionActivity, setReflectionActivity] = useState<{
+    count: number;
+    authorName?: string;
+  }>({ count: 0 });
   const latestCompletedMeeting = data?.meetings
-    .filter((meeting) => meeting.groupId === data.group?.id && meeting.status === "completed")
+    .filter(
+      (meeting) =>
+        meeting.groupId === data.group?.id && meeting.status === "completed",
+    )
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate))[0];
   useEffect(() => {
     if (circleId && data?.group?.id !== circleId) {
@@ -70,17 +97,286 @@ export function CirclePage() {
     };
   }, [circleId, latestCompletedMeeting?.id]);
   if (!data) return null;
+  const isAdmin = data.currentUser.role === "admin";
+  const canCreateFirstCircle =
+    data.currentUser.isApprovedLeader && data.groups.length === 0;
+  const canCreateCircle = isAdmin || canCreateFirstCircle;
+  const creationModal = creatingCircle ? (
+    <Modal
+      title={isAdmin ? "Create a Circle" : "Create your Circle"}
+      onClose={() => setCreatingCircle(false)}
+    >
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setCircleBusy(true);
+          setCircleError("");
+          void createGroup({
+            ...circleForm,
+            leaderPersonId: isAdmin ? circleForm.leaderPersonId : undefined,
+          })
+            .then(() => setCreatingCircle(false))
+            .catch((cause) =>
+              setCircleError(
+                getErrorMessage(cause, "The Circle could not be created."),
+              ),
+            )
+            .finally(() => setCircleBusy(false));
+        }}
+      >
+        <p className="text-sm leading-6 text-muted">
+          {isAdmin
+            ? "A new Circle begins with an approved leader."
+            : "You are approved to lead. Create your first Circle and you will be assigned as its primary leader."}
+        </p>
+        <label className="field-label">
+          Circle name
+          <input
+            className="field"
+            required
+            value={circleForm.name}
+            onChange={(event) =>
+              setCircleForm({ ...circleForm, name: event.target.value })
+            }
+          />
+        </label>
+        <label className="field-label">
+          Description
+          <textarea
+            className="field min-h-24"
+            value={circleForm.description}
+            onChange={(event) =>
+              setCircleForm({ ...circleForm, description: event.target.value })
+            }
+          />
+        </label>
+        <label className="field-label">
+          Location
+          <input
+            className="field"
+            value={circleForm.location}
+            onChange={(event) =>
+              setCircleForm({ ...circleForm, location: event.target.value })
+            }
+          />
+        </label>
+        {isAdmin && (
+          <label className="field-label">
+            Primary leader
+            <select
+              className="field"
+              required
+              value={circleForm.leaderPersonId}
+              onChange={(event) =>
+                setCircleForm({
+                  ...circleForm,
+                  leaderPersonId: event.target.value,
+                })
+              }
+            >
+              <option value="">Choose an approved leader</option>
+              {data.approvedLeaders.map((leader) => (
+                <option key={leader.personId} value={leader.personId}>
+                  {leader.fullName}
+                  {leader.email ? ` · ${leader.email}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {isAdmin && !data.approvedLeaders.length && (
+          <p className="rounded-xl bg-parchment p-4 text-sm leading-6 text-muted">
+            No approved leaders are available yet. Assign a Cell Group Leader in
+            Ministry Lens first.
+          </p>
+        )}
+        {circleError && (
+          <p className="form-error" role="alert">
+            {circleError}
+          </p>
+        )}
+        <button
+          className="primary-button w-full"
+          disabled={
+            circleBusy ||
+            !circleForm.name.trim() ||
+            (isAdmin && !data.approvedLeaders.length)
+          }
+        >
+          {circleBusy
+            ? "Creating…"
+            : isAdmin
+              ? "Create Circle"
+              : "Create your Circle"}
+        </button>
+      </form>
+    </Modal>
+  ) : null;
+  const ungroupedApprovedLeaders = data.approvedLeaders.filter(
+    (leader) => (leader.activeGroupCount ?? 0) === 0,
+  );
+  const createLeaderAccess = async (personId: string) => {
+    if (!supabase) return;
+    setLeaderAccessBusy(personId);
+    setLeaderAccessMessage("");
+    setLeaderAccessError(false);
+    setLeaderCredentials(null);
+    try {
+      const result = await invokeAuthenticatedFunction(
+        supabase,
+        "circle-member-access",
+        { action: "promote", personId },
+      );
+      if (result.error || result.data?.error) {
+        setLeaderAccessMessage(
+          await getFunctionErrorMessage(
+            result,
+            "Leader access could not be created.",
+          ),
+        );
+        setLeaderAccessError(true);
+        return;
+      }
+      setLeaderAccessMessage(
+        result.data.linkedExisting
+          ? "Their existing SheepCount account is now linked to Circles."
+          : "Leader access created. Copy the temporary credentials now.",
+      );
+      if (result.data.temporaryPassword)
+        setLeaderCredentials({
+          email: result.data.email,
+          temporaryPassword: result.data.temporaryPassword,
+        });
+      await refresh();
+    } catch (cause) {
+      setLeaderAccessMessage(
+        getErrorMessage(cause, "Leader access could not be created."),
+      );
+      setLeaderAccessError(true);
+    } finally {
+      setLeaderAccessBusy(null);
+    }
+  };
+  const leaderAccessPanel =
+    isAdmin && ungroupedApprovedLeaders.length > 0 ? (
+      <section
+        className="mt-8 border-y border-line py-6"
+        aria-labelledby="leader-access-heading"
+      >
+        <div className="section-heading">
+          <div>
+            <h2 id="leader-access-heading">Leaders without a Circle</h2>
+            <p>
+              Create or link Circles access without assigning a group first.
+            </p>
+          </div>
+        </div>
+        {leaderAccessMessage && (
+          <p
+            className={
+              leaderAccessError
+                ? "form-error mt-4"
+                : "mt-4 rounded-xl bg-sage p-4 text-sm text-olive"
+            }
+            role={leaderAccessError ? "alert" : "status"}
+          >
+            {leaderAccessMessage}
+          </p>
+        )}
+        {leaderCredentials && (
+          <div className="mt-4 rounded-2xl border border-line bg-paper p-5">
+            <h3 className="font-medium">Copy these credentials now</h3>
+            <p className="mt-3 text-sm">
+              <strong>{leaderCredentials.email}</strong>
+            </p>
+            <p className="mt-1 break-all font-mono text-sm">
+              {leaderCredentials.temporaryPassword}
+            </p>
+            <button
+              className="secondary-button mt-4"
+              onClick={() =>
+                void copyText(
+                  `SheepCount email: ${leaderCredentials.email}\nTemporary password: ${leaderCredentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
+                )
+              }
+            >
+              <Copy size={16} /> Copy credentials
+            </button>
+          </div>
+        )}
+        <div className="mt-5 divide-y divide-line border-y border-line">
+          {ungroupedApprovedLeaders.map((leader) => {
+            const hasAccess = leader.accountStatus === "active";
+            return (
+              <div
+                key={leader.personId}
+                className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-medium">{leader.fullName}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {leader.email ||
+                      "Add an email in Ministry Lens before creating access."}
+                  </p>
+                </div>
+                {hasAccess ? (
+                  <span className="role-label self-start sm:self-auto">
+                    Circles access active
+                  </span>
+                ) : (
+                  <button
+                    className="secondary-button self-start sm:self-auto"
+                    disabled={
+                      leaderAccessBusy === leader.personId || !leader.email
+                    }
+                    onClick={() => void createLeaderAccess(leader.personId)}
+                  >
+                    <KeyRound size={16} />{" "}
+                    {leaderAccessBusy === leader.personId
+                      ? "Creating…"
+                      : "Create leader access"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
   if (!circleId) {
     if (!data.groups.length)
       return (
-        <div className="empty-state">
-          <UsersRound />
-          <h2>No Circle assigned</h2>
-          <p>
-            Ask your SheepCount administrator to add you to an active cell
-            group.
-          </p>
-        </div>
+        <>
+          <div className="empty-state">
+            <UsersRound />
+            <h2>
+              {canCreateFirstCircle
+                ? "Start your Circle"
+                : isAdmin
+                  ? "No Circles yet"
+                  : "No Circle assigned"}
+            </h2>
+            <p>
+              {canCreateFirstCircle
+                ? "Your leadership approval is ready. Create your first Circle when you are ready to gather your group."
+                : isAdmin
+                  ? "Approve a Cell Group Leader in Ministry Lens, then create their Circle when they are ready."
+                  : "Ask your Ministry Lens administrator to add you to an active cell group."}
+            </p>
+            {canCreateCircle && (
+              <button
+                className="primary-button"
+                onClick={() => setCreatingCircle(true)}
+              >
+                <Plus size={17} />{" "}
+                {isAdmin ? "Create a Circle" : "Create your Circle"}
+              </button>
+            )}
+          </div>
+          {leaderAccessPanel}
+          {creationModal}
+        </>
       );
     return (
       <div>
@@ -91,11 +387,15 @@ export function CirclePage() {
             <p>Choose a Circle to see its people, place, and gatherings.</p>
           </div>
           {data.currentUser.role === "admin" && (
-            <button className="primary-button" onClick={() => setCreatingCircle(true)}>
+            <button
+              className="primary-button"
+              onClick={() => setCreatingCircle(true)}
+            >
               <Plus size={17} /> Create a Circle
             </button>
           )}
         </div>
+        {leaderAccessPanel}
         <div className="mt-8 grid gap-5 md:grid-cols-2">
           {data.groups.map((group, index) => {
             const monogram = group.name
@@ -161,35 +461,7 @@ export function CirclePage() {
             );
           })}
         </div>
-        {creatingCircle && (
-          <Modal title="Create a Circle" onClose={() => setCreatingCircle(false)}>
-            <form className="space-y-5" onSubmit={(event) => {
-              event.preventDefault();
-              setCircleBusy(true);
-              setCircleError("");
-              void createGroup(circleForm)
-                .then(() => setCreatingCircle(false))
-                .catch((cause) => setCircleError(getErrorMessage(cause, "The Circle could not be created.")))
-                .finally(() => setCircleBusy(false));
-            }}>
-              <p className="text-sm leading-6 text-muted">
-                A new Circle begins with an approved leader who has completed the Discipleship step and uses SheepCount credentials.
-              </p>
-              <label className="field-label">Circle name<input className="field" required value={circleForm.name} onChange={(event) => setCircleForm({ ...circleForm, name: event.target.value })} /></label>
-              <label className="field-label">Description<textarea className="field min-h-24" value={circleForm.description} onChange={(event) => setCircleForm({ ...circleForm, description: event.target.value })} /></label>
-              <label className="field-label">Location<input className="field" value={circleForm.location} onChange={(event) => setCircleForm({ ...circleForm, location: event.target.value })} /></label>
-              <label className="field-label">Primary leader
-                <select className="field" required value={circleForm.leaderPersonId} onChange={(event) => setCircleForm({ ...circleForm, leaderPersonId: event.target.value })}>
-                  <option value="">Choose an approved leader</option>
-                  {data.approvedLeaders.map((leader) => <option key={leader.personId} value={leader.personId}>{leader.fullName} · {leader.email}</option>)}
-                </select>
-              </label>
-              {!data.approvedLeaders.length && <p className="rounded-xl bg-parchment p-4 text-sm leading-6 text-muted">No one is ready to assign yet. Open a member’s Manage access record, award the Discipleship badge, then approve them for leadership.</p>}
-              {circleError && <p className="form-error" role="alert">{circleError}</p>}
-              <button className="primary-button w-full" disabled={circleBusy || !data.approvedLeaders.length}>{circleBusy ? "Creating…" : "Create Circle"}</button>
-            </form>
-          </Modal>
-        )}
+        {creationModal}
       </div>
     );
   }
@@ -233,7 +505,9 @@ export function CirclePage() {
   const activeGroup = data.group;
   const canManagePeople =
     data.currentUser.role === "admin" || activeGroup.role === "leader";
-  const accessMember = data.members.find((member) => member.id === accessMemberId);
+  const accessMember = data.members.find(
+    (member) => member.id === accessMemberId,
+  );
   const closeAccess = () => {
     setAccessMemberId(null);
     setAccessMessage("");
@@ -244,7 +518,10 @@ export function CirclePage() {
       void selectGroup(activeGroup.id);
     }
   };
-  const manageAccount = async (member: Member, action: "provision" | "reset" | "replace" | "promote") => {
+  const manageAccount = async (
+    member: Member,
+    action: "provision" | "reset" | "replace" | "promote",
+  ) => {
     if (!supabase) return;
     setAccountBusy(member.id);
     setAccessMessage("");
@@ -257,32 +534,52 @@ export function CirclePage() {
         { action, groupId: activeGroup.id, personId: member.id },
       );
       if (result.error || result.data?.error) {
-        setAccessMessage(await getFunctionErrorMessage(result, "Account access could not be updated."));
+        setAccessMessage(
+          await getFunctionErrorMessage(
+            result,
+            "Account access could not be updated.",
+          ),
+        );
         setAccessMessageKind("error");
         return;
       }
       setAccessNeedsRefresh(true);
       setAccessMessageKind("success");
       if (action === "promote") {
-        setAccessMessage(result.data.linkedExisting
-          ? "Leadership approved. Their existing SheepCount account is now linked."
-          : "Leadership approved. Copy the new SheepCount credentials now.");
+        setAccessMessage(
+          result.data.linkedExisting
+            ? "Leadership approved. Their existing SheepCount account is now linked."
+            : "Leadership approved. Copy the new SheepCount credentials now.",
+        );
         if (result.data.temporaryPassword)
-          setCredentials({ login: result.data.email, temporaryPassword: result.data.temporaryPassword, kind: "leader" });
-        if (result.data.warning) setAccessMessage((message) => `${message} ${result.data.warning}`);
+          setCredentials({
+            login: result.data.email,
+            temporaryPassword: result.data.temporaryPassword,
+            kind: "leader",
+          });
+        if (result.data.warning)
+          setAccessMessage((message) => `${message} ${result.data.warning}`);
       } else {
-        setAccessMessage(result.data.replacedAccount
-          ? "New Circles login created. Copy the Member ID and temporary password before closing this window."
-          : result.data.existingAccount
-          ? "Their existing SheepCount account is linked to Circles."
-          : result.data.alreadyExists
-            ? "This member already has Circles access. Use Reset temporary password if they no longer have the original password."
-            : "Account created. Copy the Member ID and temporary password before closing this window.");
+        setAccessMessage(
+          result.data.replacedAccount
+            ? "New Circles login created. Copy the Member ID and temporary password before closing this window."
+            : result.data.existingAccount
+              ? "Their existing SheepCount account is linked to Circles."
+              : result.data.alreadyExists
+                ? "This member already has Circles access. Use Reset temporary password if they no longer have the original password."
+                : "Account created. Copy the Member ID and temporary password before closing this window.",
+        );
         if (result.data.loginId && result.data.temporaryPassword)
-          setCredentials({ login: result.data.loginId, temporaryPassword: result.data.temporaryPassword, kind: "member" });
+          setCredentials({
+            login: result.data.loginId,
+            temporaryPassword: result.data.temporaryPassword,
+            kind: "member",
+          });
       }
     } catch (error) {
-      setAccessMessage(getErrorMessage(error, "Account access could not be updated."));
+      setAccessMessage(
+        getErrorMessage(error, "Account access could not be updated."),
+      );
       setAccessMessageKind("error");
     } finally {
       setAccountBusy(null);
@@ -299,7 +596,9 @@ export function CirclePage() {
     });
     if (result.error) setAccessMessage(result.error.message);
     else {
-      setAccessMessage(active ? "Discipleship badge awarded." : "Discipleship badge revoked.");
+      setAccessMessage(
+        active ? "Discipleship badge awarded." : "Discipleship badge revoked.",
+      );
       setBadgeNote("");
       await selectGroup(activeGroup.id);
     }
@@ -313,11 +612,17 @@ export function CirclePage() {
         new Date(meeting.meetingDate) >= new Date(),
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
-  const circleLeader = data.members.find((member) => member.role === "leader" || member.id === activeGroup.leaderId);
-  const circleAnnouncements = data.announcements.filter((item) => item.groupId === activeGroup.id);
+  const circleLeader = data.members.find(
+    (member) => member.role === "leader" || member.id === activeGroup.leaderId,
+  );
+  const circleAnnouncements = data.announcements.filter(
+    (item) => item.groupId === activeGroup.id,
+  );
   const latestAnnouncement = circleAnnouncements[0];
   const latestGallery = data.galleries[0];
-  const latestTestimony = data.testimonies.find((item) => item.status !== "draft");
+  const latestTestimony = data.testimonies.find(
+    (item) => item.status !== "draft",
+  );
   return (
     <div>
       <div className="page-heading">
@@ -326,8 +631,16 @@ export function CirclePage() {
           <h1>{data.group.name}</h1>
           <p>{data.group.description}</p>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
-            <span className="inline-flex items-center gap-2"><MapPin size={15} className="text-olive" />{activeGroup.location||"Location shared with members"}</span>
-            {circleLeader&&<span className="inline-flex items-center gap-2"><UsersRound size={15} className="text-olive" />Led by {circleLeader.fullName}</span>}
+            <span className="inline-flex items-center gap-2">
+              <MapPin size={15} className="text-olive" />
+              {activeGroup.location || "Location shared with members"}
+            </span>
+            {circleLeader && (
+              <span className="inline-flex items-center gap-2">
+                <UsersRound size={15} className="text-olive" />
+                Led by {circleLeader.fullName}
+              </span>
+            )}
           </div>
         </div>
         <Link className="secondary-button" to="/circles">
@@ -346,8 +659,12 @@ export function CirclePage() {
               : "The next date will appear here when it is planned."}
           </p>
         </div>
-        <Link className="primary-button" to={nextGathering ? `/gatherings/${nextGathering.id}` : "/gatherings"}>
-          {nextGathering ? "View gathering" : "View gatherings"} <ChevronRight size={16} />
+        <Link
+          className="primary-button"
+          to={nextGathering ? `/gatherings/${nextGathering.id}` : "/gatherings"}
+        >
+          {nextGathering ? "View gathering" : "View gatherings"}{" "}
+          <ChevronRight size={16} />
         </Link>
       </section>
       {latestCompletedMeeting && (
@@ -356,8 +673,12 @@ export function CirclePage() {
             <MessageCircle size={20} />
           </span>
           <div>
-            <p className="text-xs uppercase tracking-[0.14em] text-olive">Keep the conversation going</p>
-            <h2 className="mt-2 font-display text-3xl">Continue the gathering</h2>
+            <p className="text-xs uppercase tracking-[0.14em] text-olive">
+              Keep the conversation going
+            </p>
+            <h2 className="mt-2 font-display text-3xl">
+              Continue the gathering
+            </h2>
             <p className="mt-2 text-sm text-muted">
               {latestCompletedMeeting.title}
               {reflectionActivity.count > 0
@@ -365,27 +686,94 @@ export function CirclePage() {
                 : " · Share what stayed with you."}
             </p>
           </div>
-          <Link className="secondary-button justify-center" to={`/gatherings/${latestCompletedMeeting.id}`}>
+          <Link
+            className="secondary-button justify-center"
+            to={`/gatherings/${latestCompletedMeeting.id}`}
+          >
             Continue {latestCompletedMeeting.title} <ChevronRight size={16} />
           </Link>
         </section>
       )}
       {latestAnnouncement && (
         <section className="mt-12 border-t border-line pt-8">
-          <div className="section-heading"><div><h2>{activeGroup.name} updates</h2><p>Notes shared specifically with this Circle.</p></div></div>
-          <article className="max-w-4xl border-l-2 border-olive pl-5 sm:pl-7"><Megaphone size={18} className="text-olive"/><h3 className="mt-4 font-display text-3xl">{latestAnnouncement.title}</h3><p className="mt-3 whitespace-pre-line leading-7 text-muted">{latestAnnouncement.body}</p></article>
+          <div className="section-heading">
+            <div>
+              <h2>{activeGroup.name} updates</h2>
+              <p>Notes shared specifically with this Circle.</p>
+            </div>
+          </div>
+          <article className="max-w-4xl border-l-2 border-olive pl-5 sm:pl-7">
+            <Megaphone size={18} className="text-olive" />
+            <h3 className="mt-4 font-display text-3xl">
+              {latestAnnouncement.title}
+            </h3>
+            <p className="mt-3 whitespace-pre-line leading-7 text-muted">
+              {latestAnnouncement.body}
+            </p>
+          </article>
         </section>
       )}
       {latestGallery && (
         <section className="mt-12 border-t border-line pt-8">
-          <div className="section-heading"><div><h2>Life in {activeGroup.name}</h2><p>Photographs published for this Circle.</p></div></div>
-          <a href={`/${data.organization.slug}/galleries/${latestGallery.slug}`} target="_blank" rel="noreferrer" className="group relative block min-h-72 overflow-hidden rounded-[1.75rem] text-paper sm:min-h-96"><img src={latestGallery.coverUrl||"/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover"/><div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent"/><div className="relative flex min-h-72 flex-col justify-end p-6 sm:min-h-96 sm:p-8"><Images size={20}/><h3 className="mt-4 max-w-2xl font-display text-3xl sm:text-4xl">{latestGallery.title}</h3><p className="mt-2 max-w-xl text-sm text-paper/80">{latestGallery.description}</p><span className="mt-5 text-sm font-medium">View {latestGallery.photos.length} {latestGallery.photos.length===1?"photo":"photos"}</span></div></a>
+          <div className="section-heading">
+            <div>
+              <h2>Life in {activeGroup.name}</h2>
+              <p>Photographs published for this Circle.</p>
+            </div>
+          </div>
+          <a
+            href={`/${data.organization.slug}/galleries/${latestGallery.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="group relative block min-h-72 overflow-hidden rounded-[1.75rem] text-paper sm:min-h-96"
+          >
+            <img
+              src={latestGallery.coverUrl || "/assets/devotional-table.webp"}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/20 to-transparent" />
+            <div className="relative flex min-h-72 flex-col justify-end p-6 sm:min-h-96 sm:p-8">
+              <Images size={20} />
+              <h3 className="mt-4 max-w-2xl font-display text-3xl sm:text-4xl">
+                {latestGallery.title}
+              </h3>
+              <p className="mt-2 max-w-xl text-sm text-paper/80">
+                {latestGallery.description}
+              </p>
+              <span className="mt-5 text-sm font-medium">
+                View {latestGallery.photos.length}{" "}
+                {latestGallery.photos.length === 1 ? "photo" : "photos"}
+              </span>
+            </div>
+          </a>
         </section>
       )}
       {latestTestimony && (
         <section className="mt-12 border-t border-line pt-8">
-          <div className="section-heading"><div><h2>Stories from {activeGroup.name}</h2><p>Testimonies rooted in this Circle’s life together.</p></div></div>
-          <a href={`/${data.organization.slug}/testimonies/${latestTestimony.slug}`} target="_blank" rel="noreferrer" className="block max-w-4xl border-y border-line py-7"><Quote size={19} className="text-olive"/><h3 className="mt-4 font-display text-3xl">{latestTestimony.title}</h3><p className="mt-3 line-clamp-4 leading-7 text-muted">{latestTestimony.body}</p><p className="mt-4 text-sm text-olive">Shared by {latestTestimony.authorName}</p></a>
+          <div className="section-heading">
+            <div>
+              <h2>Stories from {activeGroup.name}</h2>
+              <p>Testimonies rooted in this Circle’s life together.</p>
+            </div>
+          </div>
+          <a
+            href={`/${data.organization.slug}/testimonies/${latestTestimony.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="block max-w-4xl border-y border-line py-7"
+          >
+            <Quote size={19} className="text-olive" />
+            <h3 className="mt-4 font-display text-3xl">
+              {latestTestimony.title}
+            </h3>
+            <p className="mt-3 line-clamp-4 leading-7 text-muted">
+              {latestTestimony.body}
+            </p>
+            <p className="mt-4 text-sm text-olive">
+              Shared by {latestTestimony.authorName}
+            </p>
+          </a>
         </section>
       )}
       <div className="mt-8 grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
@@ -427,14 +815,22 @@ export function CirclePage() {
                 >
                   {m.role}
                 </span>
-                {m.discipleshipBadge && <span className="role-label flex items-center gap-1"><BadgeCheck size={13} /> Discipleship</span>}
-                {(data.currentUser.role === "admin" || (activeGroup.role === "leader" && m.role === "member")) && (
-                  <button className="secondary-button ml-12 w-full sm:ml-0 sm:w-auto" onClick={() => {
-                    setAccessMemberId(m.id);
-                    setAccessMessage("");
-                    setCredentials(null);
-                    setBadgeNote("");
-                  }}>
+                {m.discipleshipBadge && (
+                  <span className="role-label flex items-center gap-1">
+                    <BadgeCheck size={13} /> Discipleship
+                  </span>
+                )}
+                {(data.currentUser.role === "admin" ||
+                  (activeGroup.role === "leader" && m.role === "member")) && (
+                  <button
+                    className="secondary-button ml-12 w-full sm:ml-0 sm:w-auto"
+                    onClick={() => {
+                      setAccessMemberId(m.id);
+                      setAccessMessage("");
+                      setCredentials(null);
+                      setBadgeNote("");
+                    }}
+                  >
                     Manage access
                   </button>
                 )}
@@ -466,8 +862,12 @@ export function CirclePage() {
           <div>
             <div className="border-b border-line pb-5">
               <p className="page-kicker">Member record</p>
-              <h3 className="mt-2 font-display text-3xl">{accessMember.fullName}</h3>
-              <p className="mt-1 text-sm text-muted">{accessMember.email || "No SheepCount email on record"}</p>
+              <h3 className="mt-2 font-display text-3xl">
+                {accessMember.fullName}
+              </h3>
+              <p className="mt-1 text-sm text-muted">
+                {accessMember.email || "No SheepCount email on record"}
+              </p>
             </div>
 
             <section className="border-b border-line py-5">
@@ -476,9 +876,19 @@ export function CirclePage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="font-medium">Login</h4>
-                    <span className="role-label">{accessMember.account?.status === "active" ? (accessMember.account.kind === "generated" ? "Member ID" : "SheepCount linked") : "No account"}</span>
+                    <span className="role-label">
+                      {accessMember.account?.status === "active"
+                        ? accessMember.account.kind === "generated"
+                          ? "Member ID"
+                          : "SheepCount linked"
+                        : "No account"}
+                    </span>
                   </div>
-                  {accessMember.account?.loginId && <p className="mt-2 break-all font-mono text-sm text-muted">{accessMember.account.loginId}</p>}
+                  {accessMember.account?.loginId && (
+                    <p className="mt-2 break-all font-mono text-sm text-muted">
+                      {accessMember.account.loginId}
+                    </p>
+                  )}
                   <p className="mt-2 text-sm leading-6 text-muted">
                     {accessMember.account?.status === "active"
                       ? accessMember.account.kind === "generated"
@@ -486,33 +896,107 @@ export function CirclePage() {
                         : "This person signs in with their normal SheepCount email and password."
                       : "Create a Member ID so this person can participate in Circles."}
                   </p>
-                  {accessMember.account?.status === "active" && accessMember.account.kind === "generated" ? (
-                    <button className="secondary-button mt-4" disabled={accountBusy === accessMember.id} onClick={() => window.confirm(`Issue a new temporary password for ${accessMember.fullName}?`) && void manageAccount(accessMember, "reset")}><KeyRound size={15} /> Reset temporary password</button>
+                  {accessMember.account?.status === "active" &&
+                  accessMember.account.kind === "generated" ? (
+                    <button
+                      className="secondary-button mt-4"
+                      disabled={accountBusy === accessMember.id}
+                      onClick={() =>
+                        window.confirm(
+                          `Issue a new temporary password for ${accessMember.fullName}?`,
+                        ) && void manageAccount(accessMember, "reset")
+                      }
+                    >
+                      <KeyRound size={15} /> Reset temporary password
+                    </button>
                   ) : accessMember.account?.status !== "active" ? (
-                    <button className="secondary-button mt-4" disabled={accountBusy === accessMember.id} onClick={() => void manageAccount(accessMember, "provision")}>{accountBusy === accessMember.id ? "Creating…" : "Create Member ID"}</button>
+                    <button
+                      className="secondary-button mt-4"
+                      disabled={accountBusy === accessMember.id}
+                      onClick={() =>
+                        void manageAccount(accessMember, "provision")
+                      }
+                    >
+                      {accountBusy === accessMember.id
+                        ? "Creating…"
+                        : "Create Member ID"}
+                    </button>
                   ) : null}
-                  {data.currentUser.role === "admin" && accessMember.account?.status === "active" && accessMember.account.kind === "existing" && (
-                    <div className="mt-4 rounded-xl border border-line bg-parchment/60 p-4">
-                      <p className="text-xs leading-5 text-muted">If this SheepCount account was linked by mistake, replace only its Circles access with a new Member ID. The original SheepCount account will not be deleted.</p>
-                      <button className="secondary-button mt-3" disabled={accountBusy === accessMember.id} onClick={() => window.confirm(`Replace ${accessMember.fullName}’s linked Circles login with a new Member ID? Their existing SheepCount account will remain intact but will no longer represent this People record in Circles.`) && void manageAccount(accessMember, "replace")}>
-                        <KeyRound size={15} /> {accountBusy === accessMember.id ? "Creating…" : "Create new Member ID"}
+                  {data.currentUser.role === "admin" &&
+                    accessMember.account?.status === "active" &&
+                    accessMember.account.kind === "existing" && (
+                      <div className="mt-4 rounded-xl border border-line bg-parchment/60 p-4">
+                        <p className="text-xs leading-5 text-muted">
+                          If this SheepCount account was linked by mistake,
+                          replace only its Circles access with a new Member ID.
+                          The original SheepCount account will not be deleted.
+                        </p>
+                        <button
+                          className="secondary-button mt-3"
+                          disabled={accountBusy === accessMember.id}
+                          onClick={() =>
+                            window.confirm(
+                              `Replace ${accessMember.fullName}’s linked Circles login with a new Member ID? Their existing SheepCount account will remain intact but will no longer represent this People record in Circles.`,
+                            ) && void manageAccount(accessMember, "replace")
+                          }
+                        >
+                          <KeyRound size={15} />{" "}
+                          {accountBusy === accessMember.id
+                            ? "Creating…"
+                            : "Create new Member ID"}
+                        </button>
+                      </div>
+                    )}
+
+                  {credentials && (
+                    <div
+                      className="mt-5 rounded-2xl border border-olive/25 bg-sage/60 p-5"
+                      role="status"
+                    >
+                      <h4 className="font-medium">
+                        Copy these credentials now
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-muted">
+                        The temporary password is shown only once and must be
+                        changed at first sign-in.
+                      </p>
+                      <div className="mt-4 space-y-3 rounded-xl bg-paper p-4">
+                        <div>
+                          <span className="text-xs text-muted">
+                            {credentials.kind === "leader"
+                              ? "SheepCount email"
+                              : "Member ID"}
+                          </span>
+                          <strong className="mt-1 block break-all font-mono">
+                            {credentials.login}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted">
+                            Temporary password
+                          </span>
+                          <strong className="mt-1 block break-all font-mono">
+                            {credentials.temporaryPassword}
+                          </strong>
+                        </div>
+                      </div>
+                      <button
+                        className="primary-button mt-4 w-full"
+                        onClick={() =>
+                          void copyText(
+                            `${credentials.kind === "leader" ? "SheepCount email" : "Circles Member ID"}: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
+                          )
+                        }
+                      >
+                        <Copy size={16} /> Copy credentials
                       </button>
                     </div>
                   )}
-
-                  {credentials && (
-                    <div className="mt-5 rounded-2xl border border-olive/25 bg-sage/60 p-5" role="status">
-                      <h4 className="font-medium">Copy these credentials now</h4>
-                      <p className="mt-2 text-sm leading-6 text-muted">The temporary password is shown only once and must be changed at first sign-in.</p>
-                      <div className="mt-4 space-y-3 rounded-xl bg-paper p-4">
-                        <div><span className="text-xs text-muted">{credentials.kind === "leader" ? "SheepCount email" : "Member ID"}</span><strong className="mt-1 block break-all font-mono">{credentials.login}</strong></div>
-                        <div><span className="text-xs text-muted">Temporary password</span><strong className="mt-1 block break-all font-mono">{credentials.temporaryPassword}</strong></div>
-                      </div>
-                      <button className="primary-button mt-4 w-full" onClick={() => void copyText(`${credentials.kind === "leader" ? "SheepCount email" : "Circles Member ID"}: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`)}><Copy size={16} /> Copy credentials</button>
-                    </div>
-                  )}
                   {accessMessage && (
-                    <p role={accessMessageKind === "error" ? "alert" : "status"} className={`mt-4 rounded-xl p-4 text-sm leading-6 ${accessMessageKind === "error" ? "bg-red-50 text-red-800" : "bg-parchment text-muted"}`}>
+                    <p
+                      role={accessMessageKind === "error" ? "alert" : "status"}
+                      className={`mt-4 rounded-xl p-4 text-sm leading-6 ${accessMessageKind === "error" ? "bg-red-50 text-red-800" : "bg-parchment text-muted"}`}
+                    >
                       {accessMessage}
                     </p>
                   )}
@@ -526,20 +1010,48 @@ export function CirclePage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="font-medium">Discipleship</h4>
-                    <span className="role-label">{accessMember.discipleshipBadge ? "Badge awarded" : "Not yet awarded"}</span>
+                    <span className="role-label">
+                      {accessMember.discipleshipBadge
+                        ? "Badge awarded"
+                        : "Not yet awarded"}
+                    </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-muted">
                     {accessMember.discipleshipBadge
-                      ? accessMember.badgeSource === "system_grandfathered" ? "Recognized from their existing leadership service." : "Recognized by an organization administrator."
+                      ? accessMember.badgeSource === "system_grandfathered"
+                        ? "Recognized from their existing leadership service."
+                        : "Recognized by an organization administrator."
                       : "The badge records completed discipleship but does not grant leadership on its own."}
                   </p>
                   {data.currentUser.role === "admin" && (
                     <div className="mt-4 space-y-3">
-                      <label className="field-label">Optional note<input className="field" value={badgeNote} onChange={(event) => setBadgeNote(event.target.value)} placeholder="Course, cohort, or reason" /></label>
-                      <button className="secondary-button" disabled={accountBusy === accessMember.id} onClick={() => {
-                        const active = !accessMember.discipleshipBadge;
-                        if (active || window.confirm(`Revoke ${accessMember.fullName}’s Discipleship badge and leadership approval?`)) void setBadge(accessMember, active);
-                      }}>{accessMember.discipleshipBadge ? "Revoke badge" : "Award Discipleship badge"}</button>
+                      <label className="field-label">
+                        Optional note
+                        <input
+                          className="field"
+                          value={badgeNote}
+                          onChange={(event) => setBadgeNote(event.target.value)}
+                          placeholder="Course, cohort, or reason"
+                        />
+                      </label>
+                      <button
+                        className="secondary-button"
+                        disabled={accountBusy === accessMember.id}
+                        onClick={() => {
+                          const active = !accessMember.discipleshipBadge;
+                          if (
+                            active ||
+                            window.confirm(
+                              `Revoke ${accessMember.fullName}’s Discipleship badge and leadership approval?`,
+                            )
+                          )
+                            void setBadge(accessMember, active);
+                        }}
+                      >
+                        {accessMember.discipleshipBadge
+                          ? "Revoke badge"
+                          : "Award Discipleship badge"}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -552,35 +1064,96 @@ export function CirclePage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="font-medium">Leadership</h4>
-                    <span className="role-label">{accessMember.leadershipStatus === "approved" ? "Approved" : "Not approved"}</span>
+                    <span className="role-label">
+                      {accessMember.leadershipStatus === "approved"
+                        ? "Approved"
+                        : "Not approved"}
+                    </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-muted">
-                    Approval converts a generated Member ID to SheepCount email credentials. It does not remove this person from {data.group.name} or give access to another Circle until an admin assigns one.
+                    Approval converts a generated Member ID to SheepCount email
+                    credentials. It does not remove this person from{" "}
+                    {data.group.name} or give access to another Circle until an
+                    admin assigns one.
                   </p>
-                  {data.currentUser.role === "admin" && accessMember.leadershipStatus !== "approved" && (
-                    <button className="primary-button mt-4" disabled={accountBusy === accessMember.id || !accessMember.discipleshipBadge || !accessMember.email} onClick={() => window.confirm(`Approve ${accessMember.fullName} for Circle leadership and convert their login to SheepCount credentials?`) && void manageAccount(accessMember, "promote")}>
-                      {accountBusy === accessMember.id ? "Approving…" : "Approve for leadership"}
-                    </button>
-                  )}
-                  {data.currentUser.role === "admin" && !accessMember.discipleshipBadge && <p className="mt-3 text-xs text-muted">Award the Discipleship badge first.</p>}
-                  {data.currentUser.role === "admin" && accessMember.discipleshipBadge && !accessMember.email && <p className="mt-3 text-xs text-muted">Add an email to this person’s SheepCount record first.</p>}
+                  {data.currentUser.role === "admin" &&
+                    accessMember.leadershipStatus !== "approved" && (
+                      <button
+                        className="primary-button mt-4"
+                        disabled={
+                          accountBusy === accessMember.id ||
+                          !accessMember.discipleshipBadge ||
+                          !accessMember.email
+                        }
+                        onClick={() =>
+                          window.confirm(
+                            `Approve ${accessMember.fullName} for Circle leadership and convert their login to SheepCount credentials?`,
+                          ) && void manageAccount(accessMember, "promote")
+                        }
+                      >
+                        {accountBusy === accessMember.id
+                          ? "Approving…"
+                          : "Approve for leadership"}
+                      </button>
+                    )}
+                  {data.currentUser.role === "admin" &&
+                    !accessMember.discipleshipBadge && (
+                      <p className="mt-3 text-xs text-muted">
+                        Award the Discipleship badge first.
+                      </p>
+                    )}
+                  {data.currentUser.role === "admin" &&
+                    accessMember.discipleshipBadge &&
+                    !accessMember.email && (
+                      <p className="mt-3 text-xs text-muted">
+                        Add an email to this person’s SheepCount record first.
+                      </p>
+                    )}
                 </div>
               </div>
             </section>
 
-            {data.currentUser.role === "admin" && Boolean(accessMember.account?.transitions?.length) && (
-              <section className="pt-5">
-                <div className="flex items-center gap-2"><History size={17} className="text-olive" /><h4 className="font-medium">Account history</h4></div>
-                <div className="mt-3 divide-y divide-line border-y border-line">
-                  {accessMember.account!.transitions.map((transition, index) => (
-                    <div className="py-3" key={`${transition.createdAt}-${index}`}>
-                      <div className="flex items-baseline justify-between gap-3"><span className="text-sm font-medium">{transition.action.split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ")}</span><time className="shrink-0 text-xs text-muted">{new Date(transition.createdAt).toLocaleDateString()}</time></div>
-                      {transition.note && <p className="mt-1 text-xs leading-5 text-muted">{transition.note}</p>}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+            {data.currentUser.role === "admin" &&
+              Boolean(accessMember.account?.transitions?.length) && (
+                <section className="pt-5">
+                  <div className="flex items-center gap-2">
+                    <History size={17} className="text-olive" />
+                    <h4 className="font-medium">Account history</h4>
+                  </div>
+                  <div className="mt-3 divide-y divide-line border-y border-line">
+                    {accessMember.account!.transitions.map(
+                      (transition, index) => (
+                        <div
+                          className="py-3"
+                          key={`${transition.createdAt}-${index}`}
+                        >
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="text-sm font-medium">
+                              {transition.action
+                                .split("_")
+                                .map(
+                                  (part) =>
+                                    part[0].toUpperCase() + part.slice(1),
+                                )
+                                .join(" ")}
+                            </span>
+                            <time className="shrink-0 text-xs text-muted">
+                              {new Date(
+                                transition.createdAt,
+                              ).toLocaleDateString()}
+                            </time>
+                          </div>
+                          {transition.note && (
+                            <p className="mt-1 text-xs leading-5 text-muted">
+                              {transition.note}
+                            </p>
+                          )}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </section>
+              )}
           </div>
         </Modal>
       )}

@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import App from "./App";
@@ -42,12 +49,61 @@ const renderWithData = (path: string, data: typeof demoData) =>
   );
 
 describe("Circles MVP", () => {
+  it("lets an approved leader without a group create their first Circle", async () => {
+    const data = structuredClone(demoData) as typeof demoData & {
+      currentUser: typeof demoData.currentUser & { isApprovedLeader: boolean };
+    };
+    data.groups = [];
+    data.group = null;
+    data.currentUser.role = "leader";
+    data.currentUser.isApprovedLeader = true;
+
+    renderWithData("/circles", data);
+
+    expect(
+      await screen.findByRole("heading", { name: "Start your Circle" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create your Circle" }));
+    expect(
+      screen.getByRole("dialog", { name: "Create your Circle" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Primary leader")).not.toBeInTheDocument();
+  });
+  it("lets an admin create Circles access for an approved ungrouped leader", async () => {
+    const data = structuredClone(demoData);
+    data.groups = [];
+    data.group = null;
+    data.currentUser.role = "admin";
+    data.currentUser.isApprovedLeader = false;
+    data.approvedLeaders = [
+      {
+        personId: "approved-leader",
+        fullName: "Jamie Leader",
+        email: "jamie@example.com",
+        accountStatus: "none",
+        activeGroupCount: 0,
+      },
+    ];
+
+    renderWithData("/circles", data);
+
+    expect(
+      await screen.findByRole("heading", { name: "Leaders without a Circle" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create leader access" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create a Circle" }));
+    expect(screen.getByLabelText("Primary leader")).toHaveValue("");
+  });
   it("exposes accurate state for the public mobile navigation", async () => {
     renderApp("/ministry-lens-church", false);
     const menu = await screen.findByRole("button", { name: "Open navigation" });
     expect(menu).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(menu);
-    expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Close navigation" }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
   it("presents an organization-wide dashboard with destination labels", async () => {
     const data = structuredClone(demoData);
@@ -69,15 +125,23 @@ describe("Circles MVP", () => {
       galleries: [],
     };
     renderWithData("/", data);
-    expect(await screen.findByText("Here’s what is happening across Ministry Lens Church.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Here’s what is happening across Ministry Lens Church.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Everyone").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "View all Circles" })).toHaveAttribute("href", "/circles");
+    expect(
+      screen.getByRole("link", { name: "View all Circles" }),
+    ).toHaveAttribute("href", "/circles");
   });
 
   it("offers organization and Circle destinations when planning a gathering", async () => {
     renderApp("/gatherings");
     fireEvent.click(screen.getByRole("button", { name: "Plan a gathering" }));
-    expect(await screen.findByLabelText("Entire organization")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Entire organization"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("A specific Circle")).toBeInTheDocument();
   });
 
@@ -120,18 +184,24 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("link", { name: "Find a gathering" }),
     ).toHaveAttribute("href", "/ministry-lens-church/gatherings");
-    screen.getAllByRole("link", { name: "Join a Circle" }).forEach((link) =>
-      expect(link).toHaveAttribute("href", "/ministry-lens-church/circles"),
-    );
+    screen
+      .getAllByRole("link", { name: "Join a Circle" })
+      .forEach((link) =>
+        expect(link).toHaveAttribute("href", "/ministry-lens-church/circles"),
+      );
     expect(
       screen.getByRole("link", { name: "Sign up for a Cell Group" }),
     ).toHaveAttribute("href", "/ministry-lens-church/cell-group-signup");
   });
   it("lets visitors learn about a Circle before opening the interest form", async () => {
     renderApp("/ministry-lens-church/circles/grace-and-ground");
-    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Grace & Ground" }),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "I’m interested in joining" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "I’m interested in joining" }),
+    );
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
     expect(screen.getByText(/does not create an account/i)).toBeInTheDocument();
   });
@@ -145,17 +215,35 @@ describe("Circles MVP", () => {
     expect(screen.getByLabelText("Last name")).toBeRequired();
     expect(screen.getByLabelText("Birthday")).toBeRequired();
     expect(screen.getByLabelText("Mobile number")).toBeInTheDocument();
-    expect(screen.getByLabelText("Facebook link or username")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /store these details/i })).toBeRequired();
-    expect(screen.getByText(/does not reserve a seat or limit who may attend/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Facebook link or username"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: /store these details/i }),
+    ).toBeRequired();
+    expect(
+      screen.getByText(/does not reserve a seat or limit who may attend/i),
+    ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Jamie" } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Rivera" } });
-    fireEvent.change(screen.getByLabelText("Birthday"), { target: { value: "1998-06-14" } });
-    fireEvent.change(screen.getByLabelText("Facebook link or username"), { target: { value: "jamie.rivera" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /store these details/i }));
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: "Jamie" },
+    });
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: "Rivera" },
+    });
+    fireEvent.change(screen.getByLabelText("Birthday"), {
+      target: { value: "1998-06-14" },
+    });
+    fireEvent.change(screen.getByLabelText("Facebook link or username"), {
+      target: { value: "jamie.rivera" },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /store these details/i }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Submit my signup" }));
-    expect(await screen.findByRole("heading", { name: "Your signup was received." })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Your signup was received." }),
+    ).toBeInTheDocument();
   });
   it("gives leaders a separate official signup placement queue", async () => {
     renderApp("/signups");
@@ -164,20 +252,32 @@ describe("Circles MVP", () => {
       await screen.findByRole("heading", { name: "Cell Group signups" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Jamie Rivera")).toBeInTheDocument();
-    expect(screen.getByLabelText("Place Jamie Rivera in")).toHaveValue("demo-group");
-    expect(screen.getByRole("button", { name: "Place in Circle" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Place Jamie Rivera in")).toHaveValue(
+      "demo-group",
+    );
+    expect(
+      screen.getByRole("button", { name: "Place in Circle" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Cell Group signups/ }),
     ).toHaveAttribute("href", "/signups");
 
     fireEvent.click(screen.getByRole("button", { name: "Place in Circle" }));
-    expect(await screen.findByText(/was placed in Grace & Ground/)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Jamie Rivera" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/was placed in Grace & Ground/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Jamie Rivera" }),
+    ).not.toBeInTheDocument();
   });
   it("wraps routed content in the shared fade and resets scrolling", () => {
     const { container } = renderApp("/gatherings");
     expect(container.querySelector(".route-reveal")).toBeInTheDocument();
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "auto" });
+    expect(window.scrollTo).toHaveBeenCalledWith({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
   });
   it("provides Back and Dashboard controls on nested standalone PWA screens", () => {
     const original = window.matchMedia;
@@ -190,22 +290,37 @@ describe("Circles MVP", () => {
       }),
     });
     renderApp("/gatherings/meeting-1");
-    expect(screen.getByRole("navigation", { name: "App navigation" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "App navigation" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "App navigation" }).querySelector('a[href="/"]')).toHaveTextContent("Dashboard");
-    Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+    expect(
+      screen
+        .getByRole("navigation", { name: "App navigation" })
+        .querySelector('a[href="/"]'),
+    ).toHaveTextContent("Dashboard");
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: original,
+    });
   });
   it("shows a user-controlled notice when a PWA update is ready", () => {
     renderApp("/");
     act(() => window.dispatchEvent(new Event("circles:pwa-update")));
-    expect(screen.getByText("A new version of Circles is ready.")).toBeInTheDocument();
+    expect(
+      screen.getByText("A new version of Circles is ready."),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
-    expect(screen.queryByText("A new version of Circles is ready.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("A new version of Circles is ready."),
+    ).not.toBeInTheDocument();
   });
   it("does not lose an update notice raised before the app mounts", () => {
     window.__circlesUpdatePending = true;
     renderApp("/");
-    expect(screen.getByText("A new version of Circles is ready.")).toBeInTheDocument();
+    expect(
+      screen.getByText("A new version of Circles is ready."),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
     window.__circlesUpdatePending = false;
   });
@@ -271,7 +386,9 @@ describe("Circles MVP", () => {
       screen.getByText("No members have said they’re going yet."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Guest RSVPs appear in the leader attendance list below/i),
+      screen.getByText(
+        /Guest RSVPs appear in the leader attendance list below/i,
+      ),
     ).toBeInTheDocument();
   });
   it("shows confirmed RSVPs as suggestions without marking attendance", async () => {
@@ -293,22 +410,36 @@ describe("Circles MVP", () => {
 
   it("closes RSVPs and opens attendance while a gathering is happening", () => {
     const data = structuredClone(demoData);
-    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    data.meetings[0].meetingDate = new Date(
+      Date.now() - 60 * 60 * 1000,
+    ).toISOString();
+    data.meetings[0].endsAt = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
 
     renderWithData("/gatherings/meeting-1", data);
 
     expect(screen.getAllByText("Happening now").length).toBeGreaterThan(0);
     expect(screen.getByText("RSVPs are closed.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "I’m going" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save attendance" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "I’m going" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save attendance" }),
+    ).toBeEnabled();
   });
 
   it("surfaces ended gatherings that need attendance review", () => {
     renderApp("/gatherings");
 
-    expect(screen.getByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Review attendance.*Carrying one another/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Needs attention" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: /Review attendance.*Carrying one another/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("requires saved attendance before completing an ended gathering", async () => {
@@ -331,9 +462,15 @@ describe("Circles MVP", () => {
 
     renderWithData("/gatherings/meeting-3", data);
 
-    screen.getAllByRole("checkbox").forEach((checkbox) => expect(checkbox).toBeDisabled());
-    expect(screen.queryByRole("button", { name: "Save attendance" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reopen gathering" })).toBeInTheDocument();
+    screen
+      .getAllByRole("checkbox")
+      .forEach((checkbox) => expect(checkbox).toBeDisabled());
+    expect(
+      screen.queryByRole("button", { name: "Save attendance" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reopen gathering" }),
+    ).toBeInTheDocument();
   });
   it("separates saving attendance from completing a future gathering", () => {
     renderApp("/gatherings/meeting-1");
@@ -342,7 +479,9 @@ describe("Circles MVP", () => {
       screen.getByRole("button", { name: "Save attendance" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Attendance becomes available when the gathering begins/i),
+      screen.getByText(
+        /Attendance becomes available when the gathering begins/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Complete gathering" }),
@@ -354,13 +493,17 @@ describe("Circles MVP", () => {
 
     renderWithData("/gatherings/meeting-3", data);
 
-    expect(screen.getByRole("heading", { name: "After the gathering" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "After the gathering" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("What stayed with you?")).toBeInTheDocument();
   });
   it("does not expose reflections before a gathering is completed", () => {
     renderApp("/gatherings/meeting-1");
 
-    expect(screen.queryByRole("heading", { name: "After the gathering" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "After the gathering" }),
+    ).not.toBeInTheDocument();
   });
   it("redirects an unauthenticated dashboard visit to SheepCount sign-in", async () => {
     renderApp("/", false);
@@ -376,7 +519,9 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("button", { name: /plan a gathering/i }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Prayer" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: "Prayer" }).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getAllByRole("button", { name: "Copy link" }).length,
     ).toBeGreaterThan(0);
@@ -389,10 +534,10 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Share a request" }));
 
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
-    expect(
-      screen.getByRole("radio", { name: "A Circle" }),
-    ).toBeChecked();
-    expect(screen.getByRole("combobox", { name: "Choose Circle" })).toHaveValue("demo-group");
+    expect(screen.getByRole("radio", { name: "A Circle" })).toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Choose Circle" })).toHaveValue(
+      "demo-group",
+    );
     fireEvent.click(
       screen.getByRole("radio", {
         name: /entire organization.*ministry lens church/i,
@@ -403,9 +548,11 @@ describe("Circles MVP", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Share request" }));
 
-    const card = (await screen.findByRole("heading", {
-      name: "Wisdom for our church",
-    })).closest("article");
+    const card = (
+      await screen.findByRole("heading", {
+        name: "Wisdom for our church",
+      })
+    ).closest("article");
     expect(card).not.toBeNull();
     expect(within(card!).getByText("Entire organization")).toBeInTheDocument();
   });
@@ -471,19 +618,32 @@ describe("Circles MVP", () => {
   });
   it("keeps member login, discipleship, and leadership in one access record", () => {
     renderApp("/circles/demo-group");
-    fireEvent.click(screen.getAllByRole("button", { name: "Manage access" })[0]);
-    expect(screen.getByRole("heading", { name: "Manage access" })).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Manage access" })[0],
+    );
+    expect(
+      screen.getByRole("heading", { name: "Manage access" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Discipleship" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Leadership" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Discipleship" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Leadership" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("mara.santos-k7p4")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Award Discipleship badge" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Award Discipleship badge" }),
+    ).not.toBeInTheDocument();
   });
   it("lets admins create Circles only with approved SheepCount leaders", () => {
     const adminData = structuredClone(demoData);
     adminData.currentUser.role = "admin";
     adminData.group = { ...adminData.group!, role: "admin" };
-    adminData.groups = adminData.groups.map((group) => ({ ...group, role: "admin" }));
+    adminData.groups = adminData.groups.map((group) => ({
+      ...group,
+      role: "admin",
+    }));
     render(
       <MemoryRouter initialEntries={["/circles"]}>
         <AppProvider initialData={adminData} initialSession={testSession}>
@@ -492,15 +652,24 @@ describe("Circles MVP", () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Create a Circle" }));
-    expect(screen.getByRole("heading", { name: "Create a Circle" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Karlo de la Rosa/ })).toHaveValue("demo-user");
-    expect(screen.queryByRole("option", { name: /Mara Santos/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Create a Circle" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Karlo de la Rosa/ }),
+    ).toHaveValue("demo-user");
+    expect(
+      screen.queryByRole("option", { name: /Mara Santos/ }),
+    ).not.toBeInTheDocument();
   });
   it("lets an admin replace a mistaken SheepCount link with a Member ID", () => {
     const adminData = structuredClone(demoData);
     adminData.currentUser.role = "admin";
     adminData.group = { ...adminData.group!, role: "admin" };
-    adminData.groups = adminData.groups.map((group) => ({ ...group, role: "admin" }));
+    adminData.groups = adminData.groups.map((group) => ({
+      ...group,
+      role: "admin",
+    }));
     render(
       <MemoryRouter initialEntries={["/circles/demo-group"]}>
         <AppProvider initialData={adminData} initialSession={testSession}>
@@ -508,10 +677,16 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Manage access" })[0]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Manage access" })[0],
+    );
     expect(screen.getByText("SheepCount linked")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create new Member ID" })).toBeInTheDocument();
-    expect(screen.getByText(/original SheepCount account will not be deleted/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create new Member ID" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/original SheepCount account will not be deleted/i),
+    ).toBeInTheDocument();
   });
   it("shows an overview before opening a Circle", () => {
     renderApp("/circles");
@@ -528,36 +703,63 @@ describe("Circles MVP", () => {
 
     renderWithData("/circles/demo-group", data);
 
-    expect(screen.getByRole("heading", { name: "Continue the gathering" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Continue Carrying one another/i })).toHaveAttribute(
-      "href",
-      "/gatherings/meeting-3",
-    );
+    expect(
+      screen.getByRole("heading", { name: "Continue the gathering" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Continue Carrying one another/i }),
+    ).toHaveAttribute("href", "/gatherings/meeting-3");
   });
   it("uses the gathering cover on the dashboard", () => {
     const { container } = renderApp("/");
     expect(
-      container.querySelector('a[href="/gatherings/meeting-1"] img[src="/assets/devotional-table.webp"]'),
+      container.querySelector(
+        'a[href="/gatherings/meeting-1"] img[src="/assets/devotional-table.webp"]',
+      ),
     ).toBeInTheDocument();
   });
   it("orders the dashboard as hero, following gathering, prayer, announcement, and gallery", () => {
     renderApp("/");
-    const hero = screen.getByRole("heading", { name: "Make room for one another." });
-    const following = screen.getByRole("heading", { name: "Following gathering" });
+    const hero = screen.getByRole("heading", {
+      name: "Make room for one another.",
+    });
+    const following = screen.getByRole("heading", {
+      name: "Following gathering",
+    });
     const prayer = screen.getByRole("heading", { name: "Prayer requests" });
-    const announcement = screen.getByRole("heading", { name: "Bring a story from your week" });
-    const gallery = screen.getByRole("heading", { name: "Life around the table" });
-    expect(hero.compareDocumentPosition(following) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(following.compareDocumentPosition(prayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(prayer.compareDocumentPosition(announcement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(announcement.compareDocumentPosition(gallery) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const announcement = screen.getByRole("heading", {
+      name: "Bring a story from your week",
+    });
+    const gallery = screen.getByRole("heading", {
+      name: "Life around the table",
+    });
+    expect(
+      hero.compareDocumentPosition(following) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      following.compareDocumentPosition(prayer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      prayer.compareDocumentPosition(announcement) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      announcement.compareDocumentPosition(gallery) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
   it("keeps the nearest gathering detailed beneath the jumbotron", () => {
     renderApp("/");
-    expect(screen.getByRole("heading", { name: "Rooted in grace" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Rooted in grace" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Colossians 2:6–7")).toBeInTheDocument();
     expect(screen.getByText("3 going")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/),
+    ).toBeInTheDocument();
   });
   it("includes attending guest RSVPs in dashboard and gathering totals", () => {
     const data = structuredClone(demoData);
@@ -619,8 +821,18 @@ describe("Circles MVP", () => {
     const later = new Date();
     later.setDate(later.getDate() + 20);
     carouselData.meetings.push(
-      { ...carouselData.meetings[1], id: "meeting-4", title: "Third upcoming", meetingDate: later.toISOString() },
-      { ...carouselData.meetings[1], id: "meeting-5", title: "Fourth upcoming", meetingDate: new Date(later.getTime() + 86400000).toISOString() },
+      {
+        ...carouselData.meetings[1],
+        id: "meeting-4",
+        title: "Third upcoming",
+        meetingDate: later.toISOString(),
+      },
+      {
+        ...carouselData.meetings[1],
+        id: "meeting-5",
+        title: "Fourth upcoming",
+        meetingDate: new Date(later.getTime() + 86400000).toISOString(),
+      },
     );
     render(
       <MemoryRouter initialEntries={["/"]}>
@@ -629,7 +841,9 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(screen.getAllByRole("button", { name: /Show slide/ })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /Show slide/ })).toHaveLength(
+      4,
+    );
     expect(screen.queryByText("Fourth upcoming")).not.toBeInTheDocument();
   });
   it("hides empty editorial sections from a Circle detail", async () => {
@@ -644,11 +858,21 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Grace & Ground updates" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Life in Grace & Ground" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Stories from Grace & Ground" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Our people" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Grace & Ground updates" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Life in Grace & Ground" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Stories from Grace & Ground" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Our people" }),
+    ).toBeInTheDocument();
   });
   it("routes ordinary members to My Circle without a Dashboard destination", async () => {
     const memberData = structuredClone(demoData);
@@ -658,9 +882,13 @@ describe("Circles MVP", () => {
       fullName: "Mara Santos",
       email: "mara@example.com",
       role: "member",
+      isApprovedLeader: false,
     };
     memberData.group = { ...memberData.group!, role: "member" };
-    memberData.groups = memberData.groups.map((group) => ({ ...group, role: "member" }));
+    memberData.groups = memberData.groups.map((group) => ({
+      ...group,
+      role: "member",
+    }));
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppProvider initialData={memberData} initialSession={testSession}>
@@ -668,18 +896,39 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("heading", { name: "Grace & Ground" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Share testimony" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Grace & Ground updates" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Life in Grace & Ground" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Stories from Grace & Ground" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Life around the table" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Grace in the ordinary" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Dashboard" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Share testimony" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Grace & Ground updates" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Life in Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Stories from Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Life around the table" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Grace in the ordinary" }),
+    ).toBeInTheDocument();
   });
   it("forces a generated member to change their temporary password", async () => {
     const memberData = structuredClone(demoData);
-    memberData.account = { kind: "generated", loginId: "mara.santos-k7p4", mustChangePassword: true, status: "active" };
+    memberData.account = {
+      kind: "generated",
+      loginId: "mara.santos-k7p4",
+      mustChangePassword: true,
+      status: "active",
+    };
     render(
       <MemoryRouter initialEntries={["/gatherings"]}>
         <AppProvider initialData={memberData} initialSession={testSession}>
@@ -687,7 +936,9 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("heading", { name: "Choose your own password." })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Choose your own password." }),
+    ).toBeInTheDocument();
     expect(screen.getByText("At least 10 characters")).toBeInTheDocument();
     expect(screen.getByText("One uppercase letter")).toBeInTheDocument();
     expect(screen.getByText("One lowercase letter")).toBeInTheDocument();
@@ -703,21 +954,33 @@ describe("Circles MVP", () => {
   it("shows the persistent dashboard return while browsing public pages", async () => {
     renderApp("/ministry-lens-church?browse=1");
     expect(await screen.findByText("Public preview")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to dashboard" })).toHaveAttribute("href", "/");
+    expect(
+      screen.getByRole("link", { name: "Back to dashboard" }),
+    ).toHaveAttribute("href", "/");
   });
   it("keeps past gatherings out of public lists but preserves their direct link", async () => {
     const list = renderApp("/ministry-lens-church/gatherings");
-    expect(await screen.findByRole("heading", { name: "Gatherings" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Gatherings" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Carrying one another")).not.toBeInTheDocument();
     list.unmount();
     renderApp("/ministry-lens-church/gatherings/carrying-one-another");
-    expect(await screen.findByText("This gathering has ended.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save my RSVP" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "After the gathering" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("This gathering has ended."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save my RSVP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "After the gathering" }),
+    ).not.toBeInTheDocument();
   });
   it("explains announcement audiences and keeps galleries discoverable in Publish", () => {
     renderApp("/content");
-    expect(screen.getByRole("heading", { name: "Publish" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Publish" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Life around the table")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add Announcements" }));
     expect(screen.getByLabelText("Members only")).toBeChecked();
@@ -741,8 +1004,12 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByText("Bring a story from your week")).toBeInTheDocument();
-    expect(screen.queryByText("Organization-wide update")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Bring a story from your week"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Organization-wide update"),
+    ).not.toBeInTheDocument();
   });
   it("shows admins an assignment review queue and explicit publishing destination", () => {
     const adminData = structuredClone(demoData);
@@ -757,16 +1024,18 @@ describe("Circles MVP", () => {
         role: "admin",
       },
     ];
-    adminData.contentAssignments = [{
-      id: "gallery-review",
-      type: "gallery",
-      title: "Needs a real Circle",
-      groupId: "demo-group",
-      groupName: "Grace & Ground",
-      confirmedAt: undefined,
-      publishedAt: new Date().toISOString(),
-      hasParticipation: false,
-    }];
+    adminData.contentAssignments = [
+      {
+        id: "gallery-review",
+        type: "gallery",
+        title: "Needs a real Circle",
+        groupId: "demo-group",
+        groupName: "Grace & Ground",
+        confirmedAt: undefined,
+        publishedAt: new Date().toISOString(),
+        hasParticipation: false,
+      },
+    ];
     render(
       <MemoryRouter initialEntries={["/content"]}>
         <AppProvider initialData={adminData} initialSession={testSession}>
@@ -774,26 +1043,32 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: "Content assignments" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Content assignments" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Needs a real Circle")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review assignment" }));
-    expect(screen.getByRole("heading", { name: "Review assignment" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Review assignment" }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
     expect(screen.getByLabelText("Destination")).toHaveValue("");
   });
   it("registers a new walk-in from gathering attendance", async () => {
     const data = structuredClone(demoData);
-    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    data.meetings[0].meetingDate = new Date(
+      Date.now() - 60 * 60 * 1000,
+    ).toISOString();
+    data.meetings[0].endsAt = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
     renderWithData("/gatherings/meeting-1", data);
     fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
     fireEvent.change(screen.getByLabelText("Full name"), {
       target: { value: "Jamie Walkin" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add visitor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Add visitor" }));
     expect(
       await screen.findByText(
         "Jamie Walkin was added and selected. Save attendance to record that they came.",
@@ -801,13 +1076,19 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Jamie Walkin")).toBeInTheDocument();
     expect(screen.getByText("Visitor")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Jamie Walkin/ })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /Jamie Walkin/ }),
+    ).toBeChecked();
   });
 
   it("quick-adds multiple name-only visitors without closing the dialog", async () => {
     const data = structuredClone(demoData);
-    data.meetings[0].meetingDate = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    data.meetings[0].endsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    data.meetings[0].meetingDate = new Date(
+      Date.now() - 60 * 60 * 1000,
+    ).toISOString();
+    data.meetings[0].endsAt = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
     renderWithData("/gatherings/meeting-1", data);
     fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
     const fullName = screen.getByLabelText("Full name");
@@ -815,7 +1096,9 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add another" }));
 
     expect(await screen.findByText("Alex Visitor")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Add a walk-in visitor" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Add a walk-in visitor" }),
+    ).toBeInTheDocument();
     expect(fullName).toHaveValue("");
     expect(fullName).toHaveFocus();
   });
@@ -880,6 +1163,8 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Convert to Cell Group signup" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Birthday")).toBeRequired();
-    expect(screen.getByRole("checkbox", { name: /confirmed their consent/i })).toBeRequired();
+    expect(
+      screen.getByRole("checkbox", { name: /confirmed their consent/i }),
+    ).toBeRequired();
   });
 });

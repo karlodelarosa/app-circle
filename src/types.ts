@@ -2,17 +2,11 @@ export type Role = "admin" | "leader" | "member";
 export type RsvpStatus = "attending" | "tentative" | "declined";
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";
 export type ConnectionStatus =
-  | "new"
-  | "contacted"
-  | "visited"
-  | "connected"
-  | "closed";
+  "new" | "contacted" | "visited" | "connected" | "closed";
 export type ContactPreference = "email" | "phone" | "either";
 export type CellGroupSignupStatus = "unassigned" | "placed";
 export type CellGroupSignupSource =
-  | "public"
-  | "guest_self"
-  | "leader_conversion";
+  "public" | "guest_self" | "leader_conversion";
 export type PrayerCategory =
   "Family" | "Work or School" | "Health" | "Spiritual Growth" | "Other";
 export type PrayerScope = "circle" | "organization";
@@ -58,6 +52,9 @@ export interface ApprovedLeader {
   personId: string;
   fullName: string;
   email: string;
+  accountStatus?: "none" | "active" | "inactive";
+  accountKind?: "existing" | "generated";
+  activeGroupCount?: number;
 }
 
 export interface Group {
@@ -124,7 +121,12 @@ export interface GuestConnection {
     status: RsvpStatus;
     attendedAt?: string;
   }[];
-  interests?: { id: string; message: string; status: string; createdAt: string }[];
+  interests?: {
+    id: string;
+    message: string;
+    status: string;
+    createdAt: string;
+  }[];
   activities?: GuestConnectionActivity[];
 }
 
@@ -266,10 +268,7 @@ export interface Gallery {
 }
 
 export type ContentAssignmentType =
-  | "gathering"
-  | "gallery"
-  | "testimony"
-  | "announcement";
+  "gathering" | "gallery" | "testimony" | "announcement";
 
 export interface ContentAssignment {
   id: string;
@@ -348,7 +347,7 @@ export interface AppData {
   publicCircleListings: CirclePublicListing[];
   approvedLeaders: ApprovedLeader[];
   contentAssignments: ContentAssignment[];
-  currentUser: Profile & { role: Role };
+  currentUser: Profile & { role: Role; isApprovedLeader: boolean };
   connectionAttentionCount: number;
   signupAttentionCount: number;
   account: {

@@ -109,7 +109,7 @@ function HomeEntry() {
 function LeaderOnly({ children }: { children: ReactNode }) {
   const { data } = useCircles();
   if (!data) return null;
-  const canLead = data.currentUser.role === "admin" || data.groups.some((group) => group.role === "leader");
+  const canLead = data.currentUser.role === "admin" || data.currentUser.isApprovedLeader;
   return canLead ? children : <Navigate to="/circles" replace />;
 }
 

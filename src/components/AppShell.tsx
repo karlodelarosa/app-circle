@@ -141,7 +141,7 @@ export function AppShell() {
   const base = "/";
   const canLead =
     data.currentUser.role === "admin" ||
-    data.groups.some((g) => g.role === "leader");
+    data.currentUser.isApprovedLeader;
   const isMember = !canLead;
   const memberHome = data.group ? `/circles/${data.group.id}` : "/circles";
   type NavigationItem = {

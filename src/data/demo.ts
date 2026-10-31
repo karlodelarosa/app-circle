@@ -32,7 +32,8 @@ export const demoData: AppData = {
     personId: 'demo-user',
     fullName: 'Karlo de la Rosa',
     email: 'karlo@example.com',
-    role: 'leader'
+    role: 'leader',
+    isApprovedLeader: true
   },
   connectionAttentionCount: 1,
   signupAttentionCount: 1,
