@@ -150,6 +150,7 @@ DECLARE
   v_person_id UUID;
   v_name TEXT;
   v_existing_status TEXT;
+  v_target_status TEXT;
   v_results JSONB := '[]'::jsonb;
 BEGIN
   SELECT p_organization_id INTO v_org
@@ -167,6 +168,8 @@ BEGIN
 
   FOR v_person_id IN SELECT DISTINCT unnest(p_person_ids)
   LOOP
+    v_target_status := CASE WHEN p_approved THEN 'approved' ELSE 'revoked' END;
+
     SELECT concat_ws(' ', person.first_name, person.last_name)
     INTO v_name
     FROM public.people person
@@ -220,7 +223,7 @@ BEGIN
       revoked_at = CASE WHEN p_approved THEN NULL ELSE now() END,
       updated_at = now();
 
-    IF v_existing_status IS DISTINCT FROM CASE WHEN p_approved THEN 'approved' ELSE 'revoked' END THEN
+    IF v_existing_status IS DISTINCT FROM v_target_status THEN
       INSERT INTO public.circle_account_transitions(
         organization_id, person_id, action, note, performed_by
       ) VALUES (
@@ -237,7 +240,7 @@ BEGIN
     v_results := v_results || jsonb_build_array(jsonb_build_object(
       'personId', v_person_id, 'fullName', v_name, 'ok', true,
       'status', CASE WHEN p_approved THEN 'approved' ELSE 'revoked' END,
-      'unchanged', v_existing_status IS NOT DISTINCT FROM CASE WHEN p_approved THEN 'approved' ELSE 'revoked' END
+      'unchanged', v_existing_status IS NOT DISTINCT FROM v_target_status
     ));
   END LOOP;
   RETURN v_results;
