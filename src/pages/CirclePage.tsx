@@ -60,7 +60,7 @@ export function CirclePage() {
   const [leaderAccessMessage, setLeaderAccessMessage] = useState("");
   const [leaderAccessError, setLeaderAccessError] = useState(false);
   const [leaderCredentials, setLeaderCredentials] = useState<{
-    email: string;
+    loginId: string;
     temporaryPassword: string;
   } | null>(null);
   const [reflectionActivity, setReflectionActivity] = useState<{
@@ -98,9 +98,7 @@ export function CirclePage() {
   }, [circleId, latestCompletedMeeting?.id]);
   if (!data) return null;
   const isAdmin = data.currentUser.role === "admin";
-  const canCreateFirstCircle =
-    data.currentUser.isApprovedLeader && data.groups.length === 0;
-  const canCreateCircle = isAdmin || canCreateFirstCircle;
+  const canCreateCircle = isAdmin || data.currentUser.isApprovedLeader;
   const creationModal = creatingCircle ? (
     <Modal
       title={isAdmin ? "Create a Circle" : "Create your Circle"}
@@ -226,7 +224,7 @@ export function CirclePage() {
       const result = await invokeAuthenticatedFunction(
         supabase,
         "circle-member-access",
-        { action: "promote", personId },
+        { action: "provisionLeader", personId },
       );
       if (result.error || result.data?.error) {
         setLeaderAccessMessage(
@@ -239,13 +237,13 @@ export function CirclePage() {
         return;
       }
       setLeaderAccessMessage(
-        result.data.linkedExisting
-          ? "Their existing SheepCount account is now linked to Circles."
-          : "Leader access created. Copy the temporary credentials now.",
+        result.data.alreadyExists
+          ? "This leader already has Circles-only access."
+          : "Circles-only leader access created. Copy the temporary credentials now.",
       );
       if (result.data.temporaryPassword)
         setLeaderCredentials({
-          email: result.data.email,
+          loginId: result.data.loginId,
           temporaryPassword: result.data.temporaryPassword,
         });
       await refresh();
@@ -288,7 +286,7 @@ export function CirclePage() {
           <div className="mt-4 rounded-2xl border border-line bg-paper p-5">
             <h3 className="font-medium">Copy these credentials now</h3>
             <p className="mt-3 text-sm">
-              <strong>{leaderCredentials.email}</strong>
+              <strong>{leaderCredentials.loginId}</strong>
             </p>
             <p className="mt-1 break-all font-mono text-sm">
               {leaderCredentials.temporaryPassword}
@@ -297,7 +295,7 @@ export function CirclePage() {
               className="secondary-button mt-4"
               onClick={() =>
                 void copyText(
-                  `SheepCount email: ${leaderCredentials.email}\nTemporary password: ${leaderCredentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
+                  `Circles Member ID: ${leaderCredentials.loginId}\nTemporary password: ${leaderCredentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
                 )
               }
             >
@@ -316,8 +314,7 @@ export function CirclePage() {
                 <div>
                   <p className="font-medium">{leader.fullName}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {leader.email ||
-                      "Add an email in Ministry Lens before creating access."}
+                    Circles-only Member ID; no SheepCount login access
                   </p>
                 </div>
                 {hasAccess ? (
@@ -351,14 +348,14 @@ export function CirclePage() {
           <div className="empty-state">
             <UsersRound />
             <h2>
-              {canCreateFirstCircle
+              {data.currentUser.isApprovedLeader
                 ? "Start your Circle"
                 : isAdmin
                   ? "No Circles yet"
                   : "No Circle assigned"}
             </h2>
             <p>
-              {canCreateFirstCircle
+              {data.currentUser.isApprovedLeader
                 ? "Your leadership approval is ready. Create your first Circle when you are ready to gather your group."
                 : isAdmin
                   ? "Approve a Cell Group Leader in Ministry Lens, then create their Circle when they are ready."
@@ -386,7 +383,7 @@ export function CirclePage() {
             <h1>All Circles</h1>
             <p>Choose a Circle to see its people, place, and gatherings.</p>
           </div>
-          {data.currentUser.role === "admin" && (
+          {canCreateCircle && (
             <button
               className="primary-button"
               onClick={() => setCreatingCircle(true)}
@@ -520,7 +517,7 @@ export function CirclePage() {
   };
   const manageAccount = async (
     member: Member,
-    action: "provision" | "reset" | "replace" | "promote",
+    action: "provision" | "reset" | "replace" | "provisionLeader",
   ) => {
     if (!supabase) return;
     setAccountBusy(member.id);
@@ -545,15 +542,15 @@ export function CirclePage() {
       }
       setAccessNeedsRefresh(true);
       setAccessMessageKind("success");
-      if (action === "promote") {
+      if (action === "provisionLeader") {
         setAccessMessage(
-          result.data.linkedExisting
-            ? "Leadership approved. Their existing SheepCount account is now linked."
-            : "Leadership approved. Copy the new SheepCount credentials now.",
+          result.data.alreadyExists
+            ? "Leadership approved. Their Circles-only login remains active."
+            : "Leadership approved. Copy the new Circles Member ID now.",
         );
         if (result.data.temporaryPassword)
           setCredentials({
-            login: result.data.email,
+            login: result.data.loginId,
             temporaryPassword: result.data.temporaryPassword,
             kind: "leader",
           });
@@ -880,7 +877,7 @@ export function CirclePage() {
                       {accessMember.account?.status === "active"
                         ? accessMember.account.kind === "generated"
                           ? "Member ID"
-                          : "SheepCount linked"
+                          : "Legacy Circles login"
                         : "No account"}
                     </span>
                   </div>
@@ -893,7 +890,7 @@ export function CirclePage() {
                     {accessMember.account?.status === "active"
                       ? accessMember.account.kind === "generated"
                         ? "This temporary member login can be reset by their Circle leader."
-                        : "This person signs in with their normal SheepCount email and password."
+                        : "This legacy login is restricted to Circles and should be replaced with a Member ID."
                       : "Create a Member ID so this person can participate in Circles."}
                   </p>
                   {accessMember.account?.status === "active" &&
@@ -929,14 +926,15 @@ export function CirclePage() {
                         <p className="text-xs leading-5 text-muted">
                           If this SheepCount account was linked by mistake,
                           replace only its Circles access with a new Member ID.
-                          The original SheepCount account will not be deleted.
+                          The original auth identity will not be deleted, but
+                          non-admin accounts have no SheepCount organization access.
                         </p>
                         <button
                           className="secondary-button mt-3"
                           disabled={accountBusy === accessMember.id}
                           onClick={() =>
                             window.confirm(
-                              `Replace ${accessMember.fullName}’s linked Circles login with a new Member ID? Their existing SheepCount account will remain intact but will no longer represent this People record in Circles.`,
+                              `Replace ${accessMember.fullName}’s legacy Circles login with a new Member ID? The old auth identity will remain intact but will no longer represent this People record in Circles.`,
                             ) && void manageAccount(accessMember, "replace")
                           }
                         >
@@ -964,7 +962,7 @@ export function CirclePage() {
                         <div>
                           <span className="text-xs text-muted">
                             {credentials.kind === "leader"
-                              ? "SheepCount email"
+                              ? "Circles Member ID"
                               : "Member ID"}
                           </span>
                           <strong className="mt-1 block break-all font-mono">
@@ -984,7 +982,7 @@ export function CirclePage() {
                         className="primary-button mt-4 w-full"
                         onClick={() =>
                           void copyText(
-                            `${credentials.kind === "leader" ? "SheepCount email" : "Circles Member ID"}: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
+                            `Circles Member ID: ${credentials.login}\nTemporary password: ${credentials.temporaryPassword}\nSign in: ${window.location.origin}/sign-in`,
                           )
                         }
                       >
@@ -1071,8 +1069,8 @@ export function CirclePage() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-muted">
-                    Approval converts a generated Member ID to SheepCount email
-                    credentials. It does not remove this person from{" "}
+                    Approval keeps this account Circles-only. It never grants a
+                    SheepCount login. It does not remove this person from{" "}
                     {data.group.name} or give access to another Circle until an
                     admin assigns one.
                   </p>
@@ -1082,13 +1080,12 @@ export function CirclePage() {
                         className="primary-button mt-4"
                         disabled={
                           accountBusy === accessMember.id ||
-                          !accessMember.discipleshipBadge ||
-                          !accessMember.email
+                          !accessMember.discipleshipBadge
                         }
                         onClick={() =>
                           window.confirm(
-                            `Approve ${accessMember.fullName} for Circle leadership and convert their login to SheepCount credentials?`,
-                          ) && void manageAccount(accessMember, "promote")
+                            `Approve ${accessMember.fullName} for leadership with a Circles-only Member ID?`,
+                          ) && void manageAccount(accessMember, "provisionLeader")
                         }
                       >
                         {accountBusy === accessMember.id
@@ -1100,13 +1097,6 @@ export function CirclePage() {
                     !accessMember.discipleshipBadge && (
                       <p className="mt-3 text-xs text-muted">
                         Award the Discipleship badge first.
-                      </p>
-                    )}
-                  {data.currentUser.role === "admin" &&
-                    accessMember.discipleshipBadge &&
-                    !accessMember.email && (
-                      <p className="mt-3 text-xs text-muted">
-                        Add an email to this person’s SheepCount record first.
                       </p>
                     )}
                 </div>

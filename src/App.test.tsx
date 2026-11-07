@@ -69,6 +69,23 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Primary leader")).not.toBeInTheDocument();
   });
+  it("lets an approved leader create another Circle", async () => {
+    const data = structuredClone(demoData) as typeof demoData & {
+      currentUser: typeof demoData.currentUser & { isApprovedLeader: boolean };
+    };
+    data.currentUser.role = "leader";
+    data.currentUser.isApprovedLeader = true;
+
+    renderWithData("/circles", data);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create a Circle" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Create your Circle" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Primary leader")).not.toBeInTheDocument();
+  });
   it("lets an admin create Circles access for an approved ungrouped leader", async () => {
     const data = structuredClone(demoData);
     data.groups = [];
@@ -425,7 +442,7 @@ describe("Circles MVP", () => {
       screen.queryByRole("button", { name: "I’m going" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Save attendance" }),
+      screen.getByRole("button", { name: "Save draft" }),
     ).toBeEnabled();
   });
 
@@ -442,21 +459,19 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
   });
 
-  it("requires saved attendance before completing an ended gathering", async () => {
+  it("completes an ended gathering atomically", async () => {
     renderApp("/gatherings/meeting-3");
 
     expect(screen.getByText("Attendance needs review")).toBeInTheDocument();
     const complete = screen.getByRole("button", { name: "Complete gathering" });
-    expect(complete).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Save attendance" }));
-    await waitFor(() => expect(complete).toBeEnabled());
+    expect(complete).toBeEnabled();
     fireEvent.click(complete);
     expect(
       screen.getByRole("dialog", { name: "Complete this gathering?" }),
     ).toBeInTheDocument();
   });
 
-  it("makes completed attendance read-only until the gathering is reopened", () => {
+  it("keeps a completed gathering locked when no correction window is available", () => {
     const data = structuredClone(demoData);
     data.meetings[2].status = "completed";
 
@@ -466,18 +481,18 @@ describe("Circles MVP", () => {
       .getAllByRole("checkbox")
       .forEach((checkbox) => expect(checkbox).toBeDisabled());
     expect(
-      screen.queryByRole("button", { name: "Save attendance" }),
+      screen.queryByRole("button", { name: "Save corrections" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Reopen gathering" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Reopen gathering" }),
+    ).not.toBeInTheDocument();
   });
-  it("separates saving attendance from completing a future gathering", () => {
+  it("keeps closeout controls unavailable before a gathering starts", () => {
     renderApp("/gatherings/meeting-1");
 
     expect(
-      screen.getByRole("button", { name: "Save attendance" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Save draft" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(
         /Attendance becomes available when the gathering begins/i,
@@ -680,12 +695,12 @@ describe("Circles MVP", () => {
     fireEvent.click(
       screen.getAllByRole("button", { name: "Manage access" })[0],
     );
-    expect(screen.getByText("SheepCount linked")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Circles login")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create new Member ID" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/original SheepCount account will not be deleted/i),
+      screen.getByText(/original auth identity will not be deleted/i),
     ).toBeInTheDocument();
   });
   it("shows an overview before opening a Circle", () => {
@@ -1055,7 +1070,7 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
     expect(screen.getByLabelText("Destination")).toHaveValue("");
   });
-  it("registers a new walk-in from gathering attendance", async () => {
+  it("stages a newcomer for gathering closeout", async () => {
     const data = structuredClone(demoData);
     data.meetings[0].meetingDate = new Date(
       Date.now() - 60 * 60 * 1000,
@@ -1064,24 +1079,22 @@ describe("Circles MVP", () => {
       Date.now() + 60 * 60 * 1000,
     ).toISOString();
     renderWithData("/gatherings/meeting-1", data);
-    fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
-    fireEvent.change(screen.getByLabelText("Full name"), {
-      target: { value: "Jamie Walkin" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add visitor" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add newcomer" }));
+    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Jamie" } });
+    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Walkin" } });
+    fireEvent.change(screen.getByLabelText("Birthdate"), { target: { value: "1998-06-14" } });
+    const dialog = screen.getByRole("dialog", { name: "Add a newcomer" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add newcomer" }));
     expect(
       await screen.findByText(
-        "Jamie Walkin was added and selected. Save attendance to record that they came.",
+        "Jamie Walkin is staged. Save the closeout to match or create their Prospect record.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Jamie Walkin")).toBeInTheDocument();
-    expect(screen.getByText("Visitor")).toBeInTheDocument();
-    expect(
-      screen.getByRole("checkbox", { name: /Jamie Walkin/ }),
-    ).toBeChecked();
+    expect(screen.getByText("Staged newcomer")).toBeInTheDocument();
   });
 
-  it("quick-adds multiple name-only visitors without closing the dialog", async () => {
+  it("quick-adds multiple newcomers without closing the dialog", async () => {
     const data = structuredClone(demoData);
     data.meetings[0].meetingDate = new Date(
       Date.now() - 60 * 60 * 1000,
@@ -1090,17 +1103,19 @@ describe("Circles MVP", () => {
       Date.now() + 60 * 60 * 1000,
     ).toISOString();
     renderWithData("/gatherings/meeting-1", data);
-    fireEvent.click(await screen.findByRole("button", { name: "Add walk-in" }));
-    const fullName = screen.getByLabelText("Full name");
-    fireEvent.change(fullName, { target: { value: "Alex Visitor" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Add newcomer" }));
+    const firstName = screen.getByLabelText("First name");
+    fireEvent.change(firstName, { target: { value: "Alex" } });
+    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Visitor" } });
+    fireEvent.change(screen.getByLabelText("Birthdate"), { target: { value: "1995-04-18" } });
     fireEvent.click(screen.getByRole("button", { name: "Add another" }));
 
     expect(await screen.findByText("Alex Visitor")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Add a walk-in visitor" }),
+      screen.getByRole("heading", { name: "Add a newcomer" }),
     ).toBeInTheDocument();
-    expect(fullName).toHaveValue("");
-    expect(fullName).toHaveFocus();
+    expect(firstName).toHaveValue("");
+    expect(firstName).toHaveFocus();
   });
   it("keeps the post-RSVP public journey read-only", async () => {
     renderApp("/ministry-lens-church/gatherings/rooted-in-grace?browse=1");

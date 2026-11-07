@@ -13,8 +13,7 @@ import {
   deleteGatheringReflection,
   placeCellGroupSignup,
   saveMeeting,
-  setGatheringCompletion,
-  stageWalkIn,
+  saveGatheringCloseout,
   resolveCurrentUserRole,
 } from "./circles";
 
@@ -71,34 +70,56 @@ describe("saveMeeting", () => {
   });
 });
 
-describe("stageWalkIn", () => {
-  it("allows a name-only visitor and returns no connection", async () => {
+describe("saveGatheringCloseout", () => {
+  it("saves newcomers, private notes, and finalization in one request", async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: { guestRsvpId: "guest-1", connectionId: null },
+      data: {
+        saved: true,
+        status: "completed",
+        personIds: ["person-1", "prospect-1"],
+        guestRsvpIds: ["guest-1"],
+        attendees: [],
+        notes: "  Follow up next week.  ",
+        finalizedAt: "2026-11-07T00:00:00.000Z",
+        editableUntil: "2026-11-14T00:00:00.000Z",
+        canEdit: true,
+      },
       error: null,
     });
 
-    const result = await stageWalkIn(
+    const result = await saveGatheringCloseout(
       { rpc } as unknown as SupabaseClient,
       "gathering-1",
       {
-        name: "  Jamie Walkin  ",
-        email: "",
-        phone: "",
-        preferredContact: "either",
-        consent: false,
+        personIds: ["person-1"],
+        guestRsvpIds: ["guest-1"],
+        newcomers: [
+          {
+            firstName: " Jamie ",
+            lastName: " Rivera ",
+            birthdate: "1998-06-14",
+          },
+        ],
+        notes: "  Follow up next week.  ",
+        complete: true,
       },
     );
 
-    expect(rpc).toHaveBeenCalledWith("stage_circle_walk_in", {
+    expect(rpc).toHaveBeenCalledWith("save_circle_gathering_closeout", {
       p_gathering_id: "gathering-1",
-      p_name: "Jamie Walkin",
-      p_email: "",
-      p_phone: "",
-      p_preferred_contact: "either",
-      p_consent: false,
+      p_person_ids: ["person-1"],
+      p_guest_rsvp_ids: ["guest-1"],
+      p_newcomers: [
+        {
+          firstName: "Jamie",
+          lastName: "Rivera",
+          birthdate: "1998-06-14",
+        },
+      ],
+      p_notes: "Follow up next week.",
+      p_complete: true,
     });
-    expect(result).toEqual({ guestRsvpId: "guest-1", connectionId: null });
+    expect(result.status).toBe("completed");
   });
 });
 
@@ -440,23 +461,6 @@ describe("createPrayer", () => {
   });
 });
 
-describe("setGatheringCompletion", () => {
-  it("uses the guarded gathering completion RPC", async () => {
-    const rpc = vi.fn().mockResolvedValue({ error: null });
-
-    await setGatheringCompletion(
-      { rpc } as unknown as SupabaseClient,
-      "gathering-1",
-      true,
-    );
-
-    expect(rpc).toHaveBeenCalledWith("set_circle_gathering_completion", {
-      p_gathering_id: "gathering-1",
-      p_completed: true,
-    });
-  });
-});
-
 describe("loadGatheringAttendance", () => {
   it("loads the persisted leader roster", async () => {
     const rpc = vi.fn().mockResolvedValue({
@@ -464,6 +468,11 @@ describe("loadGatheringAttendance", () => {
         saved: true,
         personIds: ["person-1"],
         guestRsvpIds: ["guest-1"],
+        attendees: [],
+        notes: "Follow up next week.",
+        finalizedAt: "2026-11-07T00:00:00.000Z",
+        editableUntil: "2026-11-14T00:00:00.000Z",
+        canEdit: true,
       },
       error: null,
     });
@@ -478,5 +487,6 @@ describe("loadGatheringAttendance", () => {
     });
     expect(attendance.saved).toBe(true);
     expect(attendance.personIds).toEqual(["person-1"]);
+    expect(attendance.notes).toBe("Follow up next week.");
   });
 });

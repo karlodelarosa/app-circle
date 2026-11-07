@@ -218,6 +218,30 @@ export interface GatheringReflection {
   updatedAt: string;
 }
 
+export interface CloseoutNewcomerInput {
+  firstName: string;
+  lastName: string;
+  birthdate: string;
+}
+
+export interface GatheringCloseoutAttendee {
+  personId: string;
+  fullName: string;
+  isProspect: boolean;
+}
+
+export interface GatheringCloseout {
+  saved: boolean;
+  status: MeetingStatus;
+  personIds: string[];
+  guestRsvpIds: string[];
+  attendees: GatheringCloseoutAttendee[];
+  notes: string;
+  finalizedAt?: string;
+  editableUntil?: string;
+  canEdit: boolean;
+}
+
 export interface Announcement {
   id: string;
   organizationId: string;

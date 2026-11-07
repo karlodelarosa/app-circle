@@ -18,6 +18,8 @@ import type {
   ContentAssignment,
   CellGroupSignup,
   GatheringReflection,
+  CloseoutNewcomerInput,
+  GatheringCloseout,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -927,23 +929,34 @@ export async function loadGatheringAttendance(
     p_gathering_id: gatheringId,
   });
   if (error) throw error;
-  return data as {
-    saved: boolean;
-    personIds: string[];
-    guestRsvpIds: string[];
-  };
+  return data as GatheringCloseout;
 }
 
-export async function setGatheringCompletion(
+export async function saveGatheringCloseout(
   client: SupabaseClient,
   gatheringId: string,
-  completed: boolean,
+  input: {
+    personIds: string[];
+    guestRsvpIds: string[];
+    newcomers: CloseoutNewcomerInput[];
+    notes: string;
+    complete: boolean;
+  },
 ) {
-  const { error } = await client.rpc("set_circle_gathering_completion", {
+  const { data, error } = await client.rpc("save_circle_gathering_closeout", {
     p_gathering_id: gatheringId,
-    p_completed: completed,
+    p_person_ids: input.personIds,
+    p_guest_rsvp_ids: input.guestRsvpIds,
+    p_newcomers: input.newcomers.map((newcomer) => ({
+      firstName: newcomer.firstName.trim(),
+      lastName: newcomer.lastName.trim(),
+      birthdate: newcomer.birthdate,
+    })),
+    p_notes: input.notes.trim(),
+    p_complete: input.complete,
   });
   if (error) throw error;
+  return data as GatheringCloseout;
 }
 
 export async function loadGuestConnections(

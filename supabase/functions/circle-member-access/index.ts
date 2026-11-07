@@ -109,10 +109,10 @@ Deno.serve(async (request) => {
         : {};
     if (
       typeof action !== "string" ||
-      !["provision", "reset", "replace", "promote"].includes(action) ||
+      !["provision", "reset", "replace", "provisionLeader"].includes(action) ||
       typeof personId !== "string" ||
       !personId ||
-      (action !== "promote" && (typeof groupId !== "string" || !groupId))
+      (action !== "provisionLeader" && (typeof groupId !== "string" || !groupId))
     )
       return json({ error: "Invalid request" }, 400);
     auditAction = `account.${action}`;
@@ -125,7 +125,7 @@ Deno.serve(async (request) => {
     } | null = null;
     let organizationId: string;
 
-    if (action === "promote") {
+    if (action === "provisionLeader") {
       const personResult = await service
         .from("people")
         .select("organization_id,first_name,last_name,email,status")
@@ -211,7 +211,7 @@ Deno.serve(async (request) => {
       .eq("person_id", personId)
       .maybeSingle();
 
-    if (action === "replace") {
+    if (action === "replace" || (action === "provisionLeader" && current?.account_kind === "existing")) {
       if (!current || current.account_kind !== "existing")
         return json(
           {
@@ -231,15 +231,16 @@ Deno.serve(async (request) => {
           last_name: person.last_name,
           circles_member_id: loginId,
         },
+        app_metadata: { account_scope: "circles" },
       });
       if (created.error || !created.data.user)
         throw created.error || new Error("Account creation failed.");
-      const replaced = await callerClient.rpc("replace_circle_member_login", {
-        p_cell_group_id: groupId,
-        p_person_id: personId,
-        p_new_user_id: created.data.user.id,
-        p_login_id: loginId,
-      });
+      const replaced = await service.from("circle_user_links").update({
+        user_id: created.data.user.id, account_kind: "generated", login_id: loginId,
+        status: "active", must_change_password: true,
+        provisioned_by: auth.user.id, last_password_reset_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", current.id);
       if (replaced.error) {
         await service.auth.admin.deleteUser(created.data.user.id);
         throw replaced.error;
@@ -250,78 +251,6 @@ Deno.serve(async (request) => {
         loginId,
         temporaryPassword,
         replacedAccount: true,
-      });
-    }
-
-    if (action === "promote") {
-      const realEmail = String(person.email || "")
-        .trim()
-        .toLowerCase();
-      if (!realEmail)
-        return json(
-          {
-            error:
-              "Add a valid email to this SheepCount People record before promotion.",
-          },
-          400,
-        );
-      let targetUser = await findUserByEmail(service, realEmail);
-      let temporaryPassword: string | undefined;
-      let createdUser = false;
-      if (!targetUser) {
-        temporaryPassword = randomPassword();
-        const created = await service.auth.admin.createUser({
-          email: realEmail,
-          password: temporaryPassword,
-          email_confirm: true,
-          user_metadata: {
-            first_name: person.first_name,
-            last_name: person.last_name,
-            circles_leader_account: true,
-          },
-        });
-        if (created.error || !created.data.user)
-          throw (
-            created.error ||
-            new Error("The SheepCount account could not be created.")
-          );
-        targetUser = created.data.user;
-        createdUser = true;
-      }
-      const promoted = await callerClient.rpc("promote_circle_leader", {
-        p_person_id: personId,
-        p_new_user_id: targetUser.id,
-        p_old_user_id: current?.user_id ?? null,
-        p_created_new_user: createdUser,
-      });
-      if (promoted.error) {
-        if (createdUser) await service.auth.admin.deleteUser(targetUser.id);
-        throw promoted.error;
-      }
-      let retirementWarning: string | undefined;
-      if (
-        current?.account_kind === "generated" &&
-        current.user_id !== targetUser.id
-      ) {
-        const retired = await service.auth.admin.updateUserById(
-          current.user_id,
-          {
-            ban_duration: "876000h",
-            user_metadata: { circles_member_id_retired: true },
-          },
-        );
-        if (retired.error)
-          retirementWarning =
-            "The old Member ID no longer has Circles access, but its auth login could not be disabled automatically.";
-      }
-      await audit("success");
-      return json({
-        kind: "existing",
-        email: realEmail,
-        temporaryPassword,
-        createdAccount: createdUser,
-        linkedExisting: !createdUser,
-        warning: retirementWarning,
       });
     }
 
@@ -367,16 +296,11 @@ Deno.serve(async (request) => {
     }
 
     let userId: string | undefined;
-    const realEmail = String(person.email || "")
-      .trim()
-      .toLowerCase();
-    if (realEmail) userId = (await findUserByEmail(service, realEmail))?.id;
-    let kind: "existing" | "generated" = "existing";
+    const kind = "generated" as const;
     let loginId: string | null = null;
     let temporaryPassword: string | undefined;
     let createdUser = false;
     if (!userId) {
-      kind = "generated";
       loginId = await createMemberId(service, person.first_name);
       temporaryPassword = randomPassword();
       const created = await service.auth.admin.createUser({
@@ -388,6 +312,7 @@ Deno.serve(async (request) => {
           last_name: person.last_name,
           circles_member_id: loginId,
         },
+        app_metadata: { account_scope: "circles" },
       });
       if (created.error || !created.data.user)
         throw created.error || new Error("Account creation failed.");
@@ -395,25 +320,6 @@ Deno.serve(async (request) => {
       createdUser = true;
     }
     try {
-      const existingMembership = await service
-        .from("organization_members")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-      if (existingMembership.error) throw existingMembership.error;
-      const orgMember = existingMembership.data
-        ? await service
-            .from("organization_members")
-            .update({ status: "active" })
-            .eq("id", existingMembership.data.id)
-        : await service.from("organization_members").insert({
-            user_id: userId,
-            organization_id: organizationId,
-            role: "member",
-            status: "active",
-          });
-      if (orgMember.error) throw orgMember.error;
       const link = await service.from("circle_user_links").insert({
         user_id: userId,
         organization_id: organizationId,
