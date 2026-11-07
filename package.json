@@ -9,7 +9,8 @@
     "build:e2e": "tsc -b && vite build --mode e2e",
     "build:cf": "node scripts/validate-production-env.mjs && npm run build",
     "preview": "npm run build:cf && wrangler dev",
-    "deploy": "npm run build:cf && wrangler deploy",
+    "deploy": "npm run deploy:edge && npm run build:cf && wrangler deploy && npm run verify:public-submit",
+    "deploy:edge": "npx supabase functions deploy --remote=qrmpogczieanpahxxxkc --use-api --yes",
     "upload": "npm run build:cf && wrangler versions upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "preview:vite": "vite preview",
@@ -20,6 +21,7 @@
     "test:e2e": "npm run build:e2e && playwright test",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "db:verify:linked": "node scripts/verify-linked-migrations.mjs",
+    "verify:public-submit": "node scripts/verify-public-submit-deployment.mjs",
     "test:watch": "vitest",
     "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run build && npm run check:bundle"
   },

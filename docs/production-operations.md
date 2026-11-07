@@ -28,6 +28,12 @@ Deploy `circle-public-submit` and set these Supabase Edge Function secrets:
 
 Set `VITE_TURNSTILE_SITE_KEY` in the Cloudflare build environment. The endpoint fails closed when any server secret is missing. Deploy the function before applying the migration that revokes anonymous RPC execution, then deploy the web client.
 
+The production `npm run deploy` command deploys all checked-in Supabase Edge
+Functions before the Cloudflare Worker and finishes with an unauthenticated CORS
+smoke check for `circle-public-submit`. Treat a missing function or a non-204
+preflight response as a failed deployment; otherwise the RSVP form can render
+successfully while every submission fails before reaching the database.
+
 ## Monitoring and alerts
 
 Monitor `GET /healthz` from at least two regions every minute. Alert after two consecutive failures. Route structured Cloudflare and Supabase function logs to the SheepCount log sink and alert on `auth_failure`, `public_submission_rate_limited`, `public_submission_bot_rejected`, `public_submission_failed`, `member_account_operation_failed`, and database health latency above 1,000 ms. Keep request IDs in incident notes.
