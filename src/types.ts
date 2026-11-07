@@ -289,6 +289,8 @@ export interface Gallery {
   photos: GalleryPhoto[];
   assignmentConfirmedAt?: string;
   destinationName?: string;
+  isOrganizationHighlight?: boolean;
+  highlightedAt?: string;
 }
 
 export type ContentAssignmentType =
@@ -363,6 +365,7 @@ export interface AppData {
     prayers: PrayerRequest[];
     announcements: Announcement[];
     galleries: Gallery[];
+    highlights?: Gallery[];
   };
   prayers: PrayerRequest[];
   announcements: Announcement[];

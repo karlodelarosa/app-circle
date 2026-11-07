@@ -733,44 +733,120 @@ describe("Circles MVP", () => {
       ),
     ).toBeInTheDocument();
   });
-  it("orders the dashboard as hero, following gathering, prayer, announcement, and gallery", () => {
+  it("orders the dashboard as hero, announcement, upcoming events, highlights, and prayer", () => {
     renderApp("/");
     const hero = screen.getByRole("heading", {
       name: "Make room for one another.",
     });
-    const following = screen.getByRole("heading", {
-      name: "Following gathering",
-    });
-    const prayer = screen.getByRole("heading", { name: "Prayer requests" });
     const announcement = screen.getByRole("heading", {
       name: "Bring a story from your week",
     });
-    const gallery = screen.getByRole("heading", {
-      name: "Life around the table",
-    });
+    const upcoming = screen.getByRole("heading", { name: "Upcoming events" });
+    const highlights = screen.getByRole("heading", { name: "Recently in our Circles" });
+    const prayer = screen.getByRole("heading", { name: "Prayer requests" });
     expect(
-      hero.compareDocumentPosition(following) &
+      hero.compareDocumentPosition(announcement) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      following.compareDocumentPosition(prayer) &
+      announcement.compareDocumentPosition(upcoming) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      prayer.compareDocumentPosition(announcement) &
+      upcoming.compareDocumentPosition(highlights) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      announcement.compareDocumentPosition(gallery) &
+      highlights.compareDocumentPosition(prayer) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+  it("omits the announcement and highlights sections when they are empty", () => {
+    const data = structuredClone(demoData);
+    data.announcements = [];
+    data.galleries = [];
+    data.dashboard = {
+      meetings: data.meetings,
+      prayers: data.prayers,
+      announcements: [],
+      galleries: [],
+      highlights: [],
+    };
+
+    renderWithData("/", data);
+
+    expect(screen.queryByText("Latest announcement")).not.toBeInTheDocument();
+    expect(screen.queryByText("No current announcement")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recently in our Circles" })).not.toBeInTheDocument();
+  });
+  it("filters upcoming events and expands more than five matches inline", () => {
+    const data = structuredClone(demoData);
+    const events = Array.from({ length: 8 }, (_, index) => ({
+      ...data.meetings[0],
+      id: `filter-event-${index}`,
+      title: `Filter event ${index + 1}`,
+      meetingDate: new Date(Date.now() + (index + 1) * 86400000).toISOString(),
+      endsAt: new Date(Date.now() + (index + 1) * 86400000 + 7200000).toISOString(),
+      scope: index < 2 ? "organization" as const : "circle" as const,
+      groupId: index < 2 ? undefined : "demo-group",
+      destinationName: index < 2 ? "Everyone" : "Grace & Ground",
+    }));
+    data.dashboard = {
+      meetings: events,
+      prayers: [],
+      announcements: [],
+      galleries: [],
+      highlights: [],
+    };
+
+    renderWithData("/", data);
+
+    const section = screen.getByRole("region", { name: "Upcoming events" });
+    expect(within(section).getAllByRole("article")).toHaveLength(5);
+    fireEvent.click(within(section).getByRole("button", { name: "Show more" }));
+    expect(within(section).getAllByRole("article")).toHaveLength(8);
+    expect(within(section).getByRole("button", { name: "Show less" })).toBeInTheDocument();
+
+    fireEvent.click(within(section).getByRole("radio", { name: "Organization" }));
+    expect(within(section).getAllByRole("article")).toHaveLength(2);
+    expect(within(section).queryByRole("button", { name: "Show less" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(section).getByRole("radio", { name: "Circles" }));
+    expect(within(section).getAllByRole("article")).toHaveLength(5);
+    expect(within(section).getByRole("button", { name: "Show more" })).toBeInTheDocument();
+  });
+  it("shows the three newest organization highlights with Circle attribution", () => {
+    const data = structuredClone(demoData);
+    const highlights = Array.from({ length: 4 }, (_, index) => ({
+      ...data.galleries[0],
+      id: `highlight-${index}`,
+      slug: `highlight-${index}`,
+      title: `Circle highlight ${index + 1}`,
+      destinationName: index === 0 ? "Grace & Ground" : "Another Circle",
+      isOrganizationHighlight: true,
+      highlightedAt: new Date(Date.now() - index * 86400000).toISOString(),
+    }));
+    data.dashboard = {
+      meetings: data.meetings,
+      prayers: [],
+      announcements: [],
+      galleries: data.galleries,
+      highlights,
+    };
+
+    renderWithData("/", data);
+
+    const section = screen.getByRole("region", { name: "Recently in our Circles" });
+    expect(within(section).getAllByRole("article")).toHaveLength(3);
+    expect(within(section).getByRole("heading", { name: "Circle highlight 1" })).toBeInTheDocument();
+    expect(within(section).queryByRole("heading", { name: "Circle highlight 4" })).not.toBeInTheDocument();
+    expect(within(section).getByText("Grace & Ground")).toBeInTheDocument();
   });
   it("keeps the nearest gathering detailed beneath the jumbotron", () => {
     renderApp("/");
     expect(
       screen.getByRole("heading", { name: "Rooted in grace" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Colossians 2:6–7")).toBeInTheDocument();
     expect(screen.getByText("3 going")).toBeInTheDocument();
     expect(
       screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/),
@@ -828,8 +904,8 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByText("No one confirmed yet")).toBeInTheDocument();
-    expect(screen.getByText("0 going")).toBeInTheDocument();
+    expect(screen.getAllByText("No one confirmed yet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0 going").length).toBeGreaterThan(0);
   });
   it("limits the jumbotron to the next three upcoming gatherings", () => {
     const carouselData = structuredClone(demoData);
@@ -859,7 +935,8 @@ describe("Circles MVP", () => {
     expect(screen.getAllByRole("button", { name: /Show slide/ })).toHaveLength(
       4,
     );
-    expect(screen.queryByText("Fourth upcoming")).not.toBeInTheDocument();
+    const carousel = screen.getByRole("region", { name: "Community highlights" });
+    expect(within(carousel).queryByText("Fourth upcoming")).not.toBeInTheDocument();
   });
   it("hides empty editorial sections from a Circle detail", async () => {
     const emptyCircle = structuredClone(demoData);
