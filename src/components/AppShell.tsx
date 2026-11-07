@@ -20,6 +20,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "./Avatar";
 import { RouteOutlet, StandaloneRouteBar } from "./RouteExperience";
+import { PwaRefreshController } from "./PwaRefreshController";
 
 export function Brand() {
   return (
@@ -135,7 +136,7 @@ function AccountMenu({
 }
 
 export function AppShell() {
-  const { data, demoMode, signOut, toast } = useCircles();
+  const { data, demoMode, refresh, signOut, toast } = useCircles();
   const { pathname } = useLocation();
   if (!data) return null;
   const base = "/";
@@ -178,6 +179,7 @@ export function AppShell() {
         : "/";
   return (
     <div className="min-h-screen bg-parchment text-ink">
+      <PwaRefreshController refresh={refresh} />
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-paper/95 px-6 py-7 lg:flex lg:flex-col">
         <Link to={isMember ? memberHome : "/"}>
           <Brand />

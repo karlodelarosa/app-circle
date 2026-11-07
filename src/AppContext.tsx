@@ -22,7 +22,7 @@ interface AppContextValue {
   error: string | null;
   demoMode: boolean;
   toast: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectGroup: (groupId: string) => Promise<void>;
@@ -73,7 +73,7 @@ export function AppProvider({
   const sessionUserId = session?.user.id;
   const sessionEmail = session?.user.email ?? "";
   const refresh = useCallback(async () => {
-    if (!supabase || !sessionUserId) return;
+    if (!supabase || !sessionUserId) return false;
     setError(null);
     try {
       const next = await api.loadAppData(
@@ -84,12 +84,14 @@ export function AppProvider({
       next.currentUser.email = sessionEmail;
       setData(next);
       setSelectedGroupId(next.group?.id);
+      return true;
     } catch (cause) {
       setError(
         !navigator.onLine
           ? "You’re offline. The Circles shell is available, but private group data needs a connection. Reconnect and try again."
           : getErrorMessage(cause, "Circles could not load your group."),
       );
+      return false;
     } finally {
       setLoading(false);
     }

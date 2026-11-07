@@ -19,6 +19,7 @@ vi.mock("./services/circles", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./services/circles")>()),
   createPrayer: vi.fn(),
   loadAppData: vi.fn(),
+  setPrayerClick: vi.fn(),
 }));
 
 const testSession = {
@@ -46,6 +47,19 @@ function FailedPrayerHarness() {
         }}
       >
         Share elsewhere
+      </button>
+    </div>
+  );
+}
+
+function PrayerToggleHarness() {
+  const { togglePrayer, data } = useCircles();
+  const prayer = data?.prayers.find((item) => item.id === "prayer-2");
+  return (
+    <div>
+      <output>{prayer ? `${prayer.prayerCount}:${prayer.prayedByMe}` : "missing"}</output>
+      <button onClick={() => void togglePrayer("prayer-2").catch(() => undefined)}>
+        I prayed
       </button>
     </div>
   );
@@ -79,5 +93,27 @@ describe("AppProvider prayer destinations", () => {
     await waitFor(() => expect(circlesApi.createPrayer).toHaveBeenCalled());
     expect(screen.getByText(data.group!.name)).toBeInTheDocument();
     expect(circlesApi.loadAppData).not.toHaveBeenCalled();
+  });
+
+  it("optimistically updates the anonymous total and rolls it back on failure", async () => {
+    const data = structuredClone(demoData);
+    let rejectSave: ((reason: Error) => void) | undefined;
+    vi.mocked(circlesApi.loadAppData).mockResolvedValue(data);
+    vi.mocked(circlesApi.setPrayerClick).mockImplementationOnce(
+      () => new Promise<void>((_resolve, reject) => { rejectSave = reject; }),
+    );
+
+    render(
+      <AppProvider initialData={data} initialSession={testSession}>
+        <PrayerToggleHarness />
+      </AppProvider>,
+    );
+    await waitFor(() => expect(circlesApi.loadAppData).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "I prayed" }));
+    expect(screen.getByText("13:true")).toBeInTheDocument();
+
+    rejectSave?.(new Error("Could not save prayer click"));
+    await waitFor(() => expect(screen.getByText("12:false")).toBeInTheDocument());
   });
 });

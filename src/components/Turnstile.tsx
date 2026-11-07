@@ -37,9 +37,17 @@ function loadTurnstile() {
   return loader;
 }
 
-export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
-  const testMode = import.meta.env.MODE === "test";
+export function Turnstile({
+  onToken,
+  siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "",
+  testMode = import.meta.env.MODE === "test",
+  loadApi = loadTurnstile,
+}: {
+  onToken: (token: string) => void;
+  siteKey?: string;
+  testMode?: boolean;
+  loadApi?: () => Promise<void>;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const statusId = useId();
   const [failed, setFailed] = useState(!siteKey && !testMode);
@@ -52,7 +60,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
     if (!siteKey || !container.current) return;
     let active = true;
     let widgetId: string | undefined;
-    void loadTurnstile()
+    void loadApi()
       .then(() => {
         if (!active || !container.current || !window.turnstile) return;
         widgetId = window.turnstile.render(container.current, {
@@ -75,7 +83,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
       onToken("");
     };
-  }, [onToken, siteKey, testMode]);
+  }, [loadApi, onToken, siteKey, testMode]);
 
   return (
     <div aria-describedby={statusId}>

@@ -3,6 +3,27 @@ import { vi } from "vitest";
 import { Modal } from "./Modal";
 
 describe("Modal", () => {
+  it("portals the dialog to the document body with a dedicated scroll region", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    const { unmount } = render(
+      <Modal title="Long form" onClose={vi.fn()}>
+        <div>Form fields</div>
+      </Modal>,
+      { container: host },
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const scrollRegion = screen.getByRole("document", { name: "Long form content" });
+    expect(dialog.parentElement).toBe(document.body);
+    expect(scrollRegion).toHaveClass("modal-scroll-region");
+
+    unmount();
+    host.remove();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("traps keyboard focus and restores the opener on close", () => {
     const onClose = vi.fn();
     const opener = document.createElement("button");
