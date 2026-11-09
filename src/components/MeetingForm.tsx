@@ -8,9 +8,11 @@ import type { Meeting } from "../types";
 
 export function MeetingForm({
   meeting,
+  fixedGroupId,
   onDone,
 }: {
   meeting?: Meeting;
+  fixedGroupId?: string;
   onDone: () => void;
 }) {
   const { data, saveMeeting } = useCircles();
@@ -20,10 +22,10 @@ export function MeetingForm({
   const hasSingleLeaderDestination =
     data?.currentUser.role !== "admin" && manageableGroups.length === 1;
   const [scope, setScope] = useState<"circle" | "organization">(
-    meeting?.scope ?? "circle",
+    fixedGroupId ? "circle" : meeting?.scope ?? "circle",
   );
   const [groupId, setGroupId] = useState(
-    meeting?.groupId ?? (hasSingleLeaderDestination ? manageableGroups[0].id : ""),
+    fixedGroupId ?? meeting?.groupId ?? (hasSingleLeaderDestination ? manageableGroups[0].id : ""),
   );
   const [title, setTitle] = useState(meeting?.title ?? "");
   const [meetingDate, setMeetingDate] = useState(
@@ -105,6 +107,14 @@ export function MeetingForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="rounded-2xl border border-olive/20 bg-parchment p-4">
+        {fixedGroupId ? (
+          <div>
+            <span className="field-label">Circle</span>
+            <p className="mt-2 text-sm font-medium">
+              {manageableGroups.find((group) => group.id === fixedGroupId)?.name ?? "Current Circle"}
+            </p>
+          </div>
+        ) : (
         <fieldset disabled={Boolean(meeting)}>
           <legend className="field-label">Who is this gathering for?</legend>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -130,7 +140,8 @@ export function MeetingForm({
             </label>
           </div>
         </fieldset>
-        {scope === "circle" && (
+        )}
+        {!fixedGroupId && scope === "circle" && (
         <label className="field-label">
           Destination Circle
           <select
@@ -148,7 +159,9 @@ export function MeetingForm({
         </label>
         )}
         <p className="mt-2 text-xs leading-5 text-muted">
-          {meeting
+          {fixedGroupId
+            ? "This gathering will be scheduled for this Circle."
+            : meeting
             ? "Existing gatherings are reassigned from Publish → Content assignments."
             : scope === "organization"
               ? "Everyone in the organization can see this gathering. Public access still follows the visibility setting below."

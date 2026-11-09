@@ -10,16 +10,18 @@ import {
   Images,
   Megaphone,
   MessageCircle,
+  MoreHorizontal,
   Pencil,
   Quote,
   UserPlus,
   UsersRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
+import { MeetingForm } from "../components/MeetingForm";
 import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
 import { formatDate } from "../lib/format";
@@ -43,6 +45,7 @@ export function CirclePage() {
     refresh,
   } = useCircles();
   const { circleId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [managingPeople, setManagingPeople] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const [accessMemberId, setAccessMemberId] = useState<string | null>(null);
@@ -77,7 +80,8 @@ export function CirclePage() {
   const [leaderAccessBusy, setLeaderAccessBusy] = useState<string | null>(null);
   const [leaderAccessMessage, setLeaderAccessMessage] = useState("");
   const [leaderAccessError, setLeaderAccessError] = useState(false);
-  const [showAllGatherings, setShowAllGatherings] = useState(false);
+  const [circleMenuOpen, setCircleMenuOpen] = useState(false);
+  const [schedulingGathering, setSchedulingGathering] = useState(false);
   const [leaderCredentials, setLeaderCredentials] = useState<{
     loginId: string;
     temporaryPassword: string;
@@ -707,9 +711,7 @@ export function CirclePage() {
         ),
     )
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
-  const visiblePreviousGatherings = showAllGatherings
-    ? previousGatherings
-    : previousGatherings.slice(0, 5);
+  const activeTab = searchParams.get("tab") === "history" ? "history" : "overview";
   const circleLeader = data.members.find(
     (member) => member.role === "leader" || member.id === activeGroup.leaderId,
   );
@@ -741,49 +743,135 @@ export function CirclePage() {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canManagePeople && (
-            <button
-              className="secondary-button"
-              onClick={() => {
-                setEditCircleError("");
-                setEditCircleForm({
-                  name: activeGroup.name,
-                  description: activeGroup.description,
-                  location: activeGroup.location,
-                });
-                setEditingCircle(true);
-              }}
-            >
-              <Pencil size={16} /> Edit Circle details
+        <div className="flex items-center gap-2">
+          {canManagePeople && (nextGathering ? (
+            <Link className="primary-button" to={`/gatherings/${nextGathering.id}`}>
+              View next gathering <ChevronRight size={16} />
+            </Link>
+          ) : (
+            <button className="primary-button" onClick={() => setSchedulingGathering(true)}>
+              <Plus size={16} /> Schedule gathering
             </button>
-          )}
-          <Link className="secondary-button" to="/circles">
-            View all Circles
-          </Link>
+          ))}
+          <div className="relative">
+            <button
+              className="icon-button"
+              aria-label="Circle actions"
+              aria-haspopup="menu"
+              aria-expanded={circleMenuOpen}
+              onClick={() => setCircleMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal size={20} />
+            </button>
+            {circleMenuOpen && (
+              <div className="action-menu" role="menu">
+                {canManagePeople && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setEditCircleError("");
+                      setEditCircleForm({
+                        name: activeGroup.name,
+                        description: activeGroup.description,
+                        location: activeGroup.location,
+                      });
+                      setCircleMenuOpen(false);
+                      setEditingCircle(true);
+                    }}
+                  >
+                    <Pencil size={16} /> Edit Circle details
+                  </button>
+                )}
+                <Link role="menuitem" to="/circles" onClick={() => setCircleMenuOpen(false)}>
+                  View all Circles
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {editCircleModal}
-      <section className="mt-8 flex flex-col gap-5 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
+      {schedulingGathering && (
+        <Modal title="Schedule gathering" onClose={() => setSchedulingGathering(false)}>
+          <MeetingForm fixedGroupId={activeGroup.id} onDone={() => setSchedulingGathering(false)} />
+        </Modal>
+      )}
+      <div className="mt-8 flex border-b border-line" role="tablist" aria-label="Circle details">
+        <button
+          role="tab"
+          aria-selected={activeTab === "overview"}
+          className={`tab-button ${activeTab === "overview" ? "tab-button-active" : ""}`}
+          onClick={() => setSearchParams({})}
+        >
+          Overview
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "history"}
+          className={`tab-button ${activeTab === "history" ? "tab-button-active" : ""}`}
+          onClick={() => setSearchParams({ tab: "history" })}
+        >
+          Previous gatherings
+        </button>
+      </div>
+      {activeTab === "history" && (
+        <section className="mt-8 border-b border-line pb-8">
+          <div className="section-heading">
+            <div>
+              <h2>Previous gatherings</h2>
+              <p>Gatherings and closeout status for this Circle.</p>
+            </div>
+          </div>
+          {previousGatherings.length ? (
+            <div className="divide-y divide-line border-y border-line">
+              {previousGatherings.map((meeting) => {
+                const lifecycle = gatheringLifecycle(meeting);
+                const status = lifecycle === "completed"
+                  ? "Completed"
+                  : lifecycle === "cancelled"
+                    ? "Cancelled"
+                    : "Attendance pending";
+                return (
+                  <Link
+                    key={meeting.id}
+                    to={`/gatherings/${meeting.id}`}
+                    className="flex items-center gap-4 py-5 hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive"
+                  >
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sage text-olive"><History size={17} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="text-xs text-muted">{formatDate(meeting.meetingDate, { month: "long", day: "numeric", year: "numeric" })}</span>
+                      <span className="mt-1 block font-display text-2xl text-ink">{meeting.title}</span>
+                      <span className="mt-1 block text-sm text-muted">{meeting.studyTopic}</span>
+                    </span>
+                    <span className="status-badge shrink-0">{status}</span>
+                    <ChevronRight size={17} aria-hidden="true" />
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="border-y border-line py-8 text-sm text-muted">No previous gatherings yet.</p>
+          )}
+        </section>
+      )}
+      <div hidden={activeTab !== "overview"}>
+      {nextGathering && <section className="mt-8 flex flex-col gap-5 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs text-olive">Next gathering</p>
           <h2 className="mt-1 font-display text-3xl">
-            {nextGathering?.title || "Nothing scheduled yet"}
+            {nextGathering.title}
           </h2>
           <p className="mt-2 text-sm text-muted">
-            {nextGathering
-              ? `${new Date(nextGathering.meetingDate).toLocaleDateString(undefined, { month: "long", day: "numeric" })} · ${nextGathering.location}`
-              : "The next date will appear here when it is planned."}
+            {`${new Date(nextGathering.meetingDate).toLocaleDateString(undefined, { month: "long", day: "numeric" })} · ${nextGathering.location}`}
           </p>
         </div>
         <Link
           className="primary-button"
-          to={nextGathering ? `/gatherings/${nextGathering.id}` : "/gatherings"}
+          to={`/gatherings/${nextGathering.id}`}
         >
-          {nextGathering ? "View gathering" : "View gatherings"}{" "}
-          <ChevronRight size={16} />
+          View gathering <ChevronRight size={16} />
         </Link>
-      </section>
+      </section>}
       {latestCompletedMeeting && (
         <section className="mt-8 grid gap-5 border-b border-line pb-8 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-sage text-olive">
@@ -809,63 +897,6 @@ export function CirclePage() {
           >
             Continue {latestCompletedMeeting.title} <ChevronRight size={16} />
           </Link>
-        </section>
-      )}
-      {previousGatherings.length > 0 && (
-        <section className="mt-8 border-b border-line pb-8">
-          <div className="section-heading">
-            <div>
-              <h2>Previous gatherings</h2>
-              <p>Recent gatherings and closeout status for this Circle.</p>
-            </div>
-          </div>
-          <div className="divide-y divide-line border-y border-line">
-            {visiblePreviousGatherings.map((meeting) => {
-              const lifecycle = gatheringLifecycle(meeting);
-              const status =
-                lifecycle === "completed"
-                  ? "Completed"
-                  : lifecycle === "cancelled"
-                    ? "Cancelled"
-                    : "Attendance pending";
-              return (
-                <Link
-                  key={meeting.id}
-                  to={`/gatherings/${meeting.id}`}
-                  className="flex items-center gap-4 py-5 hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive"
-                >
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sage text-olive">
-                    <History size={17} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="text-xs text-muted">
-                      {formatDate(meeting.meetingDate, {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <span className="mt-1 block font-display text-2xl text-ink">
-                      {meeting.title}
-                    </span>
-                    <span className="mt-1 block text-sm text-muted">
-                      {meeting.studyTopic}
-                    </span>
-                  </span>
-                  <span className="status-badge shrink-0">{status}</span>
-                  <ChevronRight size={17} aria-hidden="true" />
-                </Link>
-              );
-            })}
-          </div>
-          {previousGatherings.length > 5 && !showAllGatherings && (
-            <button
-              className="secondary-button mt-5"
-              onClick={() => setShowAllGatherings(true)}
-            >
-              View all previous gatherings
-            </button>
-          )}
         </section>
       )}
       {latestAnnouncement && (
@@ -1022,6 +1053,7 @@ export function CirclePage() {
             <UserPlus size={17} /> Add people
           </button>
         )}
+      </div>
       </div>
       {managingPeople && (
         <Modal
