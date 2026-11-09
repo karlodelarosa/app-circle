@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import App from "./App";
 import { AppProvider } from "./AppContext";
@@ -47,6 +47,16 @@ const renderWithData = (path: string, data: typeof demoData) =>
       </AppProvider>
     </MemoryRouter>,
   );
+
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output data-testid="location">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
+}
 
 describe("Circles MVP", () => {
   it("lets an approved leader without a group create their first Circle", async () => {
@@ -630,6 +640,26 @@ describe("Circles MVP", () => {
       screen.queryByRole("link", { name: "Continue in demo mode" }),
     ).not.toBeInTheDocument();
   });
+  it("preserves a complete prayer link through sign-in", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/prayer?circle=demo-group&tab=answered&prayer=prayer-2",
+        ]}
+      >
+        <AppProvider initialData={null} initialSession={null}>
+          <App />
+          <LocationProbe />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/sign-in?next=%2Fprayer%3Fcircle%3Ddemo-group%26tab%3Danswered%26prayer%3Dprayer-2",
+      ),
+    );
+  });
   it("shows leader gathering controls and prayer navigation", () => {
     renderApp("/gatherings");
     expect(
@@ -708,6 +738,118 @@ describe("Circles MVP", () => {
     expect(
       within(card!).getByRole("button", { name: "Mark as answered" }),
     ).toBeInTheDocument();
+  });
+  it("restores a shared prayer board tab from the authenticated URL", () => {
+    renderApp("/prayer?circle=demo-group&tab=answered");
+
+    expect(
+      screen.getByRole("heading", { name: "A gentle answer" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Wisdom for a new season" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Answered" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+  it("switches to an accessible Circle and focuses a shared prayer", async () => {
+    const data = structuredClone(demoData);
+    data.groups.push({
+      ...data.groups[0],
+      id: "second-circle",
+      name: "Second Circle",
+    });
+    data.prayers.push({
+      ...data.prayers[0],
+      id: "second-circle-prayer",
+      groupId: "second-circle",
+      destinationName: "Second Circle",
+      title: "Prayer in the second Circle",
+    });
+
+    renderWithData(
+      "/prayer?circle=second-circle&tab=in-prayer&prayer=second-circle-prayer",
+      data,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Prayer in the second Circle",
+    });
+    const card = heading.closest("article");
+    expect(card).toHaveClass("ring-2", "ring-olive");
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(
+      screen.queryByRole("heading", { name: "Wisdom for a new season" }),
+    ).not.toBeInTheDocument();
+  });
+  it("reveals no prayer details for an unavailable shared Circle", () => {
+    renderApp("/prayer?circle=unknown-circle&tab=in-prayer&prayer=prayer-1");
+
+    expect(
+      screen.getByRole("heading", { name: "Prayer unavailable" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Wisdom for a new season" }),
+    ).not.toBeInTheDocument();
+  });
+  it("shares the current board and a specific prayer with private URLs", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "share", {
+      value: share,
+      configurable: true,
+    });
+    renderApp("/prayer");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Share prayer board" }),
+    );
+    await waitFor(() =>
+      expect(share).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining(
+            "/prayer?circle=demo-group&tab=in-prayer",
+          ),
+        }),
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Share Wisdom for a new season",
+      }),
+    );
+    await waitFor(() =>
+      expect(share).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining(
+            "circle=demo-group&tab=in-prayer&prayer=prayer-1",
+          ),
+        }),
+      ),
+    );
+    Reflect.deleteProperty(window.navigator, "share");
+  });
+  it("copies a prayer-board link when native sharing is unavailable", async () => {
+    Reflect.deleteProperty(window.navigator, "share");
+    const writeText = vi.mocked(window.navigator.clipboard.writeText);
+    writeText.mockClear();
+    renderApp("/prayer?circle=demo-group&tab=answered");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Share prayer board" }),
+    );
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "/prayer?circle=demo-group&tab=answered",
+        ),
+      ),
+    );
+    expect(
+      screen.getByRole("status"),
+    ).toHaveTextContent("Prayer board link copied.");
   });
   it("uses clean authenticated URLs and opens content forms in a modal", () => {
     renderApp("/content");
