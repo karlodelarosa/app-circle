@@ -1237,6 +1237,88 @@ describe("Circles MVP", () => {
     expect(screen.getByText("Staged newcomer")).toBeInTheDocument();
   });
 
+  it("adds an organization member without changing the Circle roster", async () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].meetingDate = new Date(
+      Date.now() - 60 * 60 * 1000,
+    ).toISOString();
+    data.meetings[0].endsAt = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
+    data.organizationMembers = [
+      ...data.members,
+      {
+        id: "organization-person",
+        membershipId: "organization-organization-person",
+        fullName: "Ruth Navarro",
+        email: "ruth@example.com",
+        role: "member",
+        discipleshipBadge: false,
+      },
+    ];
+
+    renderWithData("/gatherings/meeting-1", data);
+    expect(screen.queryByText("Ruth Navarro")).not.toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add existing member" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Add an existing member",
+    });
+    fireEvent.change(within(dialog).getByLabelText("Search organization members"), {
+      target: { value: "Ruth" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Search" }));
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: "Add Ruth Navarro" }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    const row = screen.getByText("Ruth Navarro").closest("label");
+    expect(row).not.toBeNull();
+    expect(within(row!).getByRole("checkbox")).toBeChecked();
+    expect(within(row!).getByText("Organization member")).toBeInTheDocument();
+    expect(data.members.some((member) => member.id === "organization-person")).toBe(
+      false,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(
+      await screen.findByText("Closeout saved. This gathering is still scheduled."),
+    ).toBeInTheDocument();
+    expect(within(row!).getByRole("checkbox")).toBeChecked();
+
+    fireEvent.click(within(row!).getByRole("checkbox"));
+    expect(within(row!).getByRole("checkbox")).not.toBeChecked();
+  });
+
+  it("prevents duplicate attendance rows for existing Circle members", async () => {
+    const data = structuredClone(demoData);
+    data.meetings[0].meetingDate = new Date(
+      Date.now() - 60 * 60 * 1000,
+    ).toISOString();
+    data.meetings[0].endsAt = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
+    data.organizationMembers = data.members;
+
+    renderWithData("/gatherings/meeting-1", data);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add existing member" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Add an existing member",
+    });
+    fireEvent.change(within(dialog).getByLabelText("Search organization members"), {
+      target: { value: "Mara" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Search" }));
+
+    expect(
+      await within(dialog).findByRole("button", { name: "Mara Santos already listed" }),
+    ).toBeDisabled();
+  });
+
   it("quick-adds multiple newcomers without closing the dialog", async () => {
     const data = structuredClone(demoData);
     data.meetings[0].meetingDate = new Date(

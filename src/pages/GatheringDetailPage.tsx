@@ -12,6 +12,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
+import { AttendancePersonPickerModal } from "../components/AttendancePersonPickerModal";
 import { GatheringReflections } from "../components/GatheringReflections";
 import { Modal } from "../components/Modal";
 import {
@@ -33,7 +34,11 @@ import {
   loadGatheringAttendance,
   saveGatheringCloseout,
 } from "../services/circles";
-import type { GatheringCloseout, RsvpStatus } from "../types";
+import type {
+  AttendancePersonSummary,
+  GatheringCloseout,
+  RsvpStatus,
+} from "../types";
 
 const rsvpOptions: { value: RsvpStatus; label: string }[] = [
   { value: "attending", label: "I’m going" },
@@ -59,6 +64,10 @@ export function GatheringDetailPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [guestSelected, setGuestSelected] = useState<string[]>([]);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+  const [additionalPeople, setAdditionalPeople] = useState<
+    AttendancePersonSummary[]
+  >([]);
   const [walkInBusy, setWalkInBusy] = useState(false);
   const [walkInError, setWalkInError] = useState("");
   const [walkInNotice, setWalkInNotice] = useState("");
@@ -98,6 +107,7 @@ export function GatheringDetailPage() {
     setSelected([]);
     setGuestSelected([]);
     setNewcomers([]);
+    setAdditionalPeople([]);
     setCloseoutNotes("");
     setCloseout(null);
     setSaved(false);
@@ -125,6 +135,21 @@ export function GatheringDetailPage() {
           if (attendance.saved) {
             setSelected(attendance.personIds);
             setGuestSelected(attendance.guestRsvpIds);
+            const rosterIds = new Set(
+              (meeting.scope === "organization"
+                ? data?.organizationMembers ?? []
+                : data?.members ?? []
+              ).map((member) => member.id),
+            );
+            setAdditionalPeople(
+              attendance.attendees
+                .filter((person) => !rosterIds.has(person.personId))
+                .map((person) => ({
+                  id: person.personId,
+                  fullName: person.fullName,
+                  email: "",
+                })),
+            );
             setSaved(true);
           }
         })
@@ -137,7 +162,7 @@ export function GatheringDetailPage() {
     return () => {
       active = false;
     };
-  }, [meeting?.id, canLead, demoMode]);
+  }, [meeting, canLead, demoMode, data?.members, data?.organizationMembers]);
   if (!data) return null;
   const base = "";
   if (!meeting)
@@ -449,15 +474,23 @@ export function GatheringDetailPage() {
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-medium">People</h3>
                 {attendanceEditable && (
-                  <button
-                    className="text-link"
-                    onClick={() => {
-                      setWalkInError("");
-                      setWalkInOpen(true);
-                    }}
-                  >
-                    <UserPlus size={15} /> Add newcomer
-                  </button>
+                  <div className="flex flex-wrap justify-end gap-x-4 gap-y-2">
+                    <button
+                      className="text-link"
+                      onClick={() => setMemberPickerOpen(true)}
+                    >
+                      <UserPlus size={15} /> Add existing member
+                    </button>
+                    <button
+                      className="text-link"
+                      onClick={() => {
+                        setWalkInError("");
+                        setWalkInOpen(true);
+                      }}
+                    >
+                      <UserPlus size={15} /> Add newcomer
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="mt-3 space-y-2">
@@ -483,6 +516,30 @@ export function GatheringDetailPage() {
                     {member.fullName}
                     <span className="ml-auto text-xs text-muted">
                       {rsvpLabel(meeting.rsvps[member.id])}
+                    </span>
+                  </label>
+                ))}
+                {additionalPeople.map((person) => (
+                  <label
+                    key={person.id}
+                    className="flex items-center gap-3 rounded-xl border border-line p-3 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(person.id)}
+                      disabled={!attendanceEditable}
+                      onChange={(event) => {
+                        setSaved(false);
+                        setSelected(
+                          event.target.checked
+                            ? Array.from(new Set([...selected, person.id]))
+                            : selected.filter((id) => id !== person.id),
+                        );
+                      }}
+                    />
+                    <span>{person.fullName}</span>
+                    <span className="ml-auto text-xs text-muted">
+                      Organization member
                     </span>
                   </label>
                 ))}
@@ -643,6 +700,32 @@ export function GatheringDetailPage() {
           error={walkInError}
           onAdd={addWalkIn}
           onClose={() => setWalkInOpen(false)}
+        />
+      )}
+      {memberPickerOpen && (
+        <AttendancePersonPickerModal
+          gatheringId={meeting.id}
+          existingIds={[
+            ...attendanceMembers.map((member) => member.id),
+            ...additionalPeople.map((person) => person.id),
+          ]}
+          fallbackPeople={(data.organizationMembers ?? data.members).map(
+            (member) => ({
+              id: member.id,
+              fullName: member.fullName,
+              email: member.email,
+            }),
+          )}
+          onAdd={(person) => {
+            setAdditionalPeople((people) =>
+              people.some((item) => item.id === person.id)
+                ? people
+                : [...people, person],
+            );
+            setSelected((ids) => Array.from(new Set([...ids, person.id])));
+            setSaved(false);
+          }}
+          onClose={() => setMemberPickerOpen(false)}
         />
       )}
     </div>
