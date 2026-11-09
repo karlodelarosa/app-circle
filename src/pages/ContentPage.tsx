@@ -25,6 +25,8 @@ export function ContentPage() {
     audience: "members" as "members" | "public",
   });
   const [file, setFile] = useState<File | null>(null);
+  const [gatheringId, setGatheringId] = useState("");
+  const [shareAcrossOrganization, setShareAcrossOrganization] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [circleEditor, setCircleEditor] = useState<Group | null>(null);
@@ -42,14 +44,26 @@ export function ContentPage() {
   useEffect(() => {
     if (composer && !dialogRef.current?.open) dialogRef.current?.showModal();
   }, [composer]);
+  useEffect(() => {
+    if (composer !== "gallery" || !targetGroupId || targetGroupId === "organization") return;
+    const completed = (data?.accessibleMeetings ?? data?.meetings ?? [])
+      .filter((meeting) => meeting.groupId === targetGroupId && meeting.status === "completed")
+      .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
+    setGatheringId((current) => completed.some((meeting) => meeting.id === current) ? current : completed[0]?.id ?? "");
+  }, [composer, targetGroupId, data?.accessibleMeetings, data?.meetings]);
   if (!data) return null;
   const manageableGroups=data.groups.filter((group)=>data.currentUser.role==="admin"||group.role==="leader");
   const hasSingleLeaderDestination=data.currentUser.role!=="admin"&&manageableGroups.length===1;
   const beginComposer=(kind:Exclude<Composer,null>)=>{
     setMessage("");
     setTargetGroupId(hasSingleLeaderDestination?manageableGroups[0].id:"");
+    setGatheringId("");
+    setShareAcrossOrganization(false);
     setComposer(kind);
   };
+  const completedGatherings = (data.accessibleMeetings ?? data.meetings)
+    .filter((meeting) => meeting.groupId === targetGroupId && meeting.status === "completed")
+    .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const assignmentItems=data.contentAssignments.filter((item)=>{
     const matchesType=assignmentType==="all"||item.type===assignmentType;
     const matchesGroup=assignmentGroup==="all"||
@@ -107,6 +121,25 @@ export function ContentPage() {
       setBusy(false);
     }
   };
+  const removeOrganizationHighlight = async (galleryId: string, title: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      if (!demoMode && supabase) {
+        const { error } = await supabase
+          .from("circle_galleries")
+          .update({ is_organization_highlight: false, highlighted_at: null })
+          .eq("id", galleryId);
+        if (error) throw error;
+        await refresh();
+      }
+      setMessage(`${title} was removed from organization highlights.`);
+    } catch (cause) {
+      setMessage(getErrorMessage(cause, "The organization highlight could not be removed."));
+    } finally {
+      setBusy(false);
+    }
+  };
   const publishSpace = async () => {
     if (demoMode || !supabase) {
       setMessage("Public community page is published in demo mode.");
@@ -131,6 +164,8 @@ export function ContentPage() {
       if (!targetGroupId) throw new Error("Choose where this content belongs.");
       if (targetGroupId === "organization" && composer !== "announcement")
         throw new Error("Only announcements can be published to the entire organization.");
+      if (composer === "gallery" && shareAcrossOrganization && !gatheringId)
+        throw new Error("Choose a completed gathering before sharing across the organization.");
       if (!demoMode && supabase && data.group) {
         const common = {
           organization_id: data.organization.id,
@@ -177,6 +212,9 @@ export function ContentPage() {
               title: form.title,
               description: form.description,
               cover_url: imageUrl || null,
+              gathering_id: gatheringId || null,
+              is_organization_highlight: shareAcrossOrganization,
+              highlighted_at: shareAcrossOrganization ? new Date().toISOString() : null,
               status: "published",
               published_at: new Date().toISOString(),
             })
@@ -204,6 +242,8 @@ export function ContentPage() {
       setComposer(null);
       setForm({ title: "", body: "", author: "", description: "", audience: "members" });
       setFile(null);
+      setGatheringId("");
+      setShareAcrossOrganization(false);
       setTargetGroupId("");
     } catch (c) {
       setMessage(getErrorMessage(c, "Content could not be published."));
@@ -476,6 +516,28 @@ export function ContentPage() {
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                     />
                   </label>
+                  <label className="field-label">
+                    Completed gathering
+                    <select className="field" value={gatheringId} onChange={(event) => setGatheringId(event.target.value)}>
+                      <option value="">No gathering selected</option>
+                      {completedGatherings.map((meeting) => (
+                        <option key={meeting.id} value={meeting.id}>{meeting.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-4">
+                    <input
+                      className="mt-1"
+                      type="checkbox"
+                      checked={shareAcrossOrganization}
+                      onChange={(event) => setShareAcrossOrganization(event.target.checked)}
+                      aria-label="Share across the organization"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">Share across the organization</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">Show this recap to members of other Circles. A completed gathering is required.</span>
+                    </span>
+                  </label>
                 </>
               )}
             </div>
@@ -558,7 +620,20 @@ export function ContentPage() {
                     <p className="truncate font-medium">{gallery.title}</p>
                     <p className="mt-1 text-xs text-muted">{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · Public Gallery</p>
                   </div>
-                  <a className="text-link shrink-0" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}>View <ChevronRight size={14} /></a>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <a className="text-link" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}>View <ChevronRight size={14} /></a>
+                    {gallery.isOrganizationHighlight && (
+                      <button
+                        type="button"
+                        className="text-link"
+                        aria-label={`Remove ${gallery.title} from organization highlights`}
+                        disabled={busy}
+                        onClick={() => void removeOrganizationHighlight(gallery.id, gallery.title)}
+                      >
+                        Remove highlight
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {!data.galleries.length && <p className="py-5 text-sm text-muted">Published galleries will appear here and on the public Gallery page.</p>}

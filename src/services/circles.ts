@@ -345,6 +345,7 @@ export async function loadAppData(
     prayers: combinedDashboardPrayers,
     announcements: dashboard.announcements ?? [],
     galleries: dashboard.galleries ?? [],
+    highlights: dashboard.highlights ?? [],
   };
   base.prayers = prayers;
   if (!group) return base;
@@ -471,7 +472,7 @@ export async function loadAppData(
       client
         .from("circle_galleries")
         .select(
-          "id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,circle_gallery_photos(id,image_url,caption,alt_text)",
+          "id,organization_id,gathering_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,is_organization_highlight,highlighted_at,circle_gallery_photos(id,image_url,caption,alt_text)",
         )
         .eq("organization_id", context.organization.id)
         .eq("cell_group_id", group.id)
@@ -513,6 +514,7 @@ export async function loadAppData(
   const galleries: Gallery[] = (galleriesResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
+    gatheringId: row.gathering_id ?? undefined,
     groupId: row.cell_group_id ?? undefined,
     slug: row.public_slug,
     title: row.title,
@@ -526,6 +528,8 @@ export async function loadAppData(
       altText: photo.alt_text ?? "",
     })),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
+    isOrganizationHighlight: Boolean(row.is_organization_highlight),
+    highlightedAt: row.highlighted_at ?? undefined,
   }));
   return {
     ...base,

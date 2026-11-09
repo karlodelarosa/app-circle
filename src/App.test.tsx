@@ -1078,6 +1078,23 @@ describe("Circles MVP", () => {
     expect(screen.getByLabelText("Members only")).toBeChecked();
     expect(screen.getByLabelText("Members and public")).not.toBeChecked();
   });
+  it("links a new organization highlight to the latest completed gathering", () => {
+    const data = structuredClone(demoData);
+    data.meetings[2].status = "completed";
+
+    renderWithData("/content", data);
+    fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
+
+    expect(screen.getByLabelText("Completed gathering")).toHaveValue("meeting-3");
+    expect(screen.getByLabelText("Share across the organization")).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText("Share across the organization"));
+    expect(screen.getByLabelText("Share across the organization")).toBeChecked();
+  });
+  it("offers removal for an existing organization highlight", () => {
+    renderApp("/content");
+
+    expect(screen.getByRole("button", { name: "Remove Life around the table from organization highlights" })).toBeInTheDocument();
+  });
   it("keeps organization announcements out of a Circle detail", () => {
     const scopedData = structuredClone(demoData);
     scopedData.announcements.push({
