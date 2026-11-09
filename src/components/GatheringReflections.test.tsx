@@ -85,4 +85,26 @@ describe("GatheringReflections", () => {
       expect(screen.getByText(/Edited/)).toBeInTheDocument();
     });
   });
+
+  it("lets a view-only organization member read reflections without contributing", () => {
+    render(
+      <MemoryRouter>
+        <AppProvider initialData={structuredClone(demoData)}>
+          <GatheringReflections
+            meeting={{
+              ...demoData.meetings[2],
+              status: "completed",
+              accessLevel: "view",
+            }}
+            canModerate={false}
+            initialReflections={[reflection]}
+          />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(reflection.body)).toBeInTheDocument();
+    expect(screen.queryByLabelText("What stayed with you?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+  });
 });

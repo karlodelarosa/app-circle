@@ -192,6 +192,7 @@ export interface Organization {
 
 export interface Meeting {
   id: string;
+  accessLevel?: "manage" | "participate" | "view";
   groupId?: string;
   scope?: "circle" | "organization";
   destinationName?: string;

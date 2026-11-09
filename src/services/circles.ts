@@ -97,15 +97,16 @@ export async function loadGatheringReflectionActivity(
 
 export async function createGatheringReflection(
   client: SupabaseClient,
-  organizationId: string,
-  gatheringId: string,
+  gathering: Pick<Meeting, "id" | "organizationId">,
   authorPersonId: string,
   body: string,
 ) {
   const value = reflectionBody(body);
+  if (!gathering.organizationId)
+    throw new Error("This gathering has no organization identity.");
   const { error } = await client.from("circle_gathering_reflections").insert({
-    organization_id: organizationId,
-    gathering_id: gatheringId,
+    organization_id: gathering.organizationId,
+    gathering_id: gathering.id,
     author_person_id: authorPersonId,
     body: value,
   });

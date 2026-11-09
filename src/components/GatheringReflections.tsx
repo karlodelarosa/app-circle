@@ -124,7 +124,7 @@ export function GatheringReflections({
   const [notice, setNotice] = useState("");
 
   const personId = data?.currentUser.personId;
-  const canParticipate = Boolean(personId);
+  const canParticipate = Boolean(personId && meeting.accessLevel !== "view");
 
   const reload = async () => {
     if (!supabase) return;
@@ -176,8 +176,7 @@ export function GatheringReflections({
       } else {
         await createGatheringReflection(
           supabase,
-          data.organization.id,
-          meeting.id,
+          meeting,
           personId,
           value,
         );
@@ -235,7 +234,7 @@ export function GatheringReflections({
 
   return (
     <section className="mt-7 border-y border-line py-8" aria-labelledby="after-gathering-heading">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,.75fr)_minmax(0,1.25fr)]">
+      <div className="mx-auto max-w-3xl">
         <div>
           <p className="page-kicker">Continue together</p>
           <h2 id="after-gathering-heading" className="mt-2 font-display text-4xl">
@@ -266,12 +265,16 @@ export function GatheringReflections({
             </form>
           ) : (
             <p className="mt-6 rounded-xl bg-paper p-4 text-sm leading-6 text-muted">
-              Link this account to a People record before sharing a reflection.
+              {personId
+                ? "Reflections are read-only because this gathering belongs to another Circle."
+                : "Link this account to a People record before sharing a reflection."}
             </p>
           )}
+          {notice && <p className="mt-4 text-sm text-olive" role="status">{notice}</p>}
+          {error && <p className="form-error mt-4" role="alert">{error}</p>}
         </div>
 
-        <div aria-live="polite">
+        <div className="mt-8" aria-live="polite">
           {loading ? (
             <div className="space-y-3" aria-busy="true" aria-label="Loading reflections">
               <div className="h-24 animate-pulse rounded-2xl bg-paper" />
@@ -280,8 +283,9 @@ export function GatheringReflections({
           ) : reflections.length ? (
             <div className="divide-y divide-line border-y border-line">
               {reflections.map((reflection) => {
-                const isAuthor = reflection.authorPersonId === personId;
+                const isAuthor = canParticipate && reflection.authorPersonId === personId;
                 const member = data?.members.find((item) => item.id === reflection.authorPersonId)
+                  ?? data?.organizationMembers?.find((item) => item.id === reflection.authorPersonId)
                   ?? { id: reflection.authorPersonId, fullName: reflection.authorName, role: "member" };
                 return (
                   <ReflectionCard
@@ -308,9 +312,7 @@ export function GatheringReflections({
               </div>
             </div>
           )}
-          {notice && <p className="mt-4 text-sm text-olive" role="status">{notice}</p>}
-          {error && <p className="form-error mt-4" role="alert">{error}</p>}
-          {reflections.length > 0 && (
+          {canParticipate && reflections.length > 0 && (
             <p className="mt-5 text-sm leading-6 text-muted">
               Want to carry this further? <Link className="text-link" to="/prayer">Turn this into a prayer request</Link>
               {" or "}<Link className="text-link" to="/share-testimony">submit it as a testimony</Link>.

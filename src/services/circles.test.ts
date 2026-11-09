@@ -309,24 +309,36 @@ describe("Gathering reflections", () => {
 
     await createGatheringReflection(
       { from } as unknown as SupabaseClient,
-      "organization-1",
-      "gathering-1",
+      { id: "gathering-1", organizationId: "gathering-organization" },
       "person-1",
       "  What stayed with me.  ",
     );
 
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      organization_id: "gathering-organization",
+      gathering_id: "gathering-1",
       body: "What stayed with me.",
       author_person_id: "person-1",
     }));
+  });
+
+  it("rejects a live reflection when its gathering has no organization identity", async () => {
+    const from = vi.fn();
+
+    await expect(createGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      { id: "gathering-1" },
+      "person-1",
+      "What stayed with me.",
+    )).rejects.toThrow(/organization identity/i);
+    expect(from).not.toHaveBeenCalled();
   });
 
   it.each(["   ", "x".repeat(2001)])("rejects an invalid reflection body", async (body) => {
     const from = vi.fn();
     await expect(createGatheringReflection(
       { from } as unknown as SupabaseClient,
-      "organization-1",
-      "gathering-1",
+      { id: "gathering-1", organizationId: "organization-1" },
       "person-1",
       body,
     )).rejects.toThrow(/between 1 and 2,000 characters/i);
