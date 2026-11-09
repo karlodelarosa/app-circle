@@ -22,6 +22,8 @@ import { Avatar } from "../components/Avatar";
 import { Modal } from "../components/Modal";
 import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
+import { formatDate } from "../lib/format";
+import { gatheringLifecycle } from "../lib/gatheringLifecycle";
 import { getErrorMessage } from "../lib/errors";
 import {
   getFunctionErrorMessage,
@@ -75,6 +77,7 @@ export function CirclePage() {
   const [leaderAccessBusy, setLeaderAccessBusy] = useState<string | null>(null);
   const [leaderAccessMessage, setLeaderAccessMessage] = useState("");
   const [leaderAccessError, setLeaderAccessError] = useState(false);
+  const [showAllGatherings, setShowAllGatherings] = useState(false);
   const [leaderCredentials, setLeaderCredentials] = useState<{
     loginId: string;
     temporaryPassword: string;
@@ -694,6 +697,19 @@ export function CirclePage() {
         new Date(meeting.meetingDate) >= new Date(),
     )
     .sort((a, b) => a.meetingDate.localeCompare(b.meetingDate))[0];
+  const previousGatherings = data.meetings
+    .filter(
+      (meeting) =>
+        meeting.groupId === activeGroup.id &&
+        new Date(meeting.endsAt).getTime() < Date.now() &&
+        ["completed", "attendance_pending", "cancelled"].includes(
+          gatheringLifecycle(meeting),
+        ),
+    )
+    .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
+  const visiblePreviousGatherings = showAllGatherings
+    ? previousGatherings
+    : previousGatherings.slice(0, 5);
   const circleLeader = data.members.find(
     (member) => member.role === "leader" || member.id === activeGroup.leaderId,
   );
@@ -793,6 +809,63 @@ export function CirclePage() {
           >
             Continue {latestCompletedMeeting.title} <ChevronRight size={16} />
           </Link>
+        </section>
+      )}
+      {previousGatherings.length > 0 && (
+        <section className="mt-8 border-b border-line pb-8">
+          <div className="section-heading">
+            <div>
+              <h2>Previous gatherings</h2>
+              <p>Recent gatherings and closeout status for this Circle.</p>
+            </div>
+          </div>
+          <div className="divide-y divide-line border-y border-line">
+            {visiblePreviousGatherings.map((meeting) => {
+              const lifecycle = gatheringLifecycle(meeting);
+              const status =
+                lifecycle === "completed"
+                  ? "Completed"
+                  : lifecycle === "cancelled"
+                    ? "Cancelled"
+                    : "Attendance pending";
+              return (
+                <Link
+                  key={meeting.id}
+                  to={`/gatherings/${meeting.id}`}
+                  className="flex items-center gap-4 py-5 hover:text-olive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive"
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sage text-olive">
+                    <History size={17} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="text-xs text-muted">
+                      {formatDate(meeting.meetingDate, {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span className="mt-1 block font-display text-2xl text-ink">
+                      {meeting.title}
+                    </span>
+                    <span className="mt-1 block text-sm text-muted">
+                      {meeting.studyTopic}
+                    </span>
+                  </span>
+                  <span className="status-badge shrink-0">{status}</span>
+                  <ChevronRight size={17} aria-hidden="true" />
+                </Link>
+              );
+            })}
+          </div>
+          {previousGatherings.length > 5 && !showAllGatherings && (
+            <button
+              className="secondary-button mt-5"
+              onClick={() => setShowAllGatherings(true)}
+            >
+              View all previous gatherings
+            </button>
+          )}
         </section>
       )}
       {latestAnnouncement && (

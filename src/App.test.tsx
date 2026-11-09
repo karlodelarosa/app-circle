@@ -826,6 +826,59 @@ describe("Circles MVP", () => {
       screen.getByRole("link", { name: /Continue Carrying one another/i }),
     ).toHaveAttribute("href", "/gatherings/meeting-3");
   });
+  it("shows five past Circle gatherings before expanding the full history", () => {
+    const data = structuredClone(demoData);
+    const past = Array.from({ length: 6 }, (_, index) => {
+      const meetingDate = new Date(
+        Date.now() - (index + 2) * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      return {
+        ...data.meetings[2],
+        id: `history-${index + 1}`,
+        title: `Past gathering ${index + 1}`,
+        meetingDate,
+        endsAt: new Date(
+          new Date(meetingDate).getTime() + 2 * 60 * 60 * 1000,
+        ).toISOString(),
+        status:
+          index === 0
+            ? ("completed" as const)
+            : index === 1
+              ? ("cancelled" as const)
+              : ("scheduled" as const),
+        rsvps: {},
+      };
+    });
+    data.meetings = [
+      data.meetings[0],
+      ...past,
+      { ...past[0], id: "other-circle-history", groupId: "other-circle" },
+    ];
+
+    renderWithData("/circles/demo-group", data);
+
+    expect(
+      screen.getByRole("heading", { name: "Previous gatherings" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Past gathering 5/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Past gathering 6/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("other-circle-history")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "View all previous gatherings" }),
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Past gathering 6/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getAllByText("Attendance pending").length).toBeGreaterThan(0);
+  });
   it("uses the gathering cover on the dashboard", () => {
     const { container } = renderApp("/");
     expect(
