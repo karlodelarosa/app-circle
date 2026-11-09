@@ -6,15 +6,17 @@ import {
   Copy,
   MapPin,
   Share2,
+  Trash2,
   UserPlus,
   UsersRound,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "../components/Avatar";
 import { AttendancePersonPickerModal } from "../components/AttendancePersonPickerModal";
 import { GatheringReflections } from "../components/GatheringReflections";
 import { Modal } from "../components/Modal";
+import { DeleteGatheringModal } from "../components/DeleteGatheringModal";
 import {
   WalkInVisitorModal,
   type WalkInVisitorInput,
@@ -48,6 +50,7 @@ const rsvpOptions: { value: RsvpStatus; label: string }[] = [
 
 export function GatheringDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data, demoMode, refresh, setRsvp } = useCircles();
   const [guests, setGuests] = useState<
     {
@@ -83,6 +86,7 @@ export function GatheringDetailPage() {
   const [completionBusy, setCompletionBusy] = useState(false);
   const [completionError, setCompletionError] = useState("");
   const [completionConfirmOpen, setCompletionConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
   const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
@@ -300,12 +304,22 @@ export function GatheringDetailPage() {
   );
   return (
     <div className="mx-auto max-w-4xl">
-      <Link
-        to={`${base}/gatherings`}
-        className="mb-7 inline-flex items-center gap-2 text-sm text-muted hover:text-olive"
-      >
-        <ArrowLeft size={16} /> All gatherings
-      </Link>
+      <div className="mb-7 flex items-center justify-between gap-3">
+        <Link
+          to={`${base}/gatherings`}
+          className="inline-flex items-center gap-2 text-sm text-muted hover:text-olive"
+        >
+          <ArrowLeft size={16} /> All gatherings
+        </Link>
+        {canLead && (
+          <button
+            className="inline-flex items-center gap-2 text-sm text-red-700 hover:underline"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
+            <Trash2 size={15} /> Delete gathering
+          </button>
+        )}
+      </div>
       <article className="overflow-hidden rounded-[1.75rem] border border-line bg-paper">
         <header className="relative flex min-h-[20rem] items-end overflow-hidden border-b border-line p-6 sm:min-h-[24rem] sm:p-10">
           <img
@@ -679,6 +693,13 @@ export function GatheringDetailPage() {
             )}
           </div>
         </section>
+      )}
+      {deleteConfirmOpen && (
+        <DeleteGatheringModal
+          meeting={meeting}
+          onClose={() => setDeleteConfirmOpen(false)}
+          onDeleted={() => navigate("/gatherings")}
+        />
       )}
       {completionConfirmOpen && (
         <Modal title="Complete this gathering?" onClose={() => setCompletionConfirmOpen(false)}>

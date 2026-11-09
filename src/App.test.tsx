@@ -506,6 +506,58 @@ describe("Circles MVP", () => {
         name: /Review attendance.*Carrying one another/i,
       }),
     ).toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("link", {
+          name: /Review attendance.*Carrying one another/i,
+        }).closest("article")!,
+      ).getByText("Grace & Ground"),
+    ).toBeInTheDocument();
+  });
+
+  it("permanently deletes an empty gathering from the gathering list", async () => {
+    renderApp("/gatherings");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Actions for A life of prayer",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete gathering" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete A life of prayer?",
+    });
+    expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "A life of prayer" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps a gathering with activity and recommends cancellation", async () => {
+    renderApp("/gatherings/meeting-3");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete gathering" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Delete Carrying one another?" }),
+      ).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    expect(
+      await screen.findByText(
+        /This gathering has activity and cannot be deleted\. Cancel it instead\./i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Carrying one another" }),
+    ).toBeInTheDocument();
   });
 
   it("completes an ended gathering atomically", async () => {

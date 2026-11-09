@@ -16,6 +16,7 @@ import * as api from "./services/circles";
 import type {
   AppData,
   CircleDetailsInput,
+  DeleteMeetingResult,
   MeetingInput,
   PrayerInput,
   RsvpStatus,
@@ -48,6 +49,7 @@ interface AppContextValue {
   markAnswered: (prayerId: string, notes: string) => Promise<void>;
   saveMeeting: (input: MeetingInput, id?: string) => Promise<void>;
   cancelMeeting: (id: string) => Promise<void>;
+  deleteMeeting: (id: string) => Promise<DeleteMeetingResult>;
   requestMemberAccess: (personId: string) => Promise<void>;
   removeMember: (membershipId: string) => Promise<void>;
   openCheckin: (meetingId: string) => Promise<string>;
@@ -512,6 +514,37 @@ export function AppProvider({
     notify("Gathering cancelled.");
   };
 
+  const deleteMeeting = async (id: string): Promise<DeleteMeetingResult> => {
+    if (!data) return { deleted: false, reason: "has_activity" };
+    const meeting = (data.accessibleMeetings ?? data.meetings).find(
+      (item) => item.id === id,
+    );
+    const result =
+      supabase && session
+        ? await api.deleteMeeting(supabase, id)
+        : meeting &&
+            Object.keys(meeting.rsvps).length === 0 &&
+            !data.galleries.some((gallery) => gallery.gatheringId === id)
+          ? ({ deleted: true } as const)
+          : ({ deleted: false, reason: "has_activity" } as const);
+    if (!result.deleted) return result;
+    setData({
+      ...data,
+      meetings: data.meetings.filter((item) => item.id !== id),
+      accessibleMeetings: data.accessibleMeetings?.filter(
+        (item) => item.id !== id,
+      ),
+      dashboard: data.dashboard
+        ? {
+            ...data.dashboard,
+            meetings: data.dashboard.meetings.filter((item) => item.id !== id),
+          }
+        : undefined,
+    });
+    notify("Gathering permanently deleted.");
+    return result;
+  };
+
   const requestMemberAccess = async (personId: string) => {
     if (!data?.group) return;
     if (supabase && session)
@@ -582,6 +615,7 @@ export function AppProvider({
       markAnswered,
       saveMeeting,
       cancelMeeting,
+      deleteMeeting,
       requestMemberAccess,
       removeMember,
       openCheckin,
