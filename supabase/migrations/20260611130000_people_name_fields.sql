@@ -2,24 +2,41 @@ ALTER TABLE public.people
   ADD COLUMN IF NOT EXISTS first_name TEXT,
   ADD COLUMN IF NOT EXISTS middle_name TEXT,
   ADD COLUMN IF NOT EXISTS last_name TEXT;
-UPDATE public.people
-SET
-  first_name = COALESCE(
-    NULLIF(split_part(trim(name), ' ', 1), ''),
-    trim(name)
-  ),
-  last_name = COALESCE(
-    NULLIF(
-      split_part(
-        trim(name),
-        ' ',
-        GREATEST(array_length(string_to_array(trim(name), ' '), 1), 1)
-      ),
-      ''
-    ),
-    trim(name)
-  )
-WHERE first_name IS NULL OR last_name IS NULL;
+DO $$
+BEGIN
+  -- Older SheepCount databases stored a single name column. Fresh databases
+  -- already create first_name and last_name, so only run the legacy backfill
+  -- when that source column is actually present.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'people'
+      AND column_name = 'name'
+  ) THEN
+    EXECUTE $backfill$
+      UPDATE public.people
+      SET
+        first_name = COALESCE(
+          NULLIF(split_part(trim(name), ' ', 1), ''),
+          trim(name)
+        ),
+        last_name = COALESCE(
+          NULLIF(
+            split_part(
+              trim(name),
+              ' ',
+              GREATEST(array_length(string_to_array(trim(name), ' '), 1), 1)
+            ),
+            ''
+          ),
+          trim(name)
+        )
+      WHERE first_name IS NULL OR last_name IS NULL
+    $backfill$;
+  END IF;
+END;
+$$;
 ALTER TABLE public.people
   ALTER COLUMN first_name SET NOT NULL,
   ALTER COLUMN last_name SET NOT NULL;
