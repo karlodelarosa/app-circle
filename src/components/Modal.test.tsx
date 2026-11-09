@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { vi } from "vitest";
 import { Modal } from "./Modal";
 
@@ -47,6 +48,36 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalled();
     unmount();
     expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
+  it("keeps a controlled input focused when the parent creates a new close callback", () => {
+    function ControlledModal() {
+      const [value, setValue] = useState("");
+      return (
+        <Modal title="Edit Circle details" onClose={() => undefined}>
+          <label>
+            Circle name
+            <input
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </label>
+        </Modal>
+      );
+    }
+
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(<ControlledModal />);
+    const input = screen.getByLabelText("Circle name");
+    input.focus();
+
+    fireEvent.change(input, { target: { value: "A" } });
+
+    expect(input).toHaveFocus();
+    unmount();
     opener.remove();
   });
 });
