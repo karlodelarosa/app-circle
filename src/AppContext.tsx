@@ -13,7 +13,13 @@ import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { getErrorMessage } from "./lib/errors";
 import { reportSecurityEvent } from "./lib/telemetry";
 import * as api from "./services/circles";
-import type { AppData, MeetingInput, PrayerInput, RsvpStatus } from "./types";
+import type {
+  AppData,
+  CircleDetailsInput,
+  MeetingInput,
+  PrayerInput,
+  RsvpStatus,
+} from "./types";
 
 interface AppContextValue {
   data: AppData | null;
@@ -32,6 +38,10 @@ interface AppContextValue {
     location: string;
     leaderPersonId?: string;
   }) => Promise<void>;
+  updateGroupDetails: (
+    groupId: string,
+    input: CircleDetailsInput,
+  ) => Promise<void>;
   setRsvp: (meetingId: string, status: RsvpStatus) => Promise<void>;
   addPrayer: (input: PrayerInput) => Promise<void>;
   togglePrayer: (prayerId: string) => Promise<void>;
@@ -229,6 +239,35 @@ export function AppProvider({
       setData({ ...data, groups: [...data.groups, group], group });
     }
     notify("Cell group created in SheepCount.");
+  };
+
+  const updateGroupDetails = async (
+    groupId: string,
+    input: CircleDetailsInput,
+  ) => {
+    if (!data) return;
+    const details = {
+      name: input.name.trim(),
+      description: input.description.trim(),
+      location: input.location.trim(),
+    };
+    if (supabase && session) {
+      await api.updateGroupDetails(supabase, groupId, details);
+      await selectGroup(groupId);
+    } else {
+      const groups = data.groups.map((group) =>
+        group.id === groupId ? { ...group, ...details } : group,
+      );
+      setData({
+        ...data,
+        groups,
+        group:
+          data.group?.id === groupId
+            ? { ...data.group, ...details }
+            : data.group,
+      });
+    }
+    notify("Circle details updated.");
   };
 
   const setRsvp = async (meetingId: string, status: RsvpStatus) => {
@@ -536,6 +575,7 @@ export function AppProvider({
       signOut,
       selectGroup,
       createGroup,
+      updateGroupDetails,
       setRsvp,
       addPrayer,
       togglePrayer,

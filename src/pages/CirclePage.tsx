@@ -10,6 +10,7 @@ import {
   Images,
   Megaphone,
   MessageCircle,
+  Pencil,
   Quote,
   UserPlus,
   UsersRound,
@@ -31,7 +32,14 @@ import type { Member } from "../types";
 import { PeoplePage } from "./PeoplePage";
 
 export function CirclePage() {
-  const { data, error, selectGroup, createGroup, refresh } = useCircles();
+  const {
+    data,
+    error,
+    selectGroup,
+    createGroup,
+    updateGroupDetails,
+    refresh,
+  } = useCircles();
   const { circleId } = useParams();
   const [managingPeople, setManagingPeople] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
@@ -55,6 +63,14 @@ export function CirclePage() {
     description: "",
     location: "",
     leaderPersonId: "",
+  });
+  const [editingCircle, setEditingCircle] = useState(false);
+  const [editCircleBusy, setEditCircleBusy] = useState(false);
+  const [editCircleError, setEditCircleError] = useState("");
+  const [editCircleForm, setEditCircleForm] = useState({
+    name: "",
+    description: "",
+    location: "",
   });
   const [leaderAccessBusy, setLeaderAccessBusy] = useState<string | null>(null);
   const [leaderAccessMessage, setLeaderAccessMessage] = useState("");
@@ -502,6 +518,75 @@ export function CirclePage() {
   const activeGroup = data.group;
   const canManagePeople =
     data.currentUser.role === "admin" || activeGroup.role === "leader";
+  const editCircleModal = editingCircle ? (
+    <Modal title="Edit Circle details" onClose={() => setEditingCircle(false)}>
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setEditCircleBusy(true);
+          setEditCircleError("");
+          void updateGroupDetails(activeGroup.id, editCircleForm)
+            .then(() => setEditingCircle(false))
+            .catch((cause) =>
+              setEditCircleError(
+                getErrorMessage(cause, "The Circle details could not be updated."),
+              ),
+            )
+            .finally(() => setEditCircleBusy(false));
+        }}
+      >
+        <label className="field-label">
+          Circle name
+          <input
+            className="field"
+            required
+            value={editCircleForm.name}
+            onChange={(event) =>
+              setEditCircleForm({ ...editCircleForm, name: event.target.value })
+            }
+          />
+        </label>
+        <label className="field-label">
+          Description
+          <textarea
+            className="field min-h-24"
+            value={editCircleForm.description}
+            onChange={(event) =>
+              setEditCircleForm({
+                ...editCircleForm,
+                description: event.target.value,
+              })
+            }
+          />
+        </label>
+        <label className="field-label">
+          Location
+          <input
+            className="field"
+            value={editCircleForm.location}
+            onChange={(event) =>
+              setEditCircleForm({
+                ...editCircleForm,
+                location: event.target.value,
+              })
+            }
+          />
+        </label>
+        {editCircleError && (
+          <p className="form-error" role="alert">
+            {editCircleError}
+          </p>
+        )}
+        <button
+          className="primary-button w-full"
+          disabled={editCircleBusy || !editCircleForm.name.trim()}
+        >
+          {editCircleBusy ? "Saving…" : "Save changes"}
+        </button>
+      </form>
+    </Modal>
+  ) : null;
   const accessMember = data.members.find(
     (member) => member.id === accessMemberId,
   );
@@ -640,10 +725,29 @@ export function CirclePage() {
             )}
           </div>
         </div>
-        <Link className="secondary-button" to="/circles">
-          View all Circles
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {canManagePeople && (
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setEditCircleError("");
+                setEditCircleForm({
+                  name: activeGroup.name,
+                  description: activeGroup.description,
+                  location: activeGroup.location,
+                });
+                setEditingCircle(true);
+              }}
+            >
+              <Pencil size={16} /> Edit Circle details
+            </button>
+          )}
+          <Link className="secondary-button" to="/circles">
+            View all Circles
+          </Link>
+        </div>
       </div>
+      {editCircleModal}
       <section className="mt-8 flex flex-col gap-5 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs text-olive">Next gathering</p>

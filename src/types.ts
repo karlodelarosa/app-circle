@@ -71,6 +71,18 @@ export interface Group {
   isPublic?: boolean;
 }
 
+export interface CircleDetailsInput {
+  name: string;
+  description: string;
+  location: string;
+}
+
+export interface AttendancePersonSummary {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
 export interface CirclePublicListing {
   id: string;
   organizationId: string;

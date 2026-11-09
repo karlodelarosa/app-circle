@@ -15,6 +15,8 @@ import {
   saveMeeting,
   saveGatheringCloseout,
   resolveCurrentUserRole,
+  searchGatheringAttendancePeople,
+  updateGroupDetails,
 } from "./circles";
 
 describe("resolveCurrentUserRole", () => {
@@ -120,6 +122,92 @@ describe("saveGatheringCloseout", () => {
       p_complete: true,
     });
     expect(result.status).toBe("completed");
+  });
+});
+
+describe("updateGroupDetails", () => {
+  it("updates only the editable Circle details with trimmed values", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ update });
+
+    await updateGroupDetails(
+      { from } as unknown as SupabaseClient,
+      "circle-1",
+      {
+        name: "  Grace & Ground  ",
+        description: "  Learning to follow Jesus together.  ",
+        location: "  Santos home  ",
+      },
+    );
+
+    expect(from).toHaveBeenCalledWith("cell_groups");
+    expect(update).toHaveBeenCalledWith({
+      name: "Grace & Ground",
+      description: "Learning to follow Jesus together.",
+      location: "Santos home",
+      updated_at: expect.any(String),
+    });
+    expect(eq).toHaveBeenCalledWith("id", "circle-1");
+  });
+
+  it("rejects a blank Circle name before writing", async () => {
+    const from = vi.fn();
+
+    await expect(
+      updateGroupDetails(
+        { from } as unknown as SupabaseClient,
+        "circle-1",
+        { name: "   ", description: "", location: "" },
+      ),
+    ).rejects.toThrow("Circle name is required");
+    expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe("searchGatheringAttendancePeople", () => {
+  it("searches active organization People through the gathering-scoped RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "person-2",
+          fullName: "Mara Santos",
+          email: "mara@example.com",
+        },
+      ],
+      error: null,
+    });
+
+    const results = await searchGatheringAttendancePeople(
+      { rpc } as unknown as SupabaseClient,
+      "gathering-1",
+      "  mara  ",
+    );
+
+    expect(rpc).toHaveBeenCalledWith("search_circle_attendance_people", {
+      p_gathering_id: "gathering-1",
+      p_query: "mara",
+    });
+    expect(results).toEqual([
+      {
+        id: "person-2",
+        fullName: "Mara Santos",
+        email: "mara@example.com",
+      },
+    ]);
+  });
+
+  it("does not search until at least two characters are provided", async () => {
+    const rpc = vi.fn();
+
+    const results = await searchGatheringAttendancePeople(
+      { rpc } as unknown as SupabaseClient,
+      "gathering-1",
+      "m",
+    );
+
+    expect(results).toEqual([]);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

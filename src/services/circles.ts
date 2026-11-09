@@ -20,6 +20,8 @@ import type {
   GatheringReflection,
   CloseoutNewcomerInput,
   GatheringCloseout,
+  CircleDetailsInput,
+  AttendancePersonSummary,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -783,6 +785,25 @@ export async function createGroup(
   return data as string;
 }
 
+export async function updateGroupDetails(
+  client: SupabaseClient,
+  groupId: string,
+  input: CircleDetailsInput,
+) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Circle name is required.");
+  const { error } = await client
+    .from("cell_groups")
+    .update({
+      name,
+      description: input.description.trim(),
+      location: input.location.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", groupId);
+  if (error) throw error;
+}
+
 export async function requestMemberAccess(
   client: SupabaseClient,
   groupId: string,
@@ -934,6 +955,24 @@ export async function loadGatheringAttendance(
   });
   if (error) throw error;
   return data as GatheringCloseout;
+}
+
+export async function searchGatheringAttendancePeople(
+  client: SupabaseClient,
+  gatheringId: string,
+  query: string,
+): Promise<AttendancePersonSummary[]> {
+  const value = query.trim();
+  if (value.length < 2) return [];
+  const { data, error } = await client.rpc(
+    "search_circle_attendance_people",
+    {
+      p_gathering_id: gatheringId,
+      p_query: value,
+    },
+  );
+  if (error) throw error;
+  return (data ?? []) as AttendancePersonSummary[];
 }
 
 export async function saveGatheringCloseout(

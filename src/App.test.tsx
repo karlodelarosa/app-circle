@@ -86,6 +86,55 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Primary leader")).not.toBeInTheDocument();
   });
+  it("lets the current leader edit Circle details", async () => {
+    renderApp("/circles/demo-group");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Circle details" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit Circle details" });
+    expect(within(dialog).getByLabelText("Circle name")).toHaveValue(
+      "Grace & Ground",
+    );
+    expect(within(dialog).getByLabelText("Description")).toHaveValue(
+      demoData.group?.description,
+    );
+    expect(within(dialog).getByLabelText("Location")).toHaveValue(
+      "18 Acacia Street",
+    );
+
+    fireEvent.change(within(dialog).getByLabelText("Circle name"), {
+      target: { value: "Grace at Home" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Location"), {
+      target: { value: "Santos home" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Grace at Home" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Santos home").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("dialog", { name: "Edit Circle details" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not let an ordinary member edit Circle details", async () => {
+    const data = structuredClone(demoData);
+    data.currentUser.role = "member";
+    data.group = { ...data.group!, role: "member" };
+    data.groups = data.groups.map((group) => ({ ...group, role: "member" }));
+
+    renderWithData("/circles/demo-group", data);
+
+    expect(
+      await screen.findByRole("heading", { name: "Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit Circle details" }),
+    ).not.toBeInTheDocument();
+  });
   it("lets an admin create Circles access for an approved ungrouped leader", async () => {
     const data = structuredClone(demoData);
     data.groups = [];
