@@ -7,6 +7,7 @@ import type {
   Member,
   PrayerInput,
   PrayerRequest,
+  DeleteMeetingResult,
   Role,
   RsvpStatus,
   PersonSearchResult,
@@ -698,6 +699,24 @@ export async function cancelMeeting(client: SupabaseClient, id: string) {
     .update({ status: "cancelled" })
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function deleteMeeting(
+  client: SupabaseClient,
+  id: string,
+): Promise<DeleteMeetingResult> {
+  const { data, error } = await client.rpc("delete_empty_circle_gathering", {
+    p_gathering_id: id,
+  });
+  if (error) throw error;
+  if (
+    data &&
+    typeof data === "object" &&
+    ((data.deleted === true && data.reason === undefined) ||
+      (data.deleted === false && data.reason === "has_activity"))
+  )
+    return data as DeleteMeetingResult;
+  throw new Error("The gathering deletion returned an unexpected response.");
 }
 
 export async function saveCirclePublicListing(

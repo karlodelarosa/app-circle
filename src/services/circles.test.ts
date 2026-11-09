@@ -11,6 +11,7 @@ import {
   createGatheringReflection,
   updateGatheringReflection,
   deleteGatheringReflection,
+  deleteMeeting,
   placeCellGroupSignup,
   saveMeeting,
   saveGatheringCloseout,
@@ -18,6 +19,36 @@ import {
   searchGatheringAttendancePeople,
   updateGroupDetails,
 } from "./circles";
+
+describe("deleteMeeting", () => {
+  it("returns the stable deletion result from the guarded RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { deleted: false, reason: "has_activity" },
+      error: null,
+    });
+
+    const result = await deleteMeeting(
+      { rpc } as unknown as SupabaseClient,
+      "gathering-1",
+    );
+
+    expect(rpc).toHaveBeenCalledWith("delete_empty_circle_gathering", {
+      p_gathering_id: "gathering-1",
+    });
+    expect(result).toEqual({ deleted: false, reason: "has_activity" });
+  });
+
+  it("rejects an invalid RPC response instead of assuming deletion", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      deleteMeeting(
+        { rpc } as unknown as SupabaseClient,
+        "gathering-1",
+      ),
+    ).rejects.toThrow("unexpected response");
+  });
+});
 
 describe("resolveCurrentUserRole", () => {
   it("recognizes an approved leader before they have a Circle", () => {

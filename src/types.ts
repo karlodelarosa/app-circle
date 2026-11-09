@@ -219,6 +219,10 @@ export interface Meeting {
   assignmentConfirmedAt?: string;
 }
 
+export type DeleteMeetingResult =
+  | { deleted: true }
+  | { deleted: false; reason: "has_activity" };
+
 export interface GatheringReflection {
   id: string;
   gatheringId: string;
