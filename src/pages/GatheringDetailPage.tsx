@@ -90,7 +90,11 @@ export function GatheringDetailPage() {
   const [shareStatus, setShareStatus] = useState("");
   const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
-  const attendanceMembers = meeting?.scope === "organization"
+  const accessLevel = meeting?.accessLevel ??
+    (meeting?.canManage ? "manage" : "participate");
+  const canLead = accessLevel === "manage";
+  const canParticipate = accessLevel !== "view";
+  const attendanceMembers = meeting?.scope === "organization" || accessLevel === "view"
     ? data?.organizationMembers ?? []
     : data?.members ?? [];
   const attending =
@@ -99,11 +103,6 @@ export function GatheringDetailPage() {
           (member) => meeting.rsvps[member.id] === "attending",
         )
       : [];
-  const canLead = Boolean(
-    data &&
-    meeting &&
-    (meeting.canManage ?? data.currentUser.role !== "member"),
-  );
   useEffect(() => {
     if (!meeting) return;
     if (attendanceInitializedFor.current === meeting.id) return;
@@ -231,6 +230,10 @@ export function GatheringDetailPage() {
     }
   };
   const chooseRsvp = async (status: RsvpStatus) => {
+    if (!canParticipate) {
+      setRsvpError("Only members of this gathering’s Circle can change an RSVP.");
+      return;
+    }
     setRsvpBusy(true);
     setRsvpError("");
     try {
@@ -296,20 +299,37 @@ export function GatheringDetailPage() {
     }
   };
   const canShare = Boolean(
-    canLead &&
-      lifecycle === "upcoming" &&
+    lifecycle === "upcoming" &&
       meeting.visibility === "public" &&
       meeting.guestRsvpEnabled &&
       meeting.slug,
   );
+  const destinationName = meeting.scope === "organization"
+    ? "Entire organization"
+    : meeting.destinationName ||
+      data.groups.find((group) => group.id === meeting.groupId)?.name ||
+      "Circle gathering";
+  const lifecycleLabel = meeting.status === "cancelled"
+    ? "Cancelled"
+    : meeting.status === "completed"
+      ? "Completed"
+      : lifecycle === "live"
+        ? "Happening now"
+        : lifecycle === "attendance_pending"
+          ? "Ended"
+          : "Upcoming";
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-7 flex items-center justify-between gap-3">
         <Link
-          to={`${base}/gatherings`}
+          to={meeting.scope === "circle" && meeting.groupId
+            ? `${base}/circles/${meeting.groupId}`
+            : `${base}/gatherings`}
           className="inline-flex items-center gap-2 text-sm text-muted hover:text-olive"
         >
-          <ArrowLeft size={16} /> All gatherings
+          <ArrowLeft size={16} /> {meeting.scope === "circle"
+            ? `Back to ${destinationName}`
+            : "All gatherings"}
         </Link>
         {canLead && (
           <button
@@ -329,18 +349,19 @@ export function GatheringDetailPage() {
           />
           <div className="absolute inset-0 bg-[#30362A]/75" />
           <div className="relative max-w-4xl text-paper">
-            <p className="text-sm text-[#D9DDCE]">
-              {meeting.status === "cancelled"
-                ? "Cancelled gathering"
-                : meeting.status === "completed"
-                  ? "Completed gathering"
-                : lifecycle === "live"
-                  ? "Happening now"
-                : lifecycle === "attendance_pending"
-                  ? "This gathering has ended"
-                : meeting.scope === "organization"
-                  ? "Everyone is welcome"
-                  : meeting.destinationName || "Our next gathering"}
+            <p className="flex flex-wrap items-center gap-1 text-sm text-[#D9DDCE]">
+              <span>{lifecycleLabel}</span>
+              <span aria-hidden="true">·</span>
+              {meeting.scope === "circle" && meeting.groupId ? (
+                <Link
+                  to={`${base}/circles/${meeting.groupId}`}
+                  className="underline decoration-current/40 underline-offset-4 hover:decoration-current"
+                >
+                  {destinationName}
+                </Link>
+              ) : (
+                <span>{destinationName}</span>
+              )}
             </p>
             <h1 className="mt-2 max-w-4xl font-display text-4xl leading-[1.02] sm:text-6xl lg:text-7xl">
               {meeting.title}
@@ -421,7 +442,7 @@ export function GatheringDetailPage() {
             </p>
           </div>
         </div>
-        {lifecycle === "upcoming" && data.currentUser.personId && (
+        {canParticipate && lifecycle === "upcoming" && data.currentUser.personId && (
           <footer className="border-t border-line px-6 py-5 sm:px-10">
             <p className="mb-3 text-xs text-muted">Can you make it?</p>
             <div className="flex flex-wrap gap-2">
@@ -444,7 +465,7 @@ export function GatheringDetailPage() {
             )}
           </footer>
         )}
-        {(lifecycle === "live" || lifecycle === "attendance_pending") &&
+        {canParticipate && (lifecycle === "live" || lifecycle === "attendance_pending") &&
           data.currentUser.personId && (
             <footer className="border-t border-line px-6 py-5 sm:px-10">
               <p className="text-sm font-medium">

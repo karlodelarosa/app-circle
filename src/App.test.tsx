@@ -474,6 +474,80 @@ describe("Circles MVP", () => {
     await waitFor(() => expect(maybe).toHaveAttribute("aria-pressed", "true"));
     expect(going).toHaveAttribute("aria-pressed", "false");
   });
+  it("lets same-organization users view and share another Circle gathering without participating", () => {
+    const data = structuredClone(demoData);
+    const meeting = {
+      ...data.meetings[0],
+      id: "other-circle-gathering",
+      groupId: "ahs-circle",
+      scope: "circle" as const,
+      destinationName: "AHS",
+      accessLevel: "view" as const,
+      canManage: false,
+      rsvps: { "member-2": "attending" as const },
+    };
+    data.currentUser.role = "member";
+    data.group = { ...data.group!, role: "member" };
+    data.groups = [
+      { ...data.group },
+      {
+        ...data.group,
+        id: "ahs-circle",
+        name: "AHS",
+        role: "member",
+      },
+    ];
+    data.accessibleMeetings = [meeting];
+    data.organizationMembers = data.members;
+
+    renderWithData("/gatherings/other-circle-gathering", data);
+
+    expect(screen.getByRole("link", { name: "Back to AHS" })).toHaveAttribute(
+      "href",
+      "/circles/ahs-circle",
+    );
+    expect(screen.getByRole("link", { name: "AHS" })).toHaveAttribute(
+      "href",
+      "/circles/ahs-circle",
+    );
+    expect(screen.getByText("Mara Santos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Share invitation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "I’m going" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete gathering" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "RSVPs and attendance" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer sharing for a private view-only gathering", () => {
+    const data = structuredClone(demoData);
+    data.accessibleMeetings = [
+      {
+        ...data.meetings[0],
+        id: "private-other-circle-gathering",
+        accessLevel: "view",
+        canManage: false,
+        destinationName: "AHS",
+        visibility: "private",
+      },
+    ];
+    data.organizationMembers = data.members;
+
+    renderWithData("/gatherings/private-other-circle-gathering", data);
+
+    expect(
+      screen.queryByRole("button", { name: "Share invitation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Copy RSVP link" }),
+    ).not.toBeInTheDocument();
+  });
   it("explains who appears in Who’s coming when no member has confirmed", () => {
     const data = structuredClone(demoData);
     data.meetings[0].rsvps = {};

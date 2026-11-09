@@ -328,7 +328,11 @@ export async function loadAppData(
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const dashboardMeetings = (dashboard.meetings ?? []) as Meeting[];
   const managedGatheringIds = dashboardMeetings
-    .filter((meeting) => meeting.canManage)
+    .filter(
+      (meeting) =>
+        meeting.accessLevel === "manage" ||
+        (meeting.accessLevel === undefined && meeting.canManage),
+    )
     .map((meeting) => meeting.id);
   const guestRsvpCounts = await loadGuestRsvpCounts(
     client,
@@ -426,6 +430,10 @@ export async function loadAppData(
     scope: row.scope ?? "circle",
     destinationName: group.name,
     canManage: currentUser.role === "admin" || group.role === "leader",
+    accessLevel:
+      currentUser.role === "admin" || group.role === "leader"
+        ? "manage"
+        : "participate",
     title: row.title,
     meetingDate: row.starts_at,
     endsAt: row.ends_at,

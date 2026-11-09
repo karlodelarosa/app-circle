@@ -274,6 +274,13 @@ export function AppProvider({
 
   const setRsvp = async (meetingId: string, status: RsvpStatus) => {
     if (!data) return;
+    const meeting = (data.accessibleMeetings ?? data.meetings).find(
+      (item) => item.id === meetingId,
+    );
+    if (meeting?.accessLevel === "view")
+      throw new Error(
+        "Only members of this gathering’s Circle can change an RSVP.",
+      );
     const personId = requirePerson();
     const previous = data;
     setData({

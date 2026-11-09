@@ -89,6 +89,10 @@ export function GatheringsPage() {
     data.currentUser.role === "admin" || data.group?.role === "leader";
   const base = "";
   const meetings = data.accessibleMeetings ?? data.meetings;
+  const canManageMeeting = (meeting: Meeting) =>
+    meeting.accessLevel
+      ? meeting.accessLevel === "manage"
+      : (meeting.canManage ?? data.currentUser.role !== "member");
   const upcoming = meetings
     .filter((item) => {
       const lifecycle = gatheringLifecycle(item);
@@ -99,14 +103,14 @@ export function GatheringsPage() {
     .filter(
       (item) =>
         gatheringLifecycle(item) === "attendance_pending" &&
-        (item.canManage ?? data.currentUser.role !== "member"),
+        canManageMeeting(item),
     )
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const previous = meetings
     .filter((item) => {
       const lifecycle = gatheringLifecycle(item);
       if (lifecycle === "completed" || lifecycle === "cancelled") return true;
-      return lifecycle === "attendance_pending" && !(item.canManage ?? data.currentUser.role !== "member");
+      return lifecycle === "attendance_pending" && !canManageMeeting(item);
     })
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
   const copyInvitation = async (meeting: Meeting) => {
@@ -140,8 +144,7 @@ export function GatheringsPage() {
         data.groups.find((group) => group.id === meeting.groupId)?.name ||
         "Circle gathering";
   const actionMenu = (meeting: Meeting, allowEdit = false) => {
-    const canManage =
-      meeting.canManage ?? data.currentUser.role !== "member";
+    const canManage = canManageMeeting(meeting);
     if (!canManage) return null;
     return (
       <div className="relative">
@@ -223,7 +226,7 @@ export function GatheringsPage() {
               const attending = Object.values(meeting.rsvps).filter(
                 (status) => status === "attending",
               ).length + (meeting.guestRsvpCounts?.attending ?? 0);
-              const canManage = meeting.canManage ?? data.currentUser.role !== "member";
+              const canManage = canManageMeeting(meeting);
               return (
                 <article
                   key={meeting.id}
