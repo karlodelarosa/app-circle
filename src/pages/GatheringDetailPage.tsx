@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -48,6 +48,8 @@ const rsvpOptions: { value: RsvpStatus; label: string }[] = [
   { value: "declined", label: "Can’t go" },
 ];
 
+type GatheringDetailTab = "notes" | "attendance";
+
 export function GatheringDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -88,6 +90,9 @@ export function GatheringDetailPage() {
   const [completionConfirmOpen, setCompletionConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
+  const [detailTab, setDetailTab] = useState<GatheringDetailTab>("notes");
+  const notesTabRef = useRef<HTMLButtonElement>(null);
+  const attendanceTabRef = useRef<HTMLButtonElement>(null);
   const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
   const accessLevel = meeting?.accessLevel ??
@@ -116,6 +121,7 @@ export function GatheringDetailPage() {
     setCloseoutNotes("");
     setCloseout(null);
     setSaved(false);
+    setDetailTab("notes");
   }, [meeting]);
   useEffect(() => {
     if (!meeting || demoMode || !supabase || !canLead) return;
@@ -181,6 +187,26 @@ export function GatheringDetailPage() {
       </div>
     );
   const lifecycle = gatheringLifecycle(meeting);
+  const showDetailTabs = canLead && meeting.status === "completed";
+  const changeDetailTab = (tab: GatheringDetailTab) => {
+    setDetailTab(tab);
+  };
+  const moveDetailTabFocus = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    current: GatheringDetailTab,
+  ) => {
+    const next = event.key === "Home"
+      ? "notes"
+      : event.key === "End"
+        ? "attendance"
+        : event.key === "ArrowLeft" || event.key === "ArrowRight"
+          ? current === "notes" ? "attendance" : "notes"
+          : null;
+    if (!next) return;
+    event.preventDefault();
+    changeDetailTab(next);
+    (next === "notes" ? notesTabRef : attendanceTabRef).current?.focus();
+  };
   const attendanceEditable =
     (meeting.status === "scheduled" && lifecycle !== "upcoming") ||
     (meeting.status === "completed" && Boolean(closeout?.canEdit));
@@ -477,11 +503,64 @@ export function GatheringDetailPage() {
             </footer>
           )}
       </article>
+      {showDetailTabs && (
+        <div
+          className="mt-7 flex border-b border-line"
+          role="tablist"
+          aria-label="Completed gathering details"
+        >
+          <button
+            ref={notesTabRef}
+            type="button"
+            id="gathering-notes-tab"
+            role="tab"
+            aria-selected={detailTab === "notes"}
+            aria-controls="gathering-notes-panel"
+            tabIndex={detailTab === "notes" ? 0 : -1}
+            className={`tab-button ${detailTab === "notes" ? "tab-button-active" : ""}`}
+            onClick={() => changeDetailTab("notes")}
+            onKeyDown={(event) => moveDetailTabFocus(event, "notes")}
+          >
+            Notes
+          </button>
+          <button
+            ref={attendanceTabRef}
+            type="button"
+            id="gathering-attendance-tab"
+            role="tab"
+            aria-selected={detailTab === "attendance"}
+            aria-controls="gathering-attendance-panel"
+            tabIndex={detailTab === "attendance" ? 0 : -1}
+            className={`tab-button ${detailTab === "attendance" ? "tab-button-active" : ""}`}
+            onClick={() => changeDetailTab("attendance")}
+            onKeyDown={(event) => moveDetailTabFocus(event, "attendance")}
+          >
+            Attendance
+          </button>
+        </div>
+      )}
       {meeting.status === "completed" && (
-        <GatheringReflections meeting={meeting} canModerate={canLead} />
+        showDetailTabs ? (
+          <div
+            id="gathering-notes-panel"
+            role="tabpanel"
+            aria-labelledby="gathering-notes-tab"
+            hidden={detailTab !== "notes"}
+          >
+            <GatheringReflections meeting={meeting} canModerate={canLead} />
+          </div>
+        ) : (
+          <GatheringReflections meeting={meeting} canModerate={canLead} />
+        )
       )}
       {canLead && (
-        <section className="paper-panel mt-7 p-6 sm:p-8">
+        <section
+          id={showDetailTabs ? "gathering-attendance-panel" : undefined}
+          role={showDetailTabs ? "tabpanel" : undefined}
+          aria-labelledby={showDetailTabs ? "gathering-attendance-tab" : undefined}
+          hidden={showDetailTabs && detailTab !== "attendance"}
+          className="paper-panel mt-7 p-6 sm:p-8"
+        >
           {lifecycle === "attendance_pending" && (
             <div className="mb-7 rounded-xl border border-olive/25 bg-parchment p-4" role="status">
               <p className="font-medium text-olive">Attendance needs review</p>

@@ -683,6 +683,7 @@ describe("Circles MVP", () => {
     data.meetings[2].status = "completed";
 
     renderWithData("/gatherings/meeting-3", data);
+    fireEvent.click(screen.getByRole("tab", { name: "Attendance" }));
 
     screen
       .getAllByRole("checkbox")
@@ -715,10 +716,31 @@ describe("Circles MVP", () => {
 
     renderWithData("/gatherings/meeting-3", data);
 
+    const notesTab = screen.getByRole("tab", { name: "Notes" });
+    const attendanceTab = screen.getByRole("tab", { name: "Attendance" });
+    expect(notesTab).toHaveAttribute("aria-selected", "true");
+    expect(notesTab).toHaveAttribute("aria-controls", "gathering-notes-panel");
+    expect(attendanceTab).toHaveAttribute(
+      "aria-controls",
+      "gathering-attendance-panel",
+    );
     expect(
       screen.getByRole("heading", { name: "After the gathering" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("What stayed with you?")).toBeInTheDocument();
+    const reflection = screen.getByLabelText("What stayed with you?");
+    fireEvent.change(reflection, { target: { value: "Keep listening." } });
+
+    fireEvent.click(attendanceTab);
+    expect(attendanceTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "RSVPs and attendance" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "After the gathering", hidden: true }),
+    ).not.toBeVisible();
+
+    fireEvent.click(notesTab);
+    expect(screen.getByLabelText("What stayed with you?")).toHaveValue(
+      "Keep listening.",
+    );
   });
   it("does not expose reflections before a gathering is completed", () => {
     renderApp("/gatherings/meeting-1");
