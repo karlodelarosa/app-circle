@@ -1,3 +1,5 @@
+import { GATHERING_SHARE_PREVIEW_VERSION } from "../src/lib/sharePreview";
+
 interface AssetFetcher {
   fetch(request: Request): Promise<Response>;
 }
@@ -20,12 +22,24 @@ interface PublicGathering {
   coverUrl?: string;
 }
 
+interface PublicGalleryPhoto {
+  id?: string;
+  imageUrl?: string;
+}
+
+interface PublicGallery {
+  slug?: string;
+  coverUrl?: string;
+  photos?: PublicGalleryPhoto[];
+}
+
 interface PublicSpaceResponse {
   organization?: { name?: string };
   gathering?: PublicGathering;
   introduction?: string;
   heroTitle?: string;
   heroImageUrl?: string;
+  galleries?: PublicGallery[];
 }
 
 const escapeHtml = (value: unknown) =>
@@ -38,10 +52,55 @@ const escapeHtml = (value: unknown) =>
 
 const gatheringRoute = /^\/([^/]+)\/gatherings\/([^/]+)\/?$/;
 const gatheringImageRoute = "/__share/gathering-image";
+const galleryImageRoute = "/__media/gallery-image";
 const clientTelemetryRoute = "/__telemetry/client-error";
 const healthRoute = "/healthz";
 const organizationRoute = /^\/([^/]+)(?:\/(?:gatherings|updates|testimonies|galleries|circles|cell-group-signup|privacy))?\/?$/;
-const socialPreviewVersion = "3";
+const publicIdentifier = /^[A-Za-z0-9-]{1,160}$/;
+
+interface ImageTransformOptions {
+  fit: string;
+  width: number;
+  height?: number;
+  format: string;
+  quality: number;
+}
+
+function fetchTransformedImage(sourceUrl: string, image: ImageTransformOptions) {
+  return fetch(sourceUrl, {
+    cf: { image },
+  } as RequestInit & { cf: { image: ImageTransformOptions } });
+}
+
+function publicImageResponse(source: Response, contentType = "image/jpeg") {
+  if (!source.body) return null;
+  const headers = new Headers(source.headers);
+  headers.set("content-type", contentType);
+  headers.set("cache-control", "public, max-age=86400, s-maxage=86400");
+  headers.set("access-control-allow-origin", "*");
+  headers.delete("content-length");
+  headers.delete("x-robots-tag");
+  headers.delete("set-cookie");
+  return new Response(source.body, { status: 200, headers });
+}
+
+function headResponse(response: Response) {
+  return new Response(null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+function mediaNotFound() {
+  return new Response(null, {
+    status: 404,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "image/jpeg",
+    },
+  });
+}
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -135,7 +194,7 @@ function gatheringPlaceholder(seed: string) {
     (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
     0,
   );
-  return `/assets/gathering-placeholder-${(hash % 2) + 1}.webp`;
+  return `/assets/gathering-share-placeholder-${(hash % 2) + 1}.jpg`;
 }
 
 function routeParts(pathname: string) {
@@ -163,11 +222,11 @@ function injectMetadata(
   canonical.hash = "";
   const socialUrl = new URL(canonical);
   if (new URL(request.url).searchParams.has("share"))
-    socialUrl.searchParams.set("share", socialPreviewVersion);
+    socialUrl.searchParams.set("share", GATHERING_SHARE_PREVIEW_VERSION);
   const image = new URL(gatheringImageRoute, canonical);
   image.searchParams.set("organization", parts.organization);
   image.searchParams.set("gathering", parts.gathering);
-  image.searchParams.set("v", socialPreviewVersion);
+  image.searchParams.set("v", GATHERING_SHARE_PREVIEW_VERSION);
   const title = `${gathering.title || "Gathering"} | ${space.organization?.name || "Circles"}`;
   const description = String(
     gathering.summary ||
@@ -327,46 +386,63 @@ async function gatheringImage(request: Request, env: WorkerEnv) {
   const result = await loadPublicGathering({ organization, gathering }, env);
   if (!result) return null;
 
-  const hasCover = Boolean(result.gathering.coverUrl);
   const source = result.gathering.coverUrl
-    ? await fetch(result.gathering.coverUrl, {
-        cf: {
-          image: {
-            fit: "cover",
-            width: 1200,
-            height: 630,
-            format: "jpeg",
-            quality: 85,
-          },
-        },
-      } as RequestInit & {
-        cf: {
-          image: {
-            fit: string;
-            width: number;
-            height: number;
-            format: string;
-            quality: number;
-          };
-        };
+    ? await fetchTransformedImage(result.gathering.coverUrl, {
+        fit: "cover",
+        width: 1200,
+        height: 630,
+        format: "jpeg",
+        quality: 85,
       })
     : await env.ASSETS.fetch(
         new Request(
           new URL(gatheringPlaceholder(gathering), request.url),
         ),
       );
-  if (!source.ok || !source.body) return null;
-  const headers = new Headers(source.headers);
-  headers.set(
-    "content-type",
-    hasCover ? "image/jpeg" : source.headers.get("content-type") || "image/webp",
-  );
-  headers.set("cache-control", "public, max-age=86400, s-maxage=86400");
-  headers.set("access-control-allow-origin", "*");
-  headers.delete("content-length");
-  headers.delete("x-robots-tag");
-  headers.delete("set-cookie");
-  return new Response(source.body, { status: 200, headers });
+  if (!source.ok) return null;
+  return publicImageResponse(source, "image/jpeg");
+}
+
+async function galleryImage(request: Request, env: WorkerEnv) {
+  const url = new URL(request.url);
+  const organization = url.searchParams.get("organization")?.trim();
+  const gallerySlug = url.searchParams.get("gallery")?.trim();
+  const photoId = url.searchParams.get("photo")?.trim();
+  if (
+    !organization ||
+    !gallerySlug ||
+    !publicIdentifier.test(organization) ||
+    !publicIdentifier.test(gallerySlug) ||
+    (photoId && !publicIdentifier.test(photoId))
+  ) return null;
+
+  const space = await loadPublicSpace(organization, env);
+  const gallery = space?.galleries?.find((item) => item.slug === gallerySlug);
+  if (!gallery) return null;
+  const sourceUrl = photoId
+    ? gallery?.photos?.find((photo) => photo.id === photoId)?.imageUrl
+    : gallery?.coverUrl || gallery?.photos?.[0]?.imageUrl;
+  const placeholder = async () => {
+    const source = await env.ASSETS.fetch(
+      new Request(new URL("/assets/gallery-placeholder.jpg", request.url)),
+    );
+    return source.ok ? publicImageResponse(source) : null;
+  };
+  if (!sourceUrl) return placeholder();
+
+  try {
+    const source = await fetchTransformedImage(sourceUrl, {
+      fit: photoId ? "scale-down" : "cover",
+      width: photoId ? 1600 : 1200,
+      ...(photoId ? {} : { height: 900 }),
+      format: "jpeg",
+      quality: 85,
+    });
+    if (!source.ok) return placeholder();
+    return publicImageResponse(source);
+  } catch {
+    return placeholder();
+  }
 }
 
 export async function handleRequest(
@@ -387,11 +463,13 @@ export async function handleRequest(
     return secureResponse(response || new Response("Sitemap unavailable", { status: 503 }), id);
   }
   const isImage = requestUrl.pathname === gatheringImageRoute;
+  const isGalleryImage = requestUrl.pathname === galleryImageRoute;
   const isGathering = Boolean(routeParts(requestUrl.pathname));
   const isOrganization = organizationRoute.test(requestUrl.pathname);
+  const isHead = request.method === "HEAD";
   if (
-    request.method !== "GET" ||
-    (!isImage && !isGathering && !isOrganization)
+    (request.method !== "GET" && !isHead) ||
+    (!isImage && !isGalleryImage && !isGathering && !isOrganization)
   )
     return secureResponse(await env.ASSETS.fetch(request), id);
 
@@ -400,29 +478,33 @@ export async function handleRequest(
       caches?: { default?: Cache };
     }
   ).caches?.default;
-  const cached = await edgeCache?.match(request);
+  const cached = !isHead ? await edgeCache?.match(request) : undefined;
   if (cached) return secureResponse(cached, id);
 
   try {
-    const response = isImage
+    const response = isGalleryImage
+      ? await galleryImage(request, env)
+      : isImage
       ? await gatheringImage(request, env)
       : isGathering
         ? await gatheringHtml(request, env)
         : await organizationHtml(request, env);
     if (response) {
-      if (edgeCache && context)
+      if (!isHead && edgeCache && context)
         context.waitUntil(edgeCache.put(request, response.clone()));
-      return secureResponse(response, id);
+      return secureResponse(isHead ? headResponse(response) : response, id);
     }
   } catch (error) {
     console.error(JSON.stringify({
       event: "worker_request_failed",
       requestId: id,
-      route: isImage ? gatheringImageRoute : isGathering ? gatheringRoute.source : organizationRoute.source,
+      route: isGalleryImage ? galleryImageRoute : isImage ? gatheringImageRoute : isGathering ? gatheringRoute.source : organizationRoute.source,
       errorType: error instanceof Error ? error.name : "UnknownError",
     }));
     // The SPA still provides its normal not-found and retry experience.
   }
+  if (isImage || isGalleryImage)
+    return secureResponse(mediaNotFound(), id);
   return secureResponse(await env.ASSETS.fetch(request), id);
 }
 

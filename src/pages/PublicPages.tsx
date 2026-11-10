@@ -42,6 +42,7 @@ import {
 import { gatheringCoverImage } from "../lib/images";
 import {
   announcementShareUrl,
+  galleryImageUrl,
   gatheringShareUrl,
   LAST_PUBLIC_ORG_KEY,
   publicCommunityUrl,
@@ -57,7 +58,12 @@ import {
   requestCircleConnection,
   submitGuestRsvp,
 } from "../services/public";
-import type { ContactPreference, PublicSpace, RsvpStatus } from "../types";
+import type {
+  ContactPreference,
+  GalleryPhoto,
+  PublicSpace,
+  RsvpStatus,
+} from "../types";
 
 interface PublicContextValue {
   space: PublicSpace;
@@ -352,7 +358,7 @@ export function PublicHomePage() {
               to={href(`/${slug}/galleries/${space.galleries[0].slug}`)}
               className="group relative min-h-80 overflow-hidden rounded-[2rem]"
             >
-              <img src={space.galleries[0].coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={galleryImageUrl(space.organization.slug, space.galleries[0].slug)} alt="" className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-transparent to-transparent" />
               <h3 className="absolute inset-x-0 bottom-0 p-7 font-display text-4xl text-paper">
                 {space.galleries[0].title}
@@ -551,7 +557,7 @@ function DiscoverySection({
             className="group grid min-h-64 overflow-hidden rounded-[2rem] border border-line bg-paper sm:grid-cols-[1fr_.8fr] lg:col-span-7"
           >
             <img
-              src={gallery.coverUrl || "/assets/devotional-table.webp"}
+              src={galleryImageUrl(space.organization.slug, gallery.slug)}
               alt=""
               className="h-full min-h-56 w-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.02]"
             />
@@ -1185,7 +1191,7 @@ export function GalleriesPage() {
             className="group relative min-h-80 overflow-hidden rounded-[2rem] sm:min-h-96"
           >
             <img
-              src={gallery.coverUrl || "/assets/devotional-table.webp"}
+              src={galleryImageUrl(space.organization.slug, gallery.slug)}
               alt=""
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.02]"
             />
@@ -1208,7 +1214,7 @@ export function GalleryPage() {
   const { space } = usePublic();
   const { gallerySlug } = useParams();
   const gallery = galleryBySlug(space, gallerySlug || "");
-  const [active, setActive] = useState<string>();
+  const [active, setActive] = useState<GalleryPhoto>();
   if (!gallery)
     return (
       <PublicIndex
@@ -1222,11 +1228,11 @@ export function GalleryPage() {
         {gallery.photos.map((photo) => (
           <button
             key={photo.id}
-            onClick={() => setActive(photo.imageUrl)}
+            onClick={() => setActive(photo)}
             className="overflow-hidden rounded-3xl"
           >
             <img
-              src={photo.imageUrl}
+              src={galleryImageUrl(space.organization.slug, gallery.slug, photo.id)}
               alt={photo.altText}
               className="h-80 w-full object-cover"
             />
@@ -1243,8 +1249,8 @@ export function GalleryPage() {
           aria-label="Close image"
         >
           <img
-            src={active}
-            alt=""
+            src={galleryImageUrl(space.organization.slug, gallery.slug, active.id)}
+            alt={active.altText}
             className="m-auto max-h-full max-w-full object-contain"
           />
         </button>

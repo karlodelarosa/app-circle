@@ -1,0 +1,1 @@
+export const GATHERING_SHARE_PREVIEW_VERSION = "4";

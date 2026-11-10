@@ -6,6 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { DashboardJumbotron } from "../components/DashboardJumbotron";
 import { formatDate, formatTime } from "../lib/format";
 import { gatheringLifecycle } from "../lib/gatheringLifecycle";
+import { galleryImageUrl } from "../lib/publicLinks";
 import type { Meeting } from "../types";
 
 type EventFilter = "both" | "organization" | "circles";
@@ -209,7 +210,7 @@ export function HomePage() {
             {highlights.map((gallery) => (
               <article key={gallery.id} className="paper-panel overflow-hidden">
                 <a href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`} target="_blank" rel="noreferrer" className="group block h-full">
-                  <img src={gallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="aspect-[4/3] w-full object-cover" />
+                  <img src={galleryImageUrl(data.organization.slug, gallery.slug)} alt="" className="aspect-[4/3] w-full object-cover" />
                   <div className="p-5">
                     <p className="text-xs font-medium text-olive">{gallery.destinationName || "Circle highlight"}</p>
                     <h3 className="mt-2 font-display text-3xl leading-tight group-hover:text-olive">{gallery.title}</h3>

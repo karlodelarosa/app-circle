@@ -4,11 +4,15 @@ import { handleRequest, type WorkerEnv } from "./index";
 const shell = `<!doctype html><html><head><meta name="description" content="Default"><title>Circles</title></head><body><div id="root"></div></body></html>`;
 
 const assets = {
-  fetch: vi.fn(async (_request: Request) =>
-    new Response(shell, {
+  fetch: vi.fn(async (request: Request) => {
+    if (new URL(request.url).pathname.endsWith(".jpg"))
+      return new Response(new Uint8Array([4, 5, 6]), {
+        headers: { "content-type": "image/jpeg" },
+      });
+    return new Response(shell, {
       headers: { "content-type": "text/html; charset=UTF-8" },
-    }),
-  ),
+    });
+  }),
 };
 
 const env: WorkerEnv = {
@@ -40,7 +44,7 @@ describe("Circles Cloudflare Worker", () => {
     );
 
     const response = await handleRequest(
-      new Request("https://circles.example/elgc/gatherings/lunch?share=2"),
+      new Request("https://circles.example/elgc/gatherings/lunch?share=4"),
       env,
     );
     const html = await response.text();
@@ -49,11 +53,11 @@ describe("Circles Cloudflare Worker", () => {
     expect(response.headers.get("cache-control")).toContain("s-maxage=300");
     expect(html).toContain("Lunch &lt;Together&gt; | ELGC &amp; Friends");
     expect(html).toContain(
-      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch&amp;v=3"',
+      'property="og:image" content="https://circles.example/__share/gathering-image?organization=elgc&amp;gathering=lunch&amp;v=4"',
     );
     expect(html).toContain('property="og:image:type" content="image/jpeg"');
     expect(html).toContain(
-      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=3"',
+      'property="og:url" content="https://circles.example/elgc/gatherings/lunch?share=4"',
     );
     expect(html).not.toContain('content="Default"');
   });
@@ -167,6 +171,160 @@ describe("Circles Cloudflare Worker", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("transcodes public HEIC gallery photos without accepting a source URL", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("get_circle_public_space"))
+        return Response.json({
+          organization: { name: "ELGC" },
+          galleries: [{
+            slug: "life-together",
+            coverUrl: "https://images.example/cover.heic",
+            photos: [{
+              id: "photo-1",
+              imageUrl: "https://images.example/photo.heic",
+            }],
+          }],
+        });
+      return new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-type": "image/heic" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleRequest(
+      new Request(
+        "https://circles.example/__media/gallery-image?organization=elgc&gallery=life-together&photo=photo-1&source=https://attacker.example/image",
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(response.headers.get("cache-control")).toContain("max-age=86400");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "https://images.example/photo.heic",
+      expect.objectContaining({
+        cf: { image: expect.objectContaining({ format: "jpeg", width: 1600 }) },
+      }),
+    );
+  });
+
+  it("returns a JPEG placeholder when a public gallery image cannot be decoded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("get_circle_public_space"))
+        return Response.json({
+          organization: { name: "ELGC" },
+          galleries: [{
+            slug: "life-together",
+            coverUrl: "https://images.example/broken.heic",
+            photos: [],
+          }],
+        });
+      return new Response("Unsupported image", { status: 415 });
+    }));
+
+    const response = await handleRequest(
+      new Request(
+        "https://circles.example/__media/gallery-image?organization=elgc&gallery=life-together",
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    const assetRequest = assets.fetch.mock.calls.at(-1)?.[0] as Request;
+    expect(assetRequest.url).toMatch(/\/assets\/gallery-placeholder\.jpg$/);
+  });
+
+  it("returns a media 404 for invalid or unknown gallery identifiers", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleRequest(
+      new Request(
+        "https://circles.example/__media/gallery-image?organization=../private&gallery=life-together",
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).not.toContain("text/html");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(assets.fetch).not.toHaveBeenCalled();
+  });
+
+  it("serves gathering pages and preview images correctly for HEAD crawlers", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("get_circle_public_gathering"))
+        return Response.json({
+          organization: { name: "ELGC" },
+          gathering: {
+            slug: "lunch",
+            title: "Lunch",
+            coverUrl: "https://images.example/cover.webp",
+          },
+        });
+      return new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-type": "image/webp" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const page = await handleRequest(
+      new Request("https://circles.example/elgc/gatherings/lunch?share=4", {
+        method: "HEAD",
+      }),
+      env,
+    );
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toBe("");
+
+    const image = await handleRequest(
+      new Request(
+        "https://circles.example/__share/gathering-image?organization=elgc&gathering=lunch&v=4",
+        { method: "HEAD" },
+      ),
+      env,
+    );
+    expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toBe("image/jpeg");
+    expect(await image.text()).toBe("");
+  });
+
+  it("serves gallery images correctly for HEAD crawlers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("get_circle_public_space"))
+        return Response.json({
+          organization: { name: "ELGC" },
+          galleries: [{
+            slug: "life-together",
+            coverUrl: "https://images.example/cover.heic",
+          }],
+        });
+      return new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-type": "image/heic" },
+      });
+    }));
+
+    const response = await handleRequest(
+      new Request(
+        "https://circles.example/__media/gallery-image?organization=elgc&gallery=life-together",
+        { method: "HEAD" },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(await response.text()).toBe("");
+  });
+
   it("uses a supplied gathering banner when the gathering has no cover", async () => {
     vi.stubGlobal(
       "fetch",
@@ -187,7 +345,7 @@ describe("Circles Cloudflare Worker", () => {
 
     const assetRequest = assets.fetch.mock.calls.at(-1)?.[0] as Request;
     expect(assetRequest.url).toMatch(
-      /\/assets\/gathering-placeholder-[12]\.webp$/,
+      /\/assets\/gathering-share-placeholder-[12]\.jpg$/,
     );
   });
 

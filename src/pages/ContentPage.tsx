@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
-import { announcementShareUrl } from "../lib/publicLinks";
+import { announcementShareUrl, galleryImageUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
 import { saveCirclePublicListing, unpublishCirclePublicListing } from "../services/circles";
 import type { ContentAssignment, ContentAssignmentType, Group, Testimony } from "../types";
@@ -710,7 +710,7 @@ export function ContentPage() {
             <div className="mt-3 divide-y divide-line border-y border-line">
               {recentGalleries.slice(0, 3).map((gallery) => (
                 <div key={gallery.id} className="flex items-center gap-4 py-4">
-                  <img src={gallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="h-14 w-16 rounded-xl object-cover" />
+                  <img src={galleryImageUrl(data.organization.slug, gallery.slug)} alt="" className="h-14 w-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{gallery.title}</p>
                     <p className="mt-1 text-xs text-muted">{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · Public Gallery</p>

@@ -26,6 +26,7 @@ import { supabase } from "../lib/supabase";
 import { copyText } from "../lib/share";
 import { formatDate } from "../lib/format";
 import { gatheringLifecycle } from "../lib/gatheringLifecycle";
+import { galleryImageUrl } from "../lib/publicLinks";
 import { getErrorMessage } from "../lib/errors";
 import {
   getFunctionErrorMessage,
@@ -933,7 +934,7 @@ export function CirclePage() {
             className="group relative block min-h-72 overflow-hidden rounded-[1.75rem] text-paper sm:min-h-96"
           >
             <img
-              src={latestGallery.coverUrl || "/assets/devotional-table.webp"}
+              src={galleryImageUrl(data.organization.slug, latestGallery.slug)}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />
