@@ -10,6 +10,7 @@ SELECT
   member.cell_group_id AS viewer_group_id,
   gen_random_uuid() AS sibling_group_id,
   gen_random_uuid() AS gathering_id,
+  gen_random_uuid() AS viewer_reflection_id,
   gen_random_uuid() AS guest_id
 FROM public.organization_members membership
 JOIN public.circle_user_links link ON link.organization_id=membership.organization_id AND link.status='active'
@@ -53,6 +54,8 @@ BEGIN
     (fixture.organization_id,fixture.gathering_id,tentative_person,'tentative');
   INSERT INTO public.circle_gathering_reflections(organization_id,gathering_id,author_person_id,body)
   VALUES(fixture.organization_id,fixture.gathering_id,attending_person,'A completed reflection visible across the organization.');
+  INSERT INTO public.circle_gathering_reflections(id,organization_id,gathering_id,author_person_id,body)
+  VALUES(fixture.viewer_reflection_id,fixture.organization_id,fixture.gathering_id,fixture.viewer_person_id,'A prior reflection from a former participant.');
   INSERT INTO public.circle_guest_rsvps(id,organization_id,gathering_id,guest_name,normalized_contact,status)
   VALUES(fixture.guest_id,fixture.organization_id,fixture.gathering_id,'Private guest fixture','guest-fixture-'||fixture.guest_id,'attending');
   INSERT INTO public.circle_gathering_attendance_records(organization_id,gathering_id,person_id,recorded_by)
@@ -88,6 +91,10 @@ BEGIN
   UPDATE public.circle_gatherings SET title='Forged edit' WHERE id=fixture.gathering_id;
   GET DIAGNOSTICS affected=ROW_COUNT;
   IF affected<>0 THEN RAISE EXCEPTION 'View-only user updated another Circle gathering'; END IF;
+
+  DELETE FROM public.circle_gathering_reflections WHERE id=fixture.viewer_reflection_id;
+  GET DIAGNOSTICS affected=ROW_COUNT;
+  IF affected<>0 THEN RAISE EXCEPTION 'View-only user deleted a prior reflection'; END IF;
 
   BEGIN
     INSERT INTO public.circle_gathering_rsvps(organization_id,gathering_id,person_id,status)

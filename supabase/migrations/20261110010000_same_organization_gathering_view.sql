@@ -33,6 +33,18 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Authors and gathering managers delete reflections"
+  ON public.circle_gathering_reflections;
+CREATE POLICY "Participants and gathering managers delete reflections"
+ON public.circle_gathering_reflections FOR DELETE TO authenticated
+USING (
+  (
+    author_person_id=public.circle_current_person_id(organization_id)
+    AND public.circle_can_access_gathering(gathering_id)
+  )
+  OR public.circle_can_manage_gathering(gathering_id)
+);
+
 CREATE OR REPLACE FUNCTION public.get_circle_dashboard()
 RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 DECLARE v_org UUID; v_person UUID; v_admin BOOLEAN; result JSONB;
