@@ -432,7 +432,7 @@ export function ContentPage() {
           title="Galleries"
           description="Publish a standalone photo album that remains easy to find later."
           destination="Public homepage and Gallery"
-          count={data.galleries.length}
+          count={recentGalleries.length}
           onAdd={() => beginComposer("gallery")}
         />
         <ContentCard
@@ -717,7 +717,7 @@ export function ContentPage() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <a className="text-link" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}>View <ChevronRight size={14} /></a>
-                    {gallery.isOrganizationHighlight && (
+                    {gallery.isOrganizationHighlight && gallery.groupId && (
                       <button
                         type="button"
                         className="text-link"
