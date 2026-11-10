@@ -84,7 +84,7 @@ export function HomePage() {
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
         <div className="min-w-0">
-      {announcement && (
+          {announcement && (
         <section className="paper-panel mb-6 p-6 sm:p-8" aria-labelledby="dashboard-announcement-title">
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs uppercase tracking-[0.14em] text-olive">Latest announcement</p>
@@ -94,7 +94,7 @@ export function HomePage() {
           <p className="mt-4 max-w-3xl whitespace-pre-line leading-7 text-muted">{announcement.body}</p>
           <p className="mt-5 text-xs text-muted">Shared {formatDate(announcement.publishedAt)}</p>
         </section>
-      )}
+          )}
 
       <section className="paper-panel p-5 sm:p-7" aria-labelledby="upcoming-events-title" aria-label="Upcoming events">
         <div className="flex flex-col gap-5 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -229,7 +229,7 @@ export function HomePage() {
           className="xl:sticky xl:top-24"
           aria-labelledby="prayer-requests-title"
         >
-      <section className="paper-panel overflow-hidden" aria-labelledby="prayer-requests-title">
+          <section className="paper-panel overflow-hidden" aria-labelledby="prayer-requests-title">
         <div className="flex items-center justify-between border-b border-line p-6">
           <div>
             <p className="text-xs uppercase tracking-[0.14em] text-olive">Care</p>
@@ -248,7 +248,7 @@ export function HomePage() {
             </Link>
           )) : <p className="py-8 text-sm text-muted">No open requests right now.</p>}
         </div>
-      </section>
+          </section>
         </aside>
       </div>
     </div>

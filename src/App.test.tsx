@@ -724,6 +724,12 @@ describe("Circles MVP", () => {
       "aria-controls",
       "gathering-attendance-panel",
     );
+    fireEvent.keyDown(notesTab, { key: "ArrowRight" });
+    expect(attendanceTab).toHaveFocus();
+    expect(attendanceTab).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(attendanceTab, { key: "Home" });
+    expect(notesTab).toHaveFocus();
+    expect(notesTab).toHaveAttribute("aria-selected", "true");
     expect(
       screen.getByRole("heading", { name: "After the gathering" }),
     ).toBeInTheDocument();
@@ -741,6 +747,29 @@ describe("Circles MVP", () => {
     expect(screen.getByLabelText("What stayed with you?")).toHaveValue(
       "Keep listening.",
     );
+  });
+  it("keeps completed gathering tabs leader-only", () => {
+    const data = structuredClone(demoData);
+    data.currentUser.role = "member";
+    data.group = { ...data.group!, role: "member" };
+    data.groups = data.groups.map((group) => ({ ...group, role: "member" }));
+    data.meetings[2] = {
+      ...data.meetings[2],
+      status: "completed",
+      accessLevel: "participate",
+      canManage: false,
+    };
+
+    renderWithData("/gatherings/meeting-3", data);
+
+    expect(screen.queryByRole("tab", { name: "Notes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Attendance" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "After the gathering" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "RSVPs and attendance" }),
+    ).not.toBeInTheDocument();
   });
   it("does not expose reflections before a gathering is completed", () => {
     renderApp("/gatherings/meeting-1");
