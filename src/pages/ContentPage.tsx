@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, ChevronRight, Images, Megaphone, Plus, Quote, UsersRound, X } from "lucide-react";
+import { CalendarDays, ChevronRight, Copy, Images, Megaphone, Plus, Quote, Share2, UsersRound, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { supabase } from "../lib/supabase";
 import { getErrorMessage } from "../lib/errors";
+import { announcementShareUrl } from "../lib/publicLinks";
+import { copyText, shareLink } from "../lib/share";
 import { saveCirclePublicListing, unpublishCirclePublicListing } from "../services/circles";
 import type { ContentAssignment, ContentAssignmentType, Group, Testimony } from "../types";
 import { Modal } from "../components/Modal";
 
 type Composer = "testimony" | "gallery" | "announcement" | null;
+type ContentTab = "content" | "circle-profiles" | "assignments";
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -16,6 +20,7 @@ const slugify = (value: string) =>
     .replace(/^-|-$/g, "");
 export function ContentPage() {
   const { data, demoMode, refresh } = useCircles();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [composer, setComposer] = useState<Composer>(null);
   const [form, setForm] = useState({
     title: "",
@@ -45,13 +50,29 @@ export function ContentPage() {
     if (composer && !dialogRef.current?.open) dialogRef.current?.showModal();
   }, [composer]);
   useEffect(() => {
-    if (composer !== "gallery" || !targetGroupId || targetGroupId === "organization") return;
+    if (composer !== "gallery" || !targetGroupId) return;
     const completed = (data?.accessibleMeetings ?? data?.meetings ?? [])
-      .filter((meeting) => meeting.groupId === targetGroupId && meeting.status === "completed")
+      .filter((meeting) =>
+        meeting.status === "completed" &&
+        (targetGroupId === "organization"
+          ? meeting.scope === "organization"
+          : meeting.groupId === targetGroupId),
+      )
       .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
     setGatheringId((current) => completed.some((meeting) => meeting.id === current) ? current : completed[0]?.id ?? "");
   }, [composer, targetGroupId, data?.accessibleMeetings, data?.meetings]);
   if (!data) return null;
+  const requestedTab = searchParams.get("tab");
+  const activeTab: ContentTab = data.currentUser.role === "admin" &&
+    (requestedTab === "circle-profiles" || requestedTab === "assignments")
+    ? requestedTab
+    : "content";
+  const selectTab = (tab: ContentTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === "content") next.delete("tab");
+    else next.set("tab", tab);
+    setSearchParams(next, { replace: true });
+  };
   const manageableGroups=data.groups.filter((group)=>data.currentUser.role==="admin"||group.role==="leader");
   const hasSingleLeaderDestination=data.currentUser.role!=="admin"&&manageableGroups.length===1;
   const beginComposer=(kind:Exclude<Composer,null>)=>{
@@ -62,8 +83,42 @@ export function ContentPage() {
     setComposer(kind);
   };
   const completedGatherings = (data.accessibleMeetings ?? data.meetings)
-    .filter((meeting) => meeting.groupId === targetGroupId && meeting.status === "completed")
+    .filter((meeting) =>
+      meeting.status === "completed" &&
+      (targetGroupId === "organization"
+        ? meeting.scope === "organization"
+        : meeting.groupId === targetGroupId),
+    )
     .sort((a, b) => b.meetingDate.localeCompare(a.meetingDate));
+  const recentGalleries = Array.from(
+    new Map(
+      [...(data.dashboard?.galleries ?? []), ...data.galleries].map((gallery) => [
+        gallery.id,
+        gallery,
+      ]),
+    ).values(),
+  ).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  const shareAnnouncement = async (id: string, title: string) => {
+    setMessage("");
+    try {
+      const result = await shareLink(
+        title,
+        announcementShareUrl(data.organization.slug, id),
+      );
+      if (result === "copied") setMessage("Announcement link copied.");
+    } catch {
+      setMessage("The announcement could not be shared.");
+    }
+  };
+  const copyAnnouncement = async (id: string) => {
+    setMessage("");
+    try {
+      await copyText(announcementShareUrl(data.organization.slug, id));
+      setMessage("Announcement link copied.");
+    } catch {
+      setMessage("The announcement link could not be copied.");
+    }
+  };
   const assignmentItems=data.contentAssignments.filter((item)=>{
     const matchesType=assignmentType==="all"||item.type===assignmentType;
     const matchesGroup=assignmentGroup==="all"||
@@ -162,11 +217,13 @@ export function ContentPage() {
     setMessage("");
     try {
       if (!targetGroupId) throw new Error("Choose where this content belongs.");
-      if (targetGroupId === "organization" && composer !== "announcement")
-        throw new Error("Only announcements can be published to the entire organization.");
+      if (targetGroupId === "organization" && composer !== "announcement" && composer !== "gallery")
+        throw new Error("Only announcements and galleries can be published to the entire organization.");
+      if (composer === "gallery" && targetGroupId === "organization" && !gatheringId)
+        throw new Error("Choose a completed organization gathering before publishing.");
       if (composer === "gallery" && shareAcrossOrganization && !gatheringId)
         throw new Error("Choose a completed gathering before sharing across the organization.");
-      if (!demoMode && supabase && data.group) {
+      if (!demoMode && supabase) {
         const common = {
           organization_id: data.organization.id,
           cell_group_id: targetGroupId === "organization" ? null : targetGroupId,
@@ -213,8 +270,8 @@ export function ContentPage() {
               description: form.description,
               cover_url: imageUrl || null,
               gathering_id: gatheringId || null,
-              is_organization_highlight: shareAcrossOrganization,
-              highlighted_at: shareAcrossOrganization ? new Date().toISOString() : null,
+              is_organization_highlight: targetGroupId === "organization" || shareAcrossOrganization,
+              highlighted_at: targetGroupId === "organization" || shareAcrossOrganization ? new Date().toISOString() : null,
               status: "published",
               published_at: new Date().toISOString(),
             })
@@ -262,14 +319,36 @@ export function ContentPage() {
             space.
           </p>
         </div>
-        <button
-          className="secondary-button"
-          disabled={busy}
-          onClick={() => void publishSpace()}
-        >
-          {busy ? "Publishing…" : "Publish community page"}
-        </button>
+        {activeTab === "circle-profiles" && (
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void publishSpace()}
+          >
+            {busy ? "Publishing…" : "Publish community page"}
+          </button>
+        )}
       </div>
+      {data.currentUser.role === "admin" && (
+        <div className="mt-7 flex gap-2 overflow-x-auto border-b border-line" role="tablist" aria-label="Publishing sections">
+          {([
+            ["content", "Content"],
+            ["circle-profiles", "Circle profiles"],
+            ["assignments", "Content assignments"],
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm ${activeTab === tab ? "border-olive text-olive" : "border-transparent text-muted"}`}
+              onClick={() => selectTab(tab)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {message && !composer && (
         <p
           role="status"
@@ -278,7 +357,7 @@ export function ContentPage() {
           {message}
         </p>
       )}
-      {data.currentUser.role === "admin" && (
+      {data.currentUser.role === "admin" && activeTab === "circle-profiles" && (
         <section className="mt-10 border-t border-line pt-8">
           <div className="section-heading">
             <div>
@@ -318,7 +397,7 @@ export function ContentPage() {
           </div>
         </section>
       )}
-      {data.currentUser.role === "admin" && (
+      {data.currentUser.role === "admin" && activeTab === "assignments" && (
         <section className="mt-10 border-t border-line pt-8">
           <div className="section-heading">
             <div>
@@ -337,6 +416,7 @@ export function ContentPage() {
           </div>
         </section>
       )}
+      {activeTab === "content" && (<>
       <section className="mt-10 border-t border-line pt-8"><div className="section-heading"><div><h2>Pending testimonies</h2><p>Review stories submitted by members of {data.group?.name||"this Circle"}.</p></div></div>{pendingTestimonies.length?<div className="divide-y divide-line border-y border-line">{pendingTestimonies.map(item=><div key={item.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><h3 className="font-display text-2xl">{item.title}</h3><p className="mt-1 text-sm text-muted">Submitted by {item.authorName}</p><p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">{item.body}</p></div><button className="primary-button" onClick={()=>{setReviewing(item);setReviewName(item.authorName)}}>Review and publish</button></div>)}</div>:<p className="border-y border-line py-6 text-sm text-muted">No testimonies are waiting for review.</p>}</section>
       <div className="mt-9 grid gap-5 md:grid-cols-2">
         <ContentCard
@@ -420,12 +500,18 @@ export function ContentPage() {
                   Destination
                   <select className="field" required value={targetGroupId} onChange={(event)=>setTargetGroupId(event.target.value)} disabled={hasSingleLeaderDestination}>
                     <option value="">Choose where this belongs</option>
-                    {composer==="announcement"&&data.currentUser.role==="admin"&&<option value="organization">Entire organization</option>}
+                    {(composer==="announcement"||composer==="gallery")&&data.currentUser.role==="admin"&&<option value="organization">Entire organization</option>}
                     {manageableGroups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}
                   </select>
                 </label>
                 <p className="mt-2 text-xs leading-5 text-muted">
-                  {composer==="announcement"?"Circle announcements stay with that Circle. Organization announcements appear on the main dashboard and public Updates.":"This content will appear only in the selected Circle’s private detail view."}
+                  {composer==="announcement"
+                    ? data.currentUser.role==="admin"
+                      ? "Circle announcements stay with that Circle. Organization announcements appear on the main dashboard and public Updates."
+                      : "Organization-wide announcements can be published only by an organization administrator."
+                    : composer==="gallery"&&targetGroupId==="organization"
+                      ? "Organization galleries are public highlights and must use a completed organization gathering."
+                      : "This content will appear only in the selected Circle’s private detail view."}
                 </p>
               </div>
               <label className="field-label">
@@ -525,19 +611,26 @@ export function ContentPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-4">
-                    <input
-                      className="mt-1"
-                      type="checkbox"
-                      checked={shareAcrossOrganization}
-                      onChange={(event) => setShareAcrossOrganization(event.target.checked)}
-                      aria-label="Share across the organization"
-                    />
-                    <span>
-                      <span className="block text-sm font-medium">Share across the organization</span>
-                      <span className="mt-1 block text-xs leading-5 text-muted">Show this recap to members of other Circles. A completed gathering is required.</span>
-                    </span>
-                  </label>
+                  {targetGroupId === "organization" ? (
+                    <div className="rounded-2xl border border-olive/20 bg-parchment p-4">
+                      <p className="text-sm font-medium">Organization highlight</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">Organization galleries are automatically highlighted across the dashboard and public Gallery.</p>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-4">
+                      <input
+                        className="mt-1"
+                        type="checkbox"
+                        checked={shareAcrossOrganization}
+                        onChange={(event) => setShareAcrossOrganization(event.target.checked)}
+                        aria-label="Share across the organization"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium">Share across the organization</span>
+                        <span className="mt-1 block text-xs leading-5 text-muted">Show this recap to members of other Circles. A completed gathering is required.</span>
+                      </span>
+                    </label>
+                  )}
                 </>
               )}
             </div>
@@ -557,8 +650,9 @@ export function ContentPage() {
           </form>
         </dialog>
       )}
-      {assignmentReview&&<Modal title="Review assignment" onClose={()=>setAssignmentReview(null)}><div><span className="role-label capitalize">{assignmentReview.type}</span><h3 className="mt-3 font-display text-3xl">{assignmentReview.title}</h3><p className="mt-3 text-sm leading-6 text-muted">Confirm the current destination or choose where this content truly belongs.</p><label className="field-label mt-6">Destination<select className="field" value={assignmentTarget} onChange={(event)=>setAssignmentTarget(event.target.value)}>{(assignmentReview.type==="announcement"||assignmentReview.type==="gathering")&&<option value="organization">Entire organization</option>}{data.groups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==(assignmentReview.groupId||"organization")&&<p className="mt-3 rounded-xl bg-[#F4E5C7] p-4 text-sm leading-6 text-[#72551E]">This gathering already has RSVPs or attendance and cannot be moved. You can confirm its current destination.</p>}{assignmentError&&<p className="form-error mt-4" role="alert">{assignmentError}</p>}<button className="primary-button mt-6 w-full" disabled={busy||!assignmentTarget||(assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==(assignmentReview.groupId||"organization"))} onClick={()=>void saveAssignment()}>{busy?"Saving…":assignmentTarget===assignmentReview.groupId||(!assignmentReview.groupId&&assignmentTarget==="organization")?"Confirm assignment":"Move and confirm"}</button></div></Modal>}
       {reviewing&&<dialog open className="fixed inset-0 z-50 m-auto w-[min(36rem,calc(100%-2rem))] rounded-[1.75rem] border border-line bg-paper p-0 text-ink shadow-quiet backdrop:bg-ink/55"><form onSubmit={publishTestimony} className="p-6 sm:p-8"><p className="text-xs text-olive">Testimony review</p><h2 className="mt-2 font-display text-3xl">{reviewing.title}</h2><p className="mt-4 whitespace-pre-line leading-7 text-muted">{reviewing.body}</p><label className="field-label mt-6">Public author name<input className="field" required value={reviewName} onChange={(e)=>setReviewName(e.target.value)}/></label><div className="mt-6 flex justify-end gap-3"><button type="button" className="secondary-button" onClick={()=>setReviewing(null)}>Keep pending</button><button className="primary-button" disabled={busy}>{busy?"Publishing…":"Publish testimony"}</button></div></form></dialog>}
+      </>)}
+      {assignmentReview&&<Modal title="Review assignment" onClose={()=>setAssignmentReview(null)}><div><span className="role-label capitalize">{assignmentReview.type}</span><h3 className="mt-3 font-display text-3xl">{assignmentReview.title}</h3><p className="mt-3 text-sm leading-6 text-muted">Confirm the current destination or choose where this content truly belongs.</p><label className="field-label mt-6">Destination<select className="field" value={assignmentTarget} onChange={(event)=>setAssignmentTarget(event.target.value)}>{(assignmentReview.type==="announcement"||assignmentReview.type==="gathering"||assignmentReview.type==="gallery")&&<option value="organization">Entire organization</option>}{data.groups.map((group)=><option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==(assignmentReview.groupId||"organization")&&<p className="mt-3 rounded-xl bg-[#F4E5C7] p-4 text-sm leading-6 text-[#72551E]">This gathering already has RSVPs or attendance and cannot be moved. You can confirm its current destination.</p>}{assignmentError&&<p className="form-error mt-4" role="alert">{assignmentError}</p>}<button className="primary-button mt-6 w-full" disabled={busy||!assignmentTarget||(assignmentReview.type==="gathering"&&assignmentReview.hasParticipation&&assignmentTarget!==(assignmentReview.groupId||"organization"))} onClick={()=>void saveAssignment()}>{busy?"Saving…":assignmentTarget===assignmentReview.groupId||(!assignmentReview.groupId&&assignmentTarget==="organization")?"Confirm assignment":"Move and confirm"}</button></div></Modal>}
       {circleEditor && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCircleEditor(null); }}>
           <form role="dialog" aria-modal="true" aria-labelledby="circle-profile-title" onSubmit={publishCircleProfile} className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-[1.75rem] border border-line bg-paper text-ink shadow-quiet">
@@ -585,6 +679,7 @@ export function ContentPage() {
           </form>
         </div>
       )}
+      {activeTab === "content" && (<>
       <section className="mt-12 border-t border-line pt-8">
         <div className="section-heading">
           <div>
@@ -603,7 +698,7 @@ export function ContentPage() {
                       <p className="font-medium">{item.title}</p>
                       <p className="mt-1 text-xs text-muted">{item.isPublic ? "Member dashboard · Public Updates" : "Member dashboard"}</p>
                     </div>
-                    {item.isPublic && <a className="text-link shrink-0" target="_blank" rel="noreferrer" href={`/${data.organization.slug}/updates?browse=1`}>View <ChevronRight size={14} /></a>}
+                    {item.isPublic && <div className="flex shrink-0 flex-wrap gap-3"><a className="text-link" target="_blank" rel="noreferrer" href={announcementShareUrl(data.organization.slug,item.id)}>View <ChevronRight size={14} /></a><button type="button" className="text-link" onClick={()=>void shareAnnouncement(item.id,item.title)}><Share2 size={14}/> Share</button><button type="button" className="text-link" onClick={()=>void copyAnnouncement(item.id)}><Copy size={14}/> Copy</button></div>}
                   </div>
                 </div>
               ))}
@@ -613,7 +708,7 @@ export function ContentPage() {
           <div>
             <h3 className="font-display text-2xl">Galleries</h3>
             <div className="mt-3 divide-y divide-line border-y border-line">
-              {data.galleries.slice(0, 3).map((gallery) => (
+              {recentGalleries.slice(0, 3).map((gallery) => (
                 <div key={gallery.id} className="flex items-center gap-4 py-4">
                   <img src={gallery.coverUrl || "/assets/devotional-table.webp"} alt="" className="h-14 w-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
@@ -636,7 +731,7 @@ export function ContentPage() {
                   </div>
                 </div>
               ))}
-              {!data.galleries.length && <p className="py-5 text-sm text-muted">Published galleries will appear here and on the public Gallery page.</p>}
+              {!recentGalleries.length && <p className="py-5 text-sm text-muted">Published galleries will appear here and on the public Gallery page.</p>}
             </div>
           </div>
         </div>
@@ -648,6 +743,7 @@ export function ContentPage() {
           after a leader or administrator publishes that specific record.
         </p>
       </section>
+      </>)}
     </div>
   );
 }

@@ -1457,9 +1457,59 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Publish" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Life around the table")).toBeInTheDocument();
+    const announcementRow = screen
+      .getByText("Bring a story from your week")
+      .closest(".py-4") as HTMLElement;
+    expect(within(announcementRow).getByRole("link", { name: /View/ })).toHaveAttribute(
+      "href",
+      `${window.location.origin}/ministry-lens-church/updates#announcement-announcement-1`,
+    );
+    expect(within(announcementRow).getByRole("button", { name: /Share/ })).toBeInTheDocument();
+    expect(within(announcementRow).getByRole("button", { name: /Copy/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add Announcements" }));
     expect(screen.getByLabelText("Members only")).toBeChecked();
     expect(screen.getByLabelText("Members and public")).not.toBeChecked();
+  });
+  it("focuses a canonical announcement fragment on public Updates", async () => {
+    renderApp(
+      "/ministry-lens-church/updates#announcement-announcement-1",
+      false,
+    );
+
+    const announcement = await screen.findByRole("article");
+    expect(announcement).toHaveAttribute("id", "announcement-announcement-1");
+    await waitFor(() => expect(announcement).toHaveFocus());
+    expect(
+      within(announcement).getByRole("button", { name: "Share" }),
+    ).toBeInTheDocument();
+    expect(
+      within(announcement).getByRole("button", { name: "Copy link" }),
+    ).toBeInTheDocument();
+  });
+  it("separates admin publishing tools into URL-backed tabs", () => {
+    const data = structuredClone(demoData);
+    data.currentUser.role = "admin";
+    data.group = { ...data.group!, role: "admin" };
+
+    renderWithData("/content?tab=circle-profiles", data);
+
+    expect(screen.getByRole("tab", { name: "Circle profiles" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "Circle profiles" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Galleries", level: 2 })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Content" }));
+    expect(screen.getByRole("heading", { name: "Galleries", level: 2 })).toBeInTheDocument();
+  });
+
+  it("falls back to Content when a leader requests an admin publishing tab", () => {
+    renderApp("/content?tab=assignments");
+
+    expect(screen.getByRole("heading", { name: "Galleries", level: 2 })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Content assignments" }),
+    ).not.toBeInTheDocument();
   });
   it("links a new organization highlight to the latest completed gathering", () => {
     const data = structuredClone(demoData);
@@ -1477,6 +1527,39 @@ describe("Circles MVP", () => {
     renderApp("/content");
 
     expect(screen.getByRole("button", { name: "Remove Life around the table from organization highlights" })).toBeInTheDocument();
+  });
+  it("lets admins target a completed organization gathering for an organization gallery", () => {
+    const data = structuredClone(demoData);
+    data.currentUser.role = "admin";
+    data.group = { ...data.group!, role: "admin" };
+    data.groups = data.groups.map((group) => ({ ...group, role: "admin" }));
+    data.accessibleMeetings = [
+      {
+        ...data.meetings[2],
+        id: "organization-recap",
+        groupId: undefined,
+        scope: "organization",
+        destinationName: "Entire organization",
+        status: "completed",
+        meetingDate: "2026-11-01T18:00:00.000Z",
+      },
+    ];
+
+    renderWithData("/content", data);
+    fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
+    fireEvent.change(screen.getByLabelText("Destination"), {
+      target: { value: "organization" },
+    });
+
+    expect(screen.getByLabelText("Completed gathering")).toHaveValue(
+      "organization-recap",
+    );
+    expect(
+      screen.getByText(/Organization galleries are automatically highlighted/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Share across the organization"),
+    ).not.toBeInTheDocument();
   });
   it("keeps organization announcements out of a Circle detail", () => {
     const scopedData = structuredClone(demoData);
@@ -1529,7 +1612,7 @@ describe("Circles MVP", () => {
       },
     ];
     render(
-      <MemoryRouter initialEntries={["/content"]}>
+      <MemoryRouter initialEntries={["/content?tab=assignments"]}>
         <AppProvider initialData={adminData} initialSession={testSession}>
           <App />
         </AppProvider>
@@ -1544,6 +1627,7 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Review assignment" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Content" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Galleries" }));
     expect(screen.getByLabelText("Destination")).toHaveValue("");
   });

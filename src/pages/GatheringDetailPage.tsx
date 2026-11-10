@@ -91,7 +91,9 @@ export function GatheringDetailPage() {
   const attendanceInitializedFor = useRef<string>();
   const meeting = (data?.accessibleMeetings ?? data?.meetings)?.find((item) => item.id === id);
   const accessLevel = meeting?.accessLevel ??
-    (meeting?.canManage ? "manage" : "participate");
+    ((meeting?.canManage ?? data?.currentUser.role !== "member")
+      ? "manage"
+      : "participate");
   const canLead = accessLevel === "manage";
   const canParticipate = accessLevel !== "view";
   const attendanceMembers = meeting?.scope === "organization" || accessLevel === "view"

@@ -41,6 +41,7 @@ import {
 } from "../lib/gatheringLifecycle";
 import { gatheringCoverImage } from "../lib/images";
 import {
+  announcementShareUrl,
   gatheringShareUrl,
   LAST_PUBLIC_ORG_KEY,
   publicCommunityUrl,
@@ -1047,6 +1048,36 @@ export function PublicGatheringPage() {
 
 export function PublicUpdatesPage() {
   const { space, href } = usePublic();
+  const location = useLocation();
+  const [shareStatus, setShareStatus] = useState("");
+  useEffect(() => {
+    if (!location.hash) return;
+    const target = document.getElementById(location.hash.slice(1));
+    if (!target) return;
+    target.scrollIntoView?.({ block: "center" });
+    target.focus({ preventScroll: true });
+  }, [location.hash, space.announcements]);
+  const shareAnnouncement = async (id: string, title: string) => {
+    setShareStatus("");
+    try {
+      const result = await shareLink(
+        title,
+        announcementShareUrl(space.organization.slug, id),
+      );
+      if (result === "copied") setShareStatus("Announcement link copied.");
+    } catch {
+      setShareStatus("The announcement could not be shared.");
+    }
+  };
+  const copyAnnouncement = async (id: string) => {
+    setShareStatus("");
+    try {
+      await copyText(announcementShareUrl(space.organization.slug, id));
+      setShareStatus("Announcement link copied.");
+    } catch {
+      setShareStatus("The announcement link could not be copied.");
+    }
+  };
   if (!space.announcements.length)
     return (
       <PublicIndex
@@ -1060,12 +1091,21 @@ export function PublicUpdatesPage() {
     );
   return (
     <PublicIndex title="Updates" intro="Current notes and invitations from our community.">
+      {shareStatus && <p className="mx-auto mb-5 max-w-4xl text-sm text-muted" role="status">{shareStatus}</p>}
       <div className="mx-auto max-w-4xl divide-y divide-line border-y border-line">
         {space.announcements.map((item) => (
-          <article key={item.id} className="py-7 sm:py-10">
+          <article id={`announcement-${item.id}`} tabIndex={-1} key={item.id} className="scroll-mt-24 py-7 outline-none focus-visible:ring-2 focus-visible:ring-olive sm:py-10">
             <p className="text-sm text-olive">{formatDate(item.publishedAt)}</p>
             <h2 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">{item.title}</h2>
             <p className="mt-4 whitespace-pre-line leading-7 text-muted">{item.body}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button className="secondary-button" type="button" onClick={() => void shareAnnouncement(item.id, item.title)}>
+                <Share2 size={15} /> Share
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void copyAnnouncement(item.id)}>
+                <Copy size={15} /> Copy link
+              </button>
+            </div>
           </article>
         ))}
       </div>

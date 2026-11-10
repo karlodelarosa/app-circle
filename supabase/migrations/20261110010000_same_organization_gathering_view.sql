@@ -99,23 +99,24 @@ BEGIN
       WHERE announcement.organization_id=v_org AND announcement.assignment_confirmed_at IS NOT NULL
         AND (announcement.cell_group_id IS NULL OR group_row.id IS NOT NULL) AND (announcement.expires_at IS NULL OR announcement.expires_at>now())),'[]'::jsonb),
     'galleries',COALESCE((SELECT jsonb_agg(jsonb_build_object(
-      'id',gallery.id,'organizationId',gallery.organization_id,'gatheringId',gallery.gathering_id,'groupId',gallery.cell_group_id,'destinationName',group_row.name,
+      'id',gallery.id,'organizationId',gallery.organization_id,'gatheringId',gallery.gathering_id,'groupId',gallery.cell_group_id,'destinationName',COALESCE(group_row.name,'Entire organization'),
       'slug',gallery.public_slug,'title',gallery.title,'description',gallery.description,'coverUrl',gallery.cover_url,
       'publishedAt',gallery.published_at,'assignmentConfirmedAt',gallery.assignment_confirmed_at,
       'isOrganizationHighlight',gallery.is_organization_highlight,'highlightedAt',gallery.highlighted_at,
       'photos',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',photo.id,'imageUrl',photo.image_url,'caption',photo.caption,'altText',photo.alt_text) ORDER BY photo.display_order) FROM public.circle_gallery_photos photo WHERE photo.gallery_id=gallery.id),'[]'::jsonb)
-    ) ORDER BY gallery.published_at DESC) FROM public.circle_galleries gallery JOIN accessible_groups group_row ON group_row.id=gallery.cell_group_id
-      WHERE gallery.organization_id=v_org AND gallery.status='published' AND gallery.assignment_confirmed_at IS NOT NULL),'[]'::jsonb),
+    ) ORDER BY gallery.published_at DESC) FROM public.circle_galleries gallery LEFT JOIN accessible_groups group_row ON group_row.id=gallery.cell_group_id
+      WHERE gallery.organization_id=v_org AND gallery.status='published' AND gallery.assignment_confirmed_at IS NOT NULL
+        AND (gallery.cell_group_id IS NULL OR group_row.id IS NOT NULL)),'[]'::jsonb),
     'highlights',COALESCE((SELECT jsonb_agg(highlight.item ORDER BY highlight.highlighted_at DESC) FROM (
       SELECT gallery.highlighted_at,jsonb_build_object(
         'id',gallery.id,'organizationId',gallery.organization_id,'gatheringId',gallery.gathering_id,'groupId',gallery.cell_group_id,
-        'destinationName',group_row.name,'slug',gallery.public_slug,'title',gallery.title,'description',gallery.description,
+        'destinationName',COALESCE(group_row.name,'Entire organization'),'slug',gallery.public_slug,'title',gallery.title,'description',gallery.description,
         'coverUrl',gallery.cover_url,'publishedAt',gallery.published_at,'assignmentConfirmedAt',gallery.assignment_confirmed_at,
         'isOrganizationHighlight',true,'highlightedAt',gallery.highlighted_at,
         'photos',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',photo.id,'imageUrl',photo.image_url,'caption',photo.caption,'altText',photo.alt_text) ORDER BY photo.display_order) FROM public.circle_gallery_photos photo WHERE photo.gallery_id=gallery.id AND photo.is_published),'[]'::jsonb)
       ) AS item
       FROM public.circle_galleries gallery
-      JOIN public.cell_groups group_row ON group_row.id=gallery.cell_group_id
+      LEFT JOIN public.cell_groups group_row ON group_row.id=gallery.cell_group_id
       WHERE gallery.organization_id=v_org AND gallery.status='published' AND gallery.assignment_confirmed_at IS NOT NULL
         AND gallery.is_organization_highlight
       ORDER BY gallery.highlighted_at DESC

@@ -17,3 +17,7 @@ export function canonicalGatheringUrl(orgSlug: string, gatheringSlug: string) {
 export function gatheringShareUrl(orgSlug: string, gatheringSlug: string) {
   return `${canonicalGatheringUrl(orgSlug, gatheringSlug)}?share=2`;
 }
+
+export function announcementShareUrl(orgSlug: string, announcementId: string) {
+  return `${window.location.origin}/${encodeURIComponent(orgSlug)}/updates#announcement-${encodeURIComponent(announcementId)}`;
+}
