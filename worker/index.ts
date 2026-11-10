@@ -221,8 +221,7 @@ function injectMetadata(
   canonical.search = "";
   canonical.hash = "";
   const socialUrl = new URL(canonical);
-  if (new URL(request.url).searchParams.has("share"))
-    socialUrl.searchParams.set("share", GATHERING_SHARE_PREVIEW_VERSION);
+  socialUrl.searchParams.set("share", GATHERING_SHARE_PREVIEW_VERSION);
   const image = new URL(gatheringImageRoute, canonical);
   image.searchParams.set("organization", parts.organization);
   image.searchParams.set("gathering", parts.gathering);

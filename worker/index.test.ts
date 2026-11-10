@@ -44,7 +44,7 @@ describe("Circles Cloudflare Worker", () => {
     );
 
     const response = await handleRequest(
-      new Request("https://circles.example/elgc/gatherings/lunch?share=4"),
+      new Request("https://circles.example/elgc/gatherings/lunch"),
       env,
     );
     const html = await response.text();
