@@ -1163,7 +1163,19 @@ describe("Circles MVP", () => {
     ).toBeTruthy();
     expect(
       highlights.compareDocumentPosition(prayer) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+  it("keeps prayer requests in a sticky desktop sidebar", () => {
+    renderApp("/");
+
+    const sidebar = screen.getByRole("complementary", {
+      name: "Prayer requests",
+    });
+    expect(sidebar).toHaveClass("xl:sticky", "xl:top-24");
+    expect(
+      screen.getByRole("heading", { name: "Recently in our Circles" })
+        .compareDocumentPosition(sidebar) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
   it("omits the announcement and highlights sections when they are empty", () => {
