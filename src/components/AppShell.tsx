@@ -4,6 +4,7 @@ import {
   CircleUserRound,
   ClipboardList,
   FileText,
+  Globe2,
   Home,
   HeartHandshake,
   Heart,
@@ -11,7 +12,6 @@ import {
   LogIn,
   LogOut,
   MoreHorizontal,
-  Quote,
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -162,10 +162,11 @@ export function AppShell() {
     { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
   ];
   const memberLinks: NavigationItem[] = [
+    { to: base, label: "Home", mobileLabel: "Home", icon: Home },
     { to: memberHome, label: "My Circle", mobileLabel: "My Circle", icon: CircleUserRound },
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
     { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
-    { to: "/share-testimony", label: "Share testimony", mobileLabel: "Share", icon: Quote },
+    { to: `/${data.organization.slug}?browse=1`, label: "Community", mobileLabel: "Community", icon: Globe2 },
   ];
   const links = isMember ? memberLinks : leaderLinks;
   const mobileLinks: NavigationItem[] = isMember ? memberLinks : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
@@ -177,11 +178,32 @@ export function AppShell() {
       : pathname.startsWith("/connections/")
         ? "/connections"
         : "/";
+  const gatheringId = pathname.match(/^\/gatherings\/([^/]+)/)?.[1];
+  const gathering = gatheringId
+    ? (data.accessibleMeetings ?? data.meetings).find(
+        (meeting) => meeting.id === gatheringId,
+      )
+    : undefined;
+  const gatheringGroup = gathering?.groupId
+    ? data.groups.find((group) => group.id === gathering.groupId)
+    : undefined;
+  const standaloneBack = gathering
+    ? gathering.groupId
+      ? {
+          to: `/circles/${gathering.groupId}`,
+          label: `Back to ${gathering.destinationName || gatheringGroup?.name || "Circle"}`,
+        }
+      : { to: "/gatherings", label: "Back to Gatherings" }
+    : pathname.startsWith("/circles/")
+      ? { to: "/circles", label: "Back to Circles" }
+      : pathname.startsWith("/connections/")
+        ? { to: "/connections", label: "Back to Guests" }
+        : { to: standaloneFallback, label: "Back" };
   return (
     <div className="min-h-screen bg-parchment text-ink">
       <PwaRefreshController refresh={refresh} />
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-paper/95 px-6 py-7 lg:flex lg:flex-col">
-        <Link to={isMember ? memberHome : "/"}>
+        <Link to="/">
           <Brand />
         </Link>
         <div className="mt-10 border-t border-line pt-5">
@@ -233,7 +255,8 @@ export function AppShell() {
         <StandaloneRouteBar
           homeTo={isMember ? memberHome : "/"}
           homeLabel={isMember ? "My Circle" : "Dashboard"}
-          fallbackTo={standaloneFallback}
+          backTo={standaloneBack.to}
+          backLabel={standaloneBack.label}
           hidden={topLevel.includes(pathname) || (isMember && pathname === memberHome)}
         />
         <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
@@ -241,7 +264,7 @@ export function AppShell() {
         </main>
       </div>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden ${isMember ? "grid-cols-4" : "grid-cols-5"}`}
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden"
         aria-label="Main navigation"
       >
         {mobileLinks.map(({ to, mobileLabel, icon: Icon, ...item }) => (

@@ -377,7 +377,7 @@ describe("Circles MVP", () => {
       behavior: "auto",
     });
   });
-  it("provides Back and Dashboard controls on nested standalone PWA screens", () => {
+  it("provides contextual Back and Dashboard controls on nested standalone PWA screens", () => {
     const original = window.matchMedia;
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -387,20 +387,25 @@ describe("Circles MVP", () => {
         removeEventListener: vi.fn(),
       }),
     });
-    renderApp("/gatherings/meeting-1");
-    expect(
-      screen.getByRole("navigation", { name: "App navigation" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("navigation", { name: "App navigation" })
-        .querySelector('a[href="/"]'),
-    ).toHaveTextContent("Dashboard");
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: original,
-    });
+    try {
+      renderApp("/gatherings/meeting-1");
+      expect(
+        screen.getByRole("navigation", { name: "App navigation" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Back to Grace & Ground" }),
+      ).toHaveAttribute("href", "/circles/demo-group");
+      expect(
+        screen
+          .getByRole("navigation", { name: "App navigation" })
+          .querySelector('a[href="/"]'),
+      ).toHaveTextContent("Dashboard");
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: original,
+      });
+    }
   });
   it("shows a user-controlled notice when a PWA update is ready", () => {
     renderApp("/");
@@ -1412,7 +1417,7 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Our people" }),
     ).toBeInTheDocument();
   });
-  it("routes ordinary members to My Circle without a Dashboard destination", async () => {
+  it("gives ordinary members a read-only organization Home with app CTAs", async () => {
     const memberData = structuredClone(demoData);
     memberData.currentUser = {
       id: "member-auth",
@@ -1435,29 +1440,69 @@ describe("Circles MVP", () => {
       </MemoryRouter>,
     );
     expect(
-      await screen.findByRole("heading", { name: "Grace & Ground" }),
+      await screen.findByText(
+        "Here’s what is happening across Ministry Lens Church.",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Dashboard" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("link", { name: "Share testimony" }).length,
+      screen.getAllByRole("link", { name: "Home" }).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { name: "Grace & Ground updates" }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("link", { name: "My Circle" }).length,
+    ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { name: "Life in Grace & Ground" }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("link", { name: "Community" }).length,
+    ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { name: "Stories from Grace & Ground" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "View community pages" }),
+    ).toHaveAttribute("href", "/ministry-lens-church?browse=1");
     expect(
-      screen.getByRole("heading", { name: "Life around the table" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Share a testimony" }),
+    ).toHaveAttribute("href", "/share-testimony");
     expect(
-      screen.getByRole("heading", { name: "Grace in the ordinary" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "View my Circle" }),
+    ).toHaveAttribute("href", "/circles/demo-group");
+    expect(
+      screen.getByRole("link", { name: "Read update" }),
+    ).toHaveAttribute(
+      "href",
+      "/ministry-lens-church/updates?browse=1#announcement-announcement-1",
+    );
+    expect(
+      screen.getByRole("link", { name: "View gallery" }),
+    ).toHaveAttribute(
+      "href",
+      "/ministry-lens-church/galleries/life-around-the-table?browse=1",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Publish" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Guest connections" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows one contextual back action for a standalone Circle gathering", async () => {
+    Object.defineProperty(window.navigator, "standalone", {
+      value: true,
+      configurable: true,
+    });
+    try {
+      renderApp("/gatherings/meeting-1");
+      expect(
+        await screen.findByRole("heading", { name: "Rooted in grace" }),
+      ).toBeInTheDocument();
+      const backLinks = screen.getAllByRole("link", {
+        name: "Back to Grace & Ground",
+      });
+      expect(backLinks).toHaveLength(1);
+      expect(backLinks[0]).toHaveAttribute("href", "/circles/demo-group");
+    } finally {
+      Object.defineProperty(window.navigator, "standalone", {
+        value: false,
+        configurable: true,
+      });
+    }
   });
   it("forces a generated member to change their temporary password", async () => {
     const memberData = structuredClone(demoData);
@@ -1495,6 +1540,21 @@ describe("Circles MVP", () => {
     expect(
       screen.getByRole("link", { name: "Back to dashboard" }),
     ).toHaveAttribute("href", "/");
+    expect(
+      screen.queryByRole("link", { name: "Sign up for a Cell Group" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
+  });
+  it("keeps the published Circle directory read-only in browse mode", async () => {
+    renderApp("/ministry-lens-church/circles?browse=1");
+    expect(
+      await screen.findByRole("heading", { name: "Join a Circle" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Sign up for a Cell Group" }),
+    ).not.toBeInTheDocument();
   });
   it("keeps past gatherings out of public lists but preserves their direct link", async () => {
     const list = renderApp("/ministry-lens-church/gatherings");
@@ -1845,6 +1905,38 @@ describe("Circles MVP", () => {
       "href",
       "/ministry-lens-church/circles/grace-and-ground?browse=1",
     );
+  });
+  it("uses one contextual top back action on standalone public details", async () => {
+    Object.defineProperty(window.navigator, "standalone", {
+      value: true,
+      configurable: true,
+    });
+    try {
+      renderApp(
+        "/ministry-lens-church/gatherings/rooted-in-grace?browse=1",
+      );
+      expect(
+        await screen.findByRole("heading", { name: "Rooted in grace" }),
+      ).toBeInTheDocument();
+      const backLinks = screen.getAllByRole("link", {
+        name: "Back to Gatherings",
+      });
+      expect(backLinks).toHaveLength(1);
+      expect(backLinks[0]).toHaveAttribute(
+        "href",
+        "/ministry-lens-church/gatherings?browse=1",
+      );
+      expect(screen.getByRole("link", { name: "App Home" })).toHaveAttribute(
+        "href",
+        "/",
+      );
+      expect(screen.queryByText("Public preview")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window.navigator, "standalone", {
+        value: false,
+        configurable: true,
+      });
+    }
   });
   it("offers an optional validated cover when planning a gathering", () => {
     renderApp("/gatherings");

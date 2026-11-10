@@ -31,6 +31,7 @@ import {
 import { gatheringCoverImage } from "../lib/images";
 import { gatheringShareUrl } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
+import { useStandalone } from "../hooks/useStandalone";
 import { supabase } from "../lib/supabase";
 import {
   loadGatheringAttendance,
@@ -54,6 +55,7 @@ export function GatheringDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data, demoMode, refresh, setRsvp } = useCircles();
+  const standalone = useStandalone();
   const [guests, setGuests] = useState<
     {
       id: string;
@@ -348,26 +350,35 @@ export function GatheringDetailPage() {
           : "Upcoming";
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-7 flex items-center justify-between gap-3">
-        <Link
-          to={meeting.scope === "circle" && meeting.groupId
-            ? `${base}/circles/${meeting.groupId}`
-            : `${base}/gatherings`}
-          className="inline-flex items-center gap-2 text-sm text-muted hover:text-olive"
+      {(!standalone || canLead) && (
+        <div
+          className={`mb-7 flex items-center gap-3 ${standalone ? "justify-end" : "justify-between"}`}
         >
-          <ArrowLeft size={16} /> {meeting.scope === "circle"
-            ? `Back to ${destinationName}`
-            : "All gatherings"}
-        </Link>
-        {canLead && (
-          <button
-            className="inline-flex items-center gap-2 text-sm text-red-700 hover:underline"
-            onClick={() => setDeleteConfirmOpen(true)}
-          >
-            <Trash2 size={15} /> Delete gathering
-          </button>
-        )}
-      </div>
+          {!standalone && (
+            <Link
+              to={
+                meeting.groupId
+                  ? `${base}/circles/${meeting.groupId}`
+                  : `${base}/gatherings`
+              }
+              className="inline-flex items-center gap-2 text-sm text-muted hover:text-olive"
+            >
+              <ArrowLeft size={16} />{" "}
+              {meeting.groupId
+                ? `Back to ${destinationName}`
+                : "All gatherings"}
+            </Link>
+          )}
+          {canLead && (
+            <button
+              className="inline-flex items-center gap-2 text-sm text-red-700 hover:underline"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <Trash2 size={15} /> Delete gathering
+            </button>
+          )}
+        </div>
+      )}
       <article className="overflow-hidden rounded-[1.75rem] border border-line bg-paper">
         <header className="relative flex min-h-[20rem] items-end overflow-hidden border-b border-line p-6 sm:min-h-[24rem] sm:p-10">
           <img

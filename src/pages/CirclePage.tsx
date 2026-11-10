@@ -1046,6 +1046,9 @@ export function CirclePage() {
         </section>
       </div>
       <div className="mt-8 flex flex-wrap gap-3">
+        <Link className="secondary-button" to="/share-testimony">
+          <Quote size={17} /> Share a testimony
+        </Link>
         {canManagePeople && (
           <button
             className="primary-button"

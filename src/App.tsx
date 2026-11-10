@@ -100,10 +100,6 @@ function ProtectedApp() {
   return <AppShell />;
 }
 function HomeEntry() {
-  const { data } = useCircles();
-  if (!data) return null;
-  if (data.currentUser.role === "member")
-    return <Navigate to={data.group ? `/circles/${data.group.id}` : "/circles"} replace />;
   return <HomePage />;
 }
 function LeaderOnly({ children }: { children: ReactNode }) {

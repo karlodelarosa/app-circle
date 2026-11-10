@@ -48,3 +48,32 @@ test("announcement links focus cleanly without responsive overflow", async ({ pa
     ).toBe(true);
   }
 });
+
+test("app browse mode stays read-only and responsive", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/ministry-lens-church?demo=1&browse=1");
+
+    await expect(page.getByText("Public preview")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Sign up for a Cell Group" }),
+    ).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Find a gathering" }),
+    ).toHaveAttribute(
+      "href",
+      "/ministry-lens-church/gatherings?browse=1",
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+
+  expect(pageErrors).toEqual([]);
+});

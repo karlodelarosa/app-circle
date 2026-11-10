@@ -112,6 +112,7 @@ export function PublicShell() {
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const { pathname } = useLocation();
+  const standalone = useStandalone();
   useEffect(() => {
     setSpace(null);
     setError("");
@@ -163,11 +164,20 @@ export function PublicShell() {
         : pathname.match(/\/circles\/[^/]+$/)
           ? `${base}/circles`
           : base;
+  const publicBackLabel = pathname.match(/\/gatherings\/[^/]+$/)
+    ? "Back to Gatherings"
+    : pathname.match(/\/testimonies\/[^/]+$/)
+      ? "Back to Testimonies"
+      : pathname.match(/\/galleries\/[^/]+$/)
+        ? "Back to Gallery"
+        : pathname.match(/\/circles\/[^/]+$/)
+          ? "Back to Circles"
+          : "Back to Community";
   return (
     <PublicContext.Provider value={{ space, browse, href }}>
       <div className="min-h-screen bg-parchment text-ink">
         <div className="sticky top-0 z-40">
-        {browse && (
+        {browse && !standalone && (
           <div className="bg-olive text-paper">
             <div className="mx-auto flex min-h-11 max-w-7xl items-center justify-between gap-4 px-5 text-xs lg:px-10">
               <span>Public preview</span>
@@ -197,12 +207,14 @@ export function PublicShell() {
                   {label}
                 </NavLink>
               ))}
-              <Link
-                className="secondary-button"
-                to={`/sign-in?organization=${orgSlug}`}
-              >
-                Sign in
-              </Link>
+              {!browse && (
+                <Link
+                  className="secondary-button"
+                  to={`/sign-in?organization=${orgSlug}`}
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
             <button
               className="icon-button md:hidden"
@@ -226,19 +238,22 @@ export function PublicShell() {
                   {label}
                 </Link>
               ))}
-              <Link
-                to={`/sign-in?organization=${orgSlug}`}
-                className="primary-button mt-2"
-              >
-                Sign in
-              </Link>
+              {!browse && (
+                <Link
+                  to={`/sign-in?organization=${orgSlug}`}
+                  className="primary-button mt-2"
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
           )}
         </header>
         <StandaloneRouteBar
-          homeTo={href(base)}
-          homeLabel="Home"
-          fallbackTo={href(publicFallback)}
+          homeTo={browse ? "/" : href(base)}
+          homeLabel={browse ? "App Home" : "Home"}
+          backTo={href(publicFallback)}
+          backLabel={publicBackLabel}
           hidden={pathname === base}
         />
         </div>
@@ -258,7 +273,7 @@ export function PublicShell() {
 }
 
 export function PublicHomePage() {
-  const { space, href } = usePublic();
+  const { space, browse, href } = usePublic();
   const slug = space.organization.slug;
   return (
     <main>
@@ -292,12 +307,14 @@ export function PublicHomePage() {
                   Join a Circle
                 </Link>
               )}
-              <Link
-                className="secondary-button min-h-11 justify-center"
-                to={`/${slug}/cell-group-signup`}
-              >
-                Sign up for a Cell Group
-              </Link>
+              {!browse && (
+                <Link
+                  className="secondary-button min-h-11 justify-center"
+                  to={`/${slug}/cell-group-signup`}
+                >
+                  Sign up for a Cell Group
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -716,12 +733,14 @@ export function PublicGatheringPage() {
   return (
     <main>
       <section className="public-section pb-10">
-        <Link
-          to={href(`/${space.organization.slug}/gatherings`)}
-          className="text-link"
-        >
-          Back to gatherings
-        </Link>
+        {!install.standalone && (
+          <Link
+            to={href(`/${space.organization.slug}/gatherings`)}
+            className="text-link"
+          >
+            Back to gatherings
+          </Link>
+        )}
         <div className="mt-7 overflow-hidden rounded-[2rem] border border-line bg-paper sm:rounded-[2.25rem]">
           <img
             src={gatheringCoverImage(item.slug || item.id, item.coverUrl)}
@@ -1260,7 +1279,7 @@ export function GalleryPage() {
 }
 
 export function PublicCirclesPage() {
-  const { space, href } = usePublic();
+  const { space, browse, href } = usePublic();
   if (!space.circles.length)
     return (
       <PublicIndex
@@ -1277,15 +1296,20 @@ export function PublicCirclesPage() {
       title="Join a Circle"
       intro="Learn about each smaller community, then let a leader know where you would like to belong."
     >
-      <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-2xl text-sm leading-6 text-muted">
-          Ready to be placed in a Cell Group? Complete the official signup for
-          the shared leader placement list.
-        </p>
-        <Link className="primary-button shrink-0" to={`/${space.organization.slug}/cell-group-signup`}>
-          Sign up for a Cell Group
-        </Link>
-      </div>
+      {!browse && (
+        <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-sm leading-6 text-muted">
+            Ready to be placed in a Cell Group? Complete the official signup
+            for the shared leader placement list.
+          </p>
+          <Link
+            className="primary-button shrink-0"
+            to={`/${space.organization.slug}/cell-group-signup`}
+          >
+            Sign up for a Cell Group
+          </Link>
+        </div>
+      )}
       <div className="grid gap-5 md:grid-cols-2">
         {space.circles.map((group) => (
           <Link

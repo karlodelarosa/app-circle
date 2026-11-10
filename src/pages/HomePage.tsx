@@ -1,4 +1,4 @@
-import { ChevronRight, Clock3, ExternalLink, Heart, Images, MapPin, Users } from "lucide-react";
+import { ChevronRight, Clock3, Globe2, Heart, Images, MapPin, Quote, Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCircles } from "../AppContext";
@@ -46,6 +46,9 @@ export function HomePage() {
     .sort((a, b) => (b.highlightedAt ?? b.publishedAt).localeCompare(a.highlightedAt ?? a.publishedAt))
     .slice(0, 3);
   const defaultHeroImage = data.organization.imageUrl || "/assets/devotional-table.webp";
+  const isMember = data.currentUser.role === "member";
+  const memberHome = data.group ? `/circles/${data.group.id}` : "/circles";
+  const communityHome = `/${data.organization.slug}?browse=1`;
   const emptyEventMessage = eventFilter === "organization"
     ? "There are no organization events scheduled yet."
     : eventFilter === "circles"
@@ -64,11 +67,14 @@ export function HomePage() {
           </h1>
           <p className="mt-3 text-sm text-muted">Here’s what is happening across {data.organization.name}.</p>
         </div>
-        {data.currentUser.role === "admin" && (
-          <a href={`/${data.organization.slug}?browse=1`} target="_blank" rel="noreferrer" className="secondary-button">
-            <ExternalLink size={16} /> View public page
-          </a>
-        )}
+        <div className="flex flex-wrap gap-3">
+          <Link to={communityHome} className="secondary-button">
+            <Globe2 size={16} /> View community pages
+          </Link>
+          <Link to="/share-testimony" className="primary-button">
+            <Quote size={16} /> Share a testimony
+          </Link>
+        </div>
       </header>
 
       <section className="py-6">
@@ -77,8 +83,8 @@ export function HomePage() {
           welcomeImage="/assets/welcome-table.webp"
           gatherings={upcoming.slice(0, 3)}
           circleName={data.organization.name}
-          circlePath="/circles"
-          ctaLabel="View all Circles"
+          circlePath={isMember ? memberHome : "/circles"}
+          ctaLabel={isMember ? "View my Circle" : "View all Circles"}
         />
       </section>
 
@@ -92,7 +98,17 @@ export function HomePage() {
           </div>
           <h2 id="dashboard-announcement-title" className="mt-5 font-display text-4xl">{announcement.title}</h2>
           <p className="mt-4 max-w-3xl whitespace-pre-line leading-7 text-muted">{announcement.body}</p>
-          <p className="mt-5 text-xs text-muted">Shared {formatDate(announcement.publishedAt)}</p>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted">Shared {formatDate(announcement.publishedAt)}</p>
+            {announcement.isPublic && (
+              <Link
+                className="secondary-button"
+                to={`/${data.organization.slug}/updates?browse=1#announcement-${announcement.id}`}
+              >
+                Read update <ChevronRight size={14} />
+              </Link>
+            )}
+          </div>
         </section>
           )}
 
@@ -176,7 +192,7 @@ export function HomePage() {
                       <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{meeting.location}</span>
                       <span className="inline-flex items-center gap-1.5"><Users size={14} />{confirmedCount} going</span>
                     </div>
-                    <Link to={`/gatherings/${meeting.id}`} className="text-link mt-4">View event <ChevronRight size={14} /></Link>
+                    <Link to={`/gatherings/${meeting.id}`} className="secondary-button mt-4">View gathering <ChevronRight size={14} /></Link>
                   </div>
                 </article>
               );
@@ -185,7 +201,7 @@ export function HomePage() {
         ) : (
           <div className="py-10 text-center" role="status">
             <p className="text-sm text-muted">{emptyEventMessage}</p>
-            <Link className="text-link mt-3" to="/gatherings">View gatherings <ChevronRight size={14} /></Link>
+            <Link className="secondary-button mt-4" to="/gatherings">View gatherings <ChevronRight size={14} /></Link>
           </div>
         )}
         {filteredEvents.length > 5 && (
@@ -209,15 +225,19 @@ export function HomePage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {highlights.map((gallery) => (
               <article key={gallery.id} className="paper-panel overflow-hidden">
-                <a href={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`} target="_blank" rel="noreferrer" className="group block h-full">
-                  <img src={galleryImageUrl(data.organization.slug, gallery.slug)} alt="" className="aspect-[4/3] w-full object-cover" />
-                  <div className="p-5">
-                    <p className="text-xs font-medium text-olive">{gallery.destinationName || "Circle highlight"}</p>
-                    <h3 className="mt-2 font-display text-3xl leading-tight group-hover:text-olive">{gallery.title}</h3>
-                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">{gallery.description}</p>
-                    <p className="mt-4 flex items-center gap-2 text-xs text-muted"><Images size={14} />{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · {formatDate(gallery.highlightedAt ?? gallery.publishedAt, { month: "short", day: "numeric" })}</p>
-                  </div>
-                </a>
+                <img src={galleryImageUrl(data.organization.slug, gallery.slug)} alt="" className="aspect-[4/3] w-full object-cover" />
+                <div className="p-5">
+                  <p className="text-xs font-medium text-olive">{gallery.destinationName || "Circle highlight"}</p>
+                  <h3 className="mt-2 font-display text-3xl leading-tight">{gallery.title}</h3>
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">{gallery.description}</p>
+                  <p className="mt-4 flex items-center gap-2 text-xs text-muted"><Images size={14} />{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · {formatDate(gallery.highlightedAt ?? gallery.publishedAt, { month: "short", day: "numeric" })}</p>
+                  <Link
+                    className="secondary-button mt-5"
+                    to={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}
+                  >
+                    View gallery <ChevronRight size={14} />
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
@@ -235,7 +255,7 @@ export function HomePage() {
             <p className="text-xs uppercase tracking-[0.14em] text-olive">Care</p>
             <h2 id="prayer-requests-title" className="mt-2 font-display text-3xl">Prayer requests</h2>
           </div>
-          <Link to="/prayer" className="text-link">View all <ChevronRight size={14} /></Link>
+          <Link to="/prayer" className="secondary-button">View all <ChevronRight size={14} /></Link>
         </div>
         <div className="divide-y divide-line px-6">
           {prayers.length ? prayers.map((prayer) => (
