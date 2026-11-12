@@ -41,6 +41,8 @@ describe("GatheringReflections", () => {
     expect(screen.getByRole("heading", { name: "After the gathering" })).toBeInTheDocument();
     expect(screen.getByLabelText("What stayed with you?")).toHaveAttribute("maxlength", "2000");
     expect(screen.getByRole("button", { name: "Share reflection" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Entire organization/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Grace & Ground only/ })).not.toBeChecked();
   });
 
   it("adds a trimmed reflection and offers private next steps", async () => {

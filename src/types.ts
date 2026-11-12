@@ -233,6 +233,94 @@ export interface GatheringReflection {
   body: string;
   createdAt: string;
   updatedAt: string;
+  scope?: FeedAudience;
+  groupId?: string;
+}
+
+export type FeedAudience = "organization" | "circle";
+export type FeedItemType =
+  | "post"
+  | "reflection"
+  | "prayer"
+  | "gathering"
+  | "announcement";
+
+export interface FeedPhoto {
+  id: string;
+  url: string;
+  altText: string;
+  displayOrder: number;
+}
+
+export interface FeedComment {
+  id: string;
+  authorPersonId: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  canEdit?: boolean;
+  canModerate?: boolean;
+}
+
+export interface FeedCommentPage {
+  comments: FeedComment[];
+  nextCursor?: FeedCursor;
+}
+
+export interface CommunityFeedItem {
+  id: string;
+  type: FeedItemType;
+  sourceId?: string;
+  audience: FeedAudience;
+  groupId?: string;
+  destinationName: string;
+  authorPersonId?: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  title?: string;
+  body?: string;
+  createdAt: string;
+  updatedAt?: string;
+  gatheringId?: string;
+  gatheringTitle?: string;
+  gatheringDate?: string;
+  prayer?: PrayerRequest;
+  meeting?: Meeting;
+  photos: FeedPhoto[];
+  comments: FeedComment[];
+  commentCount: number;
+  likeCount: number;
+  likedByMe: boolean;
+  canEdit: boolean;
+  canModerate: boolean;
+  isHidden?: boolean;
+}
+
+export interface FeedCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface CommunityFeedPage {
+  items: CommunityFeedItem[];
+  nextCursor?: FeedCursor;
+}
+
+export interface FeedNotification {
+  id: string;
+  feedItemId: string;
+  kind: "comment" | "like" | "pray";
+  actorCount: number;
+  actorName: string;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface FeedNotificationPage {
+  notifications: FeedNotification[];
+  nextCursor?: FeedCursor;
 }
 
 export interface CloseoutNewcomerInput {
@@ -391,6 +479,7 @@ export interface AppData {
   publicCircleListings: CirclePublicListing[];
   approvedLeaders: ApprovedLeader[];
   contentAssignments: ContentAssignment[];
+  communityFeed?: CommunityFeedItem[];
   currentUser: Profile & { role: Role; isApprovedLeader: boolean };
   connectionAttentionCount: number;
   signupAttentionCount: number;

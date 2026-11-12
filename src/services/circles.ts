@@ -23,6 +23,7 @@ import type {
   GatheringCloseout,
   CircleDetailsInput,
   AttendancePersonSummary,
+  FeedAudience,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -54,7 +55,7 @@ export async function loadGatheringReflections(
   const { data, error } = await client
     .from("circle_gathering_reflections")
     .select(
-      "id,gathering_id,organization_id,author_person_id,body,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
+      "id,gathering_id,organization_id,author_person_id,body,scope,cell_group_id,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
     )
     .eq("gathering_id", gatheringId)
     .order("created_at", { ascending: false })
@@ -68,6 +69,8 @@ export async function loadGatheringReflections(
       authorPersonId: row.author_person_id,
       authorName: fullName(one(row.people)),
       body: row.body,
+      scope: row.scope,
+      groupId: row.cell_group_id ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }))
@@ -97,18 +100,23 @@ export async function loadGatheringReflectionActivity(
 
 export async function createGatheringReflection(
   client: SupabaseClient,
-  gathering: Pick<Meeting, "id" | "organizationId">,
+  gathering: Pick<Meeting, "id" | "organizationId" | "groupId">,
   authorPersonId: string,
   body: string,
+  scope: FeedAudience = "organization",
 ) {
   const value = reflectionBody(body);
   if (!gathering.organizationId)
     throw new Error("This gathering has no organization identity.");
+  if (scope === "circle" && !gathering.groupId)
+    throw new Error("This gathering is not connected to a Circle.");
   const { error } = await client.from("circle_gathering_reflections").insert({
     organization_id: gathering.organizationId,
     gathering_id: gathering.id,
     author_person_id: authorPersonId,
     body: value,
+    scope,
+    cell_group_id: scope === "circle" ? gathering.groupId : null,
   });
   if (error) throw error;
 }

@@ -319,6 +319,26 @@ describe("Gathering reflections", () => {
       gathering_id: "gathering-1",
       body: "What stayed with me.",
       author_person_id: "person-1",
+      scope: "organization",
+      cell_group_id: null,
+    }));
+  });
+
+  it("can keep a reflection inside its gathering Circle", async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    await createGatheringReflection(
+      { from } as unknown as SupabaseClient,
+      { id: "gathering-1", organizationId: "organization-1", groupId: "circle-1" },
+      "person-1",
+      "Held among this Circle.",
+      "circle",
+    );
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "circle",
+      cell_group_id: "circle-1",
     }));
   });
 

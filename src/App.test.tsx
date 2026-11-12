@@ -203,7 +203,7 @@ describe("Circles MVP", () => {
       screen.getByRole("button", { name: "Close navigation" }),
     ).toHaveAttribute("aria-expanded", "true");
   });
-  it("presents an organization-wide dashboard with destination labels", async () => {
+  it("presents the organization community feed with audience filters", async () => {
     const data = structuredClone(demoData);
     const organizationMeeting = {
       ...data.meetings[0],
@@ -223,15 +223,10 @@ describe("Circles MVP", () => {
       galleries: [],
     };
     renderWithData("/", data);
-    expect(
-      await screen.findByText(
-        "Here’s what is happening across Ministry Lens Church.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Everyone").length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("link", { name: "View all Circles" }),
-    ).toHaveAttribute("href", "/circles");
+    expect(await screen.findByRole("heading", { name: "Community feed" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
+    expect(screen.getByLabelText("Show")).toHaveValue("all");
+    expect(screen.getByRole("heading", { name: "Upcoming events" })).toBeInTheDocument();
   });
 
   it("offers organization and Circle destinations when planning a gathering", async () => {
@@ -832,7 +827,7 @@ describe("Circles MVP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Share a request" }));
 
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
-    expect(screen.getByRole("radio", { name: "A Circle" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /entire organization/i })).toBeChecked();
     expect(screen.getByRole("combobox", { name: "Choose Circle" })).toHaveValue(
       "demo-group",
     );
@@ -1164,230 +1159,24 @@ describe("Circles MVP", () => {
     expect(screen.getByText("Cancelled")).toBeInTheDocument();
     expect(screen.getAllByText("Attendance pending").length).toBeGreaterThan(0);
   });
-  it("uses the gathering cover on the dashboard", () => {
-    const { container } = renderApp("/");
-    expect(
-      container.querySelector(
-        'a[href="/gatherings/meeting-1"] img[src="/assets/devotional-table.webp"]',
-      ),
-    ).toBeInTheDocument();
-  });
-  it("orders the dashboard as hero, announcement, upcoming events, highlights, and prayer", () => {
+  it("places the composer and feed before compact community summaries", () => {
     renderApp("/");
-    const hero = screen.getByRole("heading", {
-      name: "Make room for one another.",
-    });
-    const announcement = screen.getByRole("heading", {
-      name: "Bring a story from your week",
-    });
-    const upcoming = screen.getByRole("heading", { name: "Upcoming events" });
-    const highlights = screen.getByRole("heading", { name: "Recently in our Circles" });
-    const prayer = screen.getByRole("heading", { name: "Prayer requests" });
-    expect(
-      hero.compareDocumentPosition(announcement) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      announcement.compareDocumentPosition(upcoming) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      upcoming.compareDocumentPosition(highlights) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      highlights.compareDocumentPosition(prayer) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const composer = screen.getByRole("form", { name: "Create a community post" });
+    const feed = screen.getByRole("heading", { name: "Community feed" });
+    const summaries = screen.getByRole("complementary", { name: "Community summaries" });
+    expect(feed.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(composer.compareDocumentPosition(summaries) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summaries).toHaveClass("xl:sticky", "xl:top-24");
   });
-  it("keeps prayer requests in a sticky desktop sidebar", () => {
+
+  it("filters the feed by organization and accessible Circle", () => {
     renderApp("/");
-
-    const sidebar = screen.getByRole("complementary", {
-      name: "Prayer requests",
-    });
-    expect(sidebar).toHaveClass("xl:sticky", "xl:top-24");
-    expect(
-      screen.getByRole("heading", { name: "Recently in our Circles" })
-        .compareDocumentPosition(sidebar) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-  it("omits the announcement and highlights sections when they are empty", () => {
-    const data = structuredClone(demoData);
-    data.announcements = [];
-    data.galleries = [];
-    data.dashboard = {
-      meetings: data.meetings,
-      prayers: data.prayers,
-      announcements: [],
-      galleries: [],
-      highlights: [],
-    };
-
-    renderWithData("/", data);
-
-    expect(screen.queryByText("Latest announcement")).not.toBeInTheDocument();
-    expect(screen.queryByText("No current announcement")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Recently in our Circles" })).not.toBeInTheDocument();
-  });
-  it("filters upcoming events and expands more than five matches inline", () => {
-    const data = structuredClone(demoData);
-    const events = Array.from({ length: 8 }, (_, index) => ({
-      ...data.meetings[0],
-      id: `filter-event-${index}`,
-      title: `Filter event ${index + 1}`,
-      meetingDate: new Date(Date.now() + (index + 1) * 86400000).toISOString(),
-      endsAt: new Date(Date.now() + (index + 1) * 86400000 + 7200000).toISOString(),
-      scope: index < 2 ? "organization" as const : "circle" as const,
-      groupId: index < 2 ? undefined : "demo-group",
-      destinationName: index < 2 ? "Everyone" : "Grace & Ground",
-    }));
-    data.dashboard = {
-      meetings: events,
-      prayers: [],
-      announcements: [],
-      galleries: [],
-      highlights: [],
-    };
-
-    renderWithData("/", data);
-
-    const section = screen.getByRole("region", { name: "Upcoming events" });
-    expect(within(section).getAllByRole("article")).toHaveLength(5);
-    fireEvent.click(within(section).getByRole("button", { name: "Show more" }));
-    expect(within(section).getAllByRole("article")).toHaveLength(8);
-    expect(within(section).getByRole("button", { name: "Show less" })).toBeInTheDocument();
-
-    fireEvent.click(within(section).getByRole("radio", { name: "Organization" }));
-    expect(within(section).getAllByRole("article")).toHaveLength(2);
-    expect(within(section).queryByRole("button", { name: "Show less" })).not.toBeInTheDocument();
-
-    fireEvent.click(within(section).getByRole("radio", { name: "Circles" }));
-    expect(within(section).getAllByRole("article")).toHaveLength(5);
-    expect(within(section).getByRole("button", { name: "Show more" })).toBeInTheDocument();
-  });
-  it("shows the three newest organization highlights with Circle attribution", () => {
-    const data = structuredClone(demoData);
-    const highlights = Array.from({ length: 4 }, (_, index) => ({
-      ...data.galleries[0],
-      id: `highlight-${index}`,
-      slug: `highlight-${index}`,
-      title: `Circle highlight ${index + 1}`,
-      destinationName: index === 0 ? "Grace & Ground" : "Another Circle",
-      isOrganizationHighlight: true,
-      highlightedAt: new Date(Date.now() - index * 86400000).toISOString(),
-    }));
-    data.dashboard = {
-      meetings: data.meetings,
-      prayers: [],
-      announcements: [],
-      galleries: data.galleries,
-      highlights,
-    };
-
-    renderWithData("/", data);
-
-    const section = screen.getByRole("region", { name: "Recently in our Circles" });
-    expect(within(section).getAllByRole("article")).toHaveLength(3);
-    expect(within(section).getByRole("heading", { name: "Circle highlight 1" })).toBeInTheDocument();
-    expect(within(section).queryByRole("heading", { name: "Circle highlight 4" })).not.toBeInTheDocument();
-    expect(within(section).getByText("Grace & Ground")).toBeInTheDocument();
-  });
-  it("keeps the nearest gathering detailed beneath the jumbotron", () => {
-    renderApp("/");
-    expect(
-      screen.getByRole("heading", { name: "Rooted in grace" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("3 going")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(/Karlo de la Rosa, Mara Santos, Ana Lopez going/),
-    ).toBeInTheDocument();
-  });
-  it("includes attending guest RSVPs in dashboard and gathering totals", () => {
-    const data = structuredClone(demoData);
-    const meeting = data.meetings[0] as (typeof data.meetings)[number] & {
-      guestRsvpCounts?: { attending?: number };
-    };
-    meeting.guestRsvpCounts = { attending: 1 };
-
-    const dashboard = renderWithData("/", data);
-    expect(screen.getByText("4 going")).toBeInTheDocument();
-    dashboard.unmount();
-
-    renderWithData("/gatherings", data);
-    expect(screen.getByText("4 going")).toBeInTheDocument();
-  });
-  it("shows a guest-only confirmation without rendering an empty avatar group", () => {
-    const data = structuredClone(demoData);
-    data.meetings[0].rsvps = {};
-    const meeting = data.meetings[0] as (typeof data.meetings)[number] & {
-      guestRsvpCounts?: { attending?: number };
-    };
-    meeting.guestRsvpCounts = { attending: 1 };
-
-    renderWithData("/", data);
-
-    expect(screen.getByText("1 guest confirmed")).toBeInTheDocument();
-    expect(screen.getByText("1 going")).toBeInTheDocument();
-  });
-  it("summarizes extra attendees and explains when no one is confirmed", () => {
-    const fullData = structuredClone(demoData);
-    fullData.meetings[0].rsvps = Object.fromEntries(
-      fullData.members.map((member) => [member.id, "attending"]),
-    );
-    const populated = render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppProvider initialData={fullData} initialSession={testSession}>
-          <App />
-        </AppProvider>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText("+1")).toBeInTheDocument();
-    expect(screen.getByText("5 going")).toBeInTheDocument();
-    populated.unmount();
-
-    const emptyData = structuredClone(demoData);
-    emptyData.meetings[0].rsvps = {};
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppProvider initialData={emptyData} initialSession={testSession}>
-          <App />
-        </AppProvider>
-      </MemoryRouter>,
-    );
-    expect(screen.getAllByText("No one confirmed yet").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("0 going").length).toBeGreaterThan(0);
-  });
-  it("limits the jumbotron to the next three upcoming gatherings", () => {
-    const carouselData = structuredClone(demoData);
-    const later = new Date();
-    later.setDate(later.getDate() + 20);
-    carouselData.meetings.push(
-      {
-        ...carouselData.meetings[1],
-        id: "meeting-4",
-        title: "Third upcoming",
-        meetingDate: later.toISOString(),
-      },
-      {
-        ...carouselData.meetings[1],
-        id: "meeting-5",
-        title: "Fourth upcoming",
-        meetingDate: new Date(later.getTime() + 86400000).toISOString(),
-      },
-    );
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppProvider initialData={carouselData} initialSession={testSession}>
-          <App />
-        </AppProvider>
-      </MemoryRouter>,
-    );
-    expect(screen.getAllByRole("button", { name: /Show slide/ })).toHaveLength(
-      4,
-    );
-    const carousel = screen.getByRole("region", { name: "Community highlights" });
-    expect(within(carousel).queryByText("Fourth upcoming")).not.toBeInTheDocument();
+    const filter = screen.getByLabelText("Show");
+    fireEvent.change(filter, { target: { value: "organization" } });
+    expect(screen.getByRole("article", { name: /small acts of kindness/i })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /Wisdom for a new season/i })).not.toBeInTheDocument();
+    fireEvent.change(filter, { target: { value: "demo-group" } });
+    expect(screen.getByRole("article", { name: /Wisdom for a new season/i })).toBeInTheDocument();
   });
   it("hides empty editorial sections from a Circle detail", async () => {
     const emptyCircle = structuredClone(demoData);
@@ -1417,7 +1206,7 @@ describe("Circles MVP", () => {
       screen.getByRole("heading", { name: "Our people" }),
     ).toBeInTheDocument();
   });
-  it("gives ordinary members a read-only organization Home with app CTAs", async () => {
+  it("gives ordinary members an authenticated community feed Home", async () => {
     const memberData = structuredClone(demoData);
     memberData.currentUser = {
       id: "member-auth",
@@ -1439,11 +1228,8 @@ describe("Circles MVP", () => {
         </AppProvider>
       </MemoryRouter>,
     );
-    expect(
-      await screen.findByText(
-        "Here’s what is happening across Ministry Lens Church.",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Community feed" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Create a community post" })).toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: "Home" }).length,
     ).toBeGreaterThan(0);
@@ -1453,27 +1239,8 @@ describe("Circles MVP", () => {
     expect(
       screen.getAllByRole("link", { name: "Community" }).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("link", { name: "Explore community" }),
-    ).toHaveAttribute("href", "/community");
-    expect(
-      screen.getByRole("link", { name: "Share a testimony" }),
-    ).toHaveAttribute("href", "/share-testimony");
-    expect(
-      screen.getByRole("link", { name: "View my Circle" }),
-    ).toHaveAttribute("href", "/circles/demo-group");
-    expect(
-      screen.getByRole("link", { name: "Read update" }),
-    ).toHaveAttribute(
-      "href",
-      "/community/updates#announcement-announcement-1",
-    );
-    expect(
-      screen.getByRole("link", { name: "View gallery" }),
-    ).toHaveAttribute(
-      "href",
-      "/community/galleries/life-around-the-table",
-    );
+    expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
+    expect(screen.getByRole("button", { name: "Prayer request" })).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Publish" }),
     ).not.toBeInTheDocument();

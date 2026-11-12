@@ -11,7 +11,7 @@ import {
   loadGatheringReflections,
   updateGatheringReflection,
 } from "../services/circles";
-import type { GatheringReflection, Meeting } from "../types";
+import type { FeedAudience, GatheringReflection, Meeting } from "../types";
 import { Avatar } from "./Avatar";
 
 const MAX_LENGTH = 2000;
@@ -118,6 +118,7 @@ export function GatheringReflections({
   const { data, demoMode } = useCircles();
   const [reflections, setReflections] = useState(initialReflections);
   const [body, setBody] = useState("");
+  const [scope, setScope] = useState<FeedAudience>("organization");
   const [loading, setLoading] = useState(!demoMode && Boolean(supabase));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -170,6 +171,8 @@ export function GatheringReflections({
           authorPersonId: personId,
           authorName: data.currentUser.fullName,
           body: value,
+          scope,
+          groupId: scope === "circle" ? meeting.groupId : undefined,
           createdAt: now,
           updatedAt: now,
         }]);
@@ -179,11 +182,14 @@ export function GatheringReflections({
           meeting,
           personId,
           value,
+          scope,
         );
         await reload();
       }
       setBody("");
-      setNotice("Your reflection was shared with this gathering’s community.");
+      setNotice(scope === "organization"
+        ? "Your reflection was shared with the entire organization."
+        : "Your reflection was shared with this Circle.");
     } catch (cause) {
       setError(getErrorMessage(cause, "Your reflection could not be shared."));
     } finally {
@@ -241,7 +247,7 @@ export function GatheringReflections({
             After the gathering
           </h2>
           <p className="mt-3 max-w-md leading-7 text-muted">
-            A private place for members to remember what mattered and carry it into the week.
+            Remember what mattered, then choose whether to share it with the organization or this Circle.
           </p>
           {canParticipate ? (
             <form className="mt-6" onSubmit={submit}>
@@ -256,6 +262,27 @@ export function GatheringReflections({
                 onChange={(event) => setBody(event.target.value)}
                 placeholder="A thought, question, or practice you want to remember…"
               />
+              {meeting.groupId && (
+                <fieldset className="mt-4">
+                  <legend className="field-label">Who should see this reflection?</legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <label className={`cursor-pointer rounded-xl border p-3 text-sm ${scope === "organization" ? "border-olive bg-parchment" : "border-line"}`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name="reflection-scope" checked={scope === "organization"} onChange={() => setScope("organization")} />
+                        Entire organization
+                      </span>
+                      <span className="mt-1 block pl-6 text-xs text-muted">Appears in every member’s community feed.</span>
+                    </label>
+                    <label className={`cursor-pointer rounded-xl border p-3 text-sm ${scope === "circle" ? "border-olive bg-parchment" : "border-line"}`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name="reflection-scope" checked={scope === "circle"} onChange={() => setScope("circle")} />
+                        {meeting.destinationName || data?.group?.name || "This Circle"} only
+                      </span>
+                      <span className="mt-1 block pl-6 text-xs text-muted">Visible only to members of this Circle.</span>
+                    </label>
+                  </div>
+                </fieldset>
+              )}
               <div className="mt-2 flex items-center justify-between gap-4">
                 <span className="text-xs text-muted">{body.length.toLocaleString()} / 2,000</span>
                 <button className="primary-button" disabled={busy || !body.trim()}>

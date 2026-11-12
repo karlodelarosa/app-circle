@@ -3,6 +3,7 @@ import {
   MAX_COVER_BYTES,
   gatheringCoverImage,
   validateGatheringCover,
+  validateFeedPhotos,
 } from "./images";
 
 describe("gathering cover validation", () => {
@@ -45,5 +46,24 @@ describe("gathering cover fallback", () => {
     expect(gatheringCoverImage("gathering-1")).not.toBe(
       gatheringCoverImage("gathering-2"),
     );
+  });
+});
+
+describe("feed photo validation", () => {
+  it("accepts up to four supported photos", () => {
+    const photos = Array.from({ length: 4 }, (_, index) =>
+      new File(["image"], `photo-${index}.jpg`, { type: "image/jpeg" }),
+    );
+    expect(() => validateFeedPhotos(photos)).not.toThrow();
+  });
+
+  it("rejects a fifth photo and unsupported media", () => {
+    const photos = Array.from({ length: 5 }, (_, index) =>
+      new File(["image"], `photo-${index}.jpg`, { type: "image/jpeg" }),
+    );
+    expect(() => validateFeedPhotos(photos)).toThrow("up to four photos");
+    expect(() => validateFeedPhotos([
+      new File(["video"], "clip.mp4", { type: "video/mp4" }),
+    ])).toThrow("JPG, PNG, or WebP");
   });
 });

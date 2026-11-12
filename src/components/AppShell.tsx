@@ -21,6 +21,7 @@ import { useCircles } from "../AppContext";
 import { Avatar } from "./Avatar";
 import { RouteOutlet, StandaloneRouteBar } from "./RouteExperience";
 import { PwaRefreshController } from "./PwaRefreshController";
+import { FeedNotifications } from "./FeedNotifications";
 
 export function Brand() {
   return (
@@ -263,6 +264,7 @@ export function AppShell() {
                 <WifiOff size={13} /> Demo mode
               </span>
             )}
+            <FeedNotifications />
             <AccountMenu
               person={data.currentUser}
               demoMode={demoMode}
