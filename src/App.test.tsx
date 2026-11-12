@@ -1515,6 +1515,7 @@ describe("Circles MVP", () => {
     expect(
       screen.queryByRole("link", { name: "App Home" }),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
   });
 
   it("maps member community actions to authenticated destinations", async () => {

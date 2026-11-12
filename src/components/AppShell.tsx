@@ -216,6 +216,7 @@ export function AppShell() {
       : pathname.startsWith("/connections/")
         ? { to: "/connections", label: "Back to Guests" }
         : { to: standaloneFallback, label: "Back" };
+  const ContentContainer = pathname.startsWith("/community") ? "div" : "main";
   return (
     <div className="min-h-screen bg-parchment text-ink">
       <PwaRefreshController refresh={refresh} />
@@ -276,9 +277,9 @@ export function AppShell() {
           backLabel={standaloneBack.label}
           hidden={topLevel.includes(pathname) || (isMember && pathname === memberHome)}
         />
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
+        <ContentContainer className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
           <RouteOutlet />
-        </main>
+        </ContentContainer>
       </div>
       <nav
         className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden"
