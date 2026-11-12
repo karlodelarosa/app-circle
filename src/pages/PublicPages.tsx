@@ -154,28 +154,37 @@ function useCommunitySpace(orgSlug: string) {
   return { space, error };
 }
 
-function CommunityLoading() {
+function CommunityLoading({ embedded = false }: { embedded?: boolean }) {
   return (
-    <div
-      className="grid min-h-64 place-items-center"
-      role="status"
-      aria-label="Loading community"
+    <main
+      className={`grid place-items-center ${embedded ? "min-h-64" : "min-h-screen bg-parchment"}`}
+      aria-busy="true"
     >
-      <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
-    </div>
+      <div role="status" aria-label="Loading community">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
+      </div>
+    </main>
   );
 }
 
-function CommunityError({ message }: { message: string }) {
+function CommunityError({
+  message,
+  embedded = false,
+}: {
+  message: string;
+  embedded?: boolean;
+}) {
   return (
-    <section className="grid min-h-64 place-items-center p-6">
+    <main
+      className={`grid place-items-center p-6 ${embedded ? "min-h-64" : "min-h-screen bg-parchment"}`}
+    >
       <div className="max-w-md text-center" role="alert">
         <h1 className="font-display text-4xl">
           This community page is unavailable.
         </h1>
         <p className="mt-3 text-muted">{message}</p>
       </div>
-    </section>
+    </main>
   );
 }
 
@@ -359,8 +368,8 @@ export function CommunityShell() {
   const orgSlug = data?.organization.slug ?? "";
   const { space, error } = useCommunitySpace(orgSlug);
 
-  if (error) return <CommunityError message={error} />;
-  if (!space) return <CommunityLoading />;
+  if (error) return <CommunityError message={error} embedded />;
+  if (!space) return <CommunityLoading embedded />;
   return (
     <CommunityContextProvider
       space={space}
