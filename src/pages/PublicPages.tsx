@@ -24,11 +24,13 @@ import {
 } from "lucide-react";
 import {
   Link,
+  Navigate,
   NavLink,
   useLocation,
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import { useCircles } from "../AppContext";
 import { Brand } from "../components/AppShell";
 import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
 import { Turnstile } from "../components/Turnstile";
@@ -67,6 +69,7 @@ import type {
 
 interface PublicContextValue {
   space: PublicSpace;
+  experience: "public" | "member";
   browse: boolean;
   href: (path: string) => string;
 }
@@ -77,6 +80,104 @@ const usePublic = () => {
   if (!value) throw new Error("Public space unavailable");
   return value;
 };
+
+function memberCommunityHref(path: string, space: PublicSpace) {
+  const [pathWithoutHash, hash] = path.split("#", 2);
+  const pathname = pathWithoutHash.split("?", 1)[0];
+  const base = `/${space.organization.slug}`;
+  const relative = pathname.startsWith(base)
+    ? pathname.slice(base.length)
+    : pathname;
+  const hashSuffix = hash ? `#${hash}` : "";
+
+  if (!relative || relative === "/") return `/community${hashSuffix}`;
+  if (relative === "/gatherings") return `/gatherings${hashSuffix}`;
+  if (relative.startsWith("/gatherings/")) {
+    const slug = relative.slice("/gatherings/".length);
+    const gathering = space.gatherings.find((item) => item.slug === slug);
+    return gathering
+      ? `/gatherings/${gathering.id}${hashSuffix}`
+      : `/gatherings${hashSuffix}`;
+  }
+  return `/community${relative}${hashSuffix}`;
+}
+
+function CommunityContextProvider({
+  space,
+  experience,
+  browse,
+  children,
+}: {
+  space: PublicSpace;
+  experience: "public" | "member";
+  browse: boolean;
+  children: ReactNode;
+}) {
+  const href = (path: string) =>
+    experience === "member"
+      ? memberCommunityHref(path, space)
+      : withBrowseMode(path, browse);
+  return (
+    <PublicContext.Provider value={{ space, experience, browse, href }}>
+      {children}
+    </PublicContext.Provider>
+  );
+}
+
+function useCommunitySpace(orgSlug: string) {
+  const [space, setSpace] = useState<PublicSpace | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setSpace(null);
+    setError("");
+    void loadPublicSpace(supabase, orgSlug)
+      .then((next) => {
+        if (!active) return;
+        setSpace(next);
+        localStorage.setItem(LAST_PUBLIC_ORG_KEY, next.organization.slug);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Community page unavailable.",
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [orgSlug]);
+
+  return { space, error };
+}
+
+function CommunityLoading() {
+  return (
+    <div
+      className="grid min-h-64 place-items-center"
+      role="status"
+      aria-label="Loading community"
+    >
+      <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
+    </div>
+  );
+}
+
+function CommunityError({ message }: { message: string }) {
+  return (
+    <section className="grid min-h-64 place-items-center p-6">
+      <div className="max-w-md text-center" role="alert">
+        <h1 className="font-display text-4xl">
+          This community page is unavailable.
+        </h1>
+        <p className="mt-3 text-muted">{message}</p>
+      </div>
+    </section>
+  );
+}
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -108,43 +209,20 @@ export function PublicShell() {
   const { orgSlug = "ministry-lens-church" } = useParams();
   const [searchParams] = useSearchParams();
   const browse = searchParams.get("browse") === "1";
-  const [space, setSpace] = useState<PublicSpace | null>(null);
-  const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  const { session } = useCircles();
+  const { space, error } = useCommunitySpace(orgSlug);
   const standalone = useStandalone();
-  useEffect(() => {
-    setSpace(null);
-    setError("");
-    void loadPublicSpace(supabase, orgSlug)
-      .then((next) => {
-        setSpace(next);
-        localStorage.setItem(LAST_PUBLIC_ORG_KEY, next.organization.slug);
-      })
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Community page unavailable.",
-        ),
-      );
-  }, [orgSlug]);
   if (error)
+    return <CommunityError message={error} />;
+  if (!space) return <CommunityLoading />;
+  if (browse && session)
     return (
-      <main className="grid min-h-screen place-items-center bg-parchment p-6">
-        <div className="max-w-md text-center">
-          <h1 className="font-display text-4xl">
-            This community page is unavailable.
-          </h1>
-          <p className="mt-3 text-muted">{error}</p>
-        </div>
-      </main>
-    );
-  if (!space)
-    return (
-      <div className="grid min-h-screen place-items-center bg-parchment">
-        <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
-      </div>
+      <Navigate
+        to={memberCommunityHref(`${pathname}${hash}`, space)}
+        replace
+      />
     );
   const base = `/${orgSlug}`;
   const href = (path: string) => withBrowseMode(path, browse);
@@ -174,7 +252,11 @@ export function PublicShell() {
           ? "Back to Circles"
           : "Back to Community";
   return (
-    <PublicContext.Provider value={{ space, browse, href }}>
+    <CommunityContextProvider
+      space={space}
+      experience="public"
+      browse={browse}
+    >
       <div className="min-h-screen bg-parchment text-ink">
         <div className="sticky top-0 z-40">
         {browse && !standalone && (
@@ -268,12 +350,30 @@ export function PublicShell() {
           </div>
         </footer>
       </div>
-    </PublicContext.Provider>
+    </CommunityContextProvider>
+  );
+}
+
+export function CommunityShell() {
+  const { data } = useCircles();
+  const orgSlug = data?.organization.slug ?? "";
+  const { space, error } = useCommunitySpace(orgSlug);
+
+  if (error) return <CommunityError message={error} />;
+  if (!space) return <CommunityLoading />;
+  return (
+    <CommunityContextProvider
+      space={space}
+      experience="member"
+      browse
+    >
+      <RouteOutlet />
+    </CommunityContextProvider>
   );
 }
 
 export function PublicHomePage() {
-  const { space, browse, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
   const slug = space.organization.slug;
   return (
     <main>
@@ -304,7 +404,7 @@ export function PublicHomePage() {
                   className="secondary-button min-h-11 justify-center"
                   to={href(`/${slug}/circles`)}
                 >
-                  Join a Circle
+                  {experience === "member" ? "Explore Circles" : "Join a Circle"}
                 </Link>
               )}
               {!browse && (
@@ -1279,7 +1379,8 @@ export function GalleryPage() {
 }
 
 export function PublicCirclesPage() {
-  const { space, browse, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
+  const memberExperience = experience === "member";
   if (!space.circles.length)
     return (
       <PublicIndex
@@ -1293,8 +1394,12 @@ export function PublicCirclesPage() {
     );
   return (
     <PublicIndex
-      title="Join a Circle"
-      intro="Learn about each smaller community, then let a leader know where you would like to belong."
+      title={memberExperience ? "Explore Circles" : "Join a Circle"}
+      intro={
+        memberExperience
+          ? "Meet the smaller communities gathering across our church."
+          : "Learn about each smaller community, then let a leader know where you would like to belong."
+      }
     >
       {!browse && (
         <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
@@ -1337,7 +1442,7 @@ export function PublicCirclesPage() {
 }
 
 export function PublicCirclePage() {
-  const { space, browse, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
   const { circleSlug } = useParams();
   const group = space.circles.find((entry) => entry.slug === circleSlug);
   const [done, setDone] = useState(false);
@@ -1394,7 +1499,28 @@ export function PublicCirclePage() {
               <span className="mt-1 block text-sm text-muted">{formatDate(nextGathering.meetingDate)} at {formatTime(nextGathering.meetingDate)}</span>
             </Link>
           )}
-          {browse ? (
+          {experience === "member" ? (
+            <div className="mt-10 border-t border-line pt-7">
+              <p className="font-display text-3xl">Continue exploring</p>
+              <p className="mt-3 leading-7 text-muted">
+                Return to the Circle directory or the wider community.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <Link
+                  className="primary-button min-h-11 justify-center"
+                  to={href(`/${space.organization.slug}/circles`)}
+                >
+                  Back to Circles
+                </Link>
+                <Link
+                  className="secondary-button min-h-11 justify-center"
+                  to={href(`/${space.organization.slug}`)}
+                >
+                  Community home
+                </Link>
+              </div>
+            </div>
+          ) : browse ? (
             <div className="mt-10 border-t border-line pt-7">
               <p className="font-display text-3xl">Keep exploring</p>
               <p className="mt-3 leading-7 text-muted">

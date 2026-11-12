@@ -48,7 +48,7 @@ export function HomePage() {
   const defaultHeroImage = data.organization.imageUrl || "/assets/devotional-table.webp";
   const isMember = data.currentUser.role === "member";
   const memberHome = data.group ? `/circles/${data.group.id}` : "/circles";
-  const communityHome = `/${data.organization.slug}?browse=1`;
+  const communityHome = "/community";
   const emptyEventMessage = eventFilter === "organization"
     ? "There are no organization events scheduled yet."
     : eventFilter === "circles"
@@ -69,7 +69,7 @@ export function HomePage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <Link to={communityHome} className="secondary-button">
-            <Globe2 size={16} /> View community pages
+            <Globe2 size={16} /> Explore community
           </Link>
           <Link to="/share-testimony" className="primary-button">
             <Quote size={16} /> Share a testimony
@@ -103,7 +103,7 @@ export function HomePage() {
             {announcement.isPublic && (
               <Link
                 className="secondary-button"
-                to={`/${data.organization.slug}/updates?browse=1#announcement-${announcement.id}`}
+                to={`/community/updates#announcement-${announcement.id}`}
               >
                 Read update <ChevronRight size={14} />
               </Link>
@@ -233,7 +233,7 @@ export function HomePage() {
                   <p className="mt-4 flex items-center gap-2 text-xs text-muted"><Images size={14} />{gallery.photos.length} {gallery.photos.length === 1 ? "photo" : "photos"} · {formatDate(gallery.highlightedAt ?? gallery.publishedAt, { month: "short", day: "numeric" })}</p>
                   <Link
                     className="secondary-button mt-5"
-                    to={`/${data.organization.slug}/galleries/${gallery.slug}?browse=1`}
+                    to={`/community/galleries/${gallery.slug}`}
                   >
                     View gallery <ChevronRight size={14} />
                   </Link>

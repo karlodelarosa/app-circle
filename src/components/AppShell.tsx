@@ -166,17 +166,19 @@ export function AppShell() {
     { to: memberHome, label: "My Circle", mobileLabel: "My Circle", icon: CircleUserRound },
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
     { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
-    { to: `/${data.organization.slug}?browse=1`, label: "Community", mobileLabel: "Community", icon: Globe2 },
+    { to: "/community", label: "Community", mobileLabel: "Community", icon: Globe2 },
   ];
   const links = isMember ? memberLinks : leaderLinks;
   const mobileLinks: NavigationItem[] = isMember ? memberLinks : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
-  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/signups", "/content", "/more"];
+  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/signups", "/content", "/more", "/community"];
   const standaloneFallback = pathname.startsWith("/gatherings/")
     ? "/gatherings"
     : pathname.startsWith("/circles/")
       ? "/circles"
       : pathname.startsWith("/connections/")
         ? "/connections"
+        : pathname.startsWith("/community/")
+          ? "/community"
         : "/";
   const gatheringId = pathname.match(/^\/gatherings\/([^/]+)/)?.[1];
   const gathering = gatheringId
@@ -187,7 +189,22 @@ export function AppShell() {
   const gatheringGroup = gathering?.groupId
     ? data.groups.find((group) => group.id === gathering.groupId)
     : undefined;
-  const standaloneBack = gathering
+  const communityDetail = pathname.match(
+    /^\/community\/(circles|testimonies|galleries)\/[^/]+$/,
+  );
+  const communityBack = communityDetail
+    ? {
+        to: `/community/${communityDetail[1]}`,
+        label: `Back to ${
+          communityDetail[1] === "galleries"
+            ? "Gallery"
+            : communityDetail[1][0].toUpperCase() + communityDetail[1].slice(1)
+        }`,
+      }
+    : { to: "/community", label: "Back to Community" };
+  const standaloneBack = pathname.startsWith("/community/")
+    ? communityBack
+    : gathering
     ? gathering.groupId
       ? {
           to: `/circles/${gathering.groupId}`,

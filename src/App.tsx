@@ -27,6 +27,7 @@ import {
   PublicGatheringsPage,
   PublicHomePage,
   PublicUpdatesPage,
+  CommunityShell,
   PublicShell,
   TestimoniesPage,
   TestimonyPage,
@@ -135,6 +136,16 @@ export default function App() {
         <Route path="/connections" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
         <Route path="/connections/:connectionId" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
         <Route path="/signups" element={<LeaderOnly><SignupsPage /></LeaderOnly>} />
+        <Route path="/community" element={<CommunityShell />}>
+          <Route index element={<PublicHomePage />} />
+          <Route path="updates" element={<PublicUpdatesPage />} />
+          <Route path="testimonies" element={<TestimoniesPage />} />
+          <Route path="testimonies/:testimonySlug" element={<TestimonyPage />} />
+          <Route path="galleries" element={<GalleriesPage />} />
+          <Route path="galleries/:gallerySlug" element={<GalleryPage />} />
+          <Route path="circles" element={<PublicCirclesPage />} />
+          <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
+        </Route>
       </Route>
       <Route path="/app/*" element={<Navigate to="/" replace />} />
       <Route path="/:orgSlug" element={<PublicShell />}>

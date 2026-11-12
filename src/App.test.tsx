@@ -1454,8 +1454,8 @@ describe("Circles MVP", () => {
       screen.getAllByRole("link", { name: "Community" }).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("link", { name: "View community pages" }),
-    ).toHaveAttribute("href", "/ministry-lens-church?browse=1");
+      screen.getByRole("link", { name: "Explore community" }),
+    ).toHaveAttribute("href", "/community");
     expect(
       screen.getByRole("link", { name: "Share a testimony" }),
     ).toHaveAttribute("href", "/share-testimony");
@@ -1466,19 +1466,54 @@ describe("Circles MVP", () => {
       screen.getByRole("link", { name: "Read update" }),
     ).toHaveAttribute(
       "href",
-      "/ministry-lens-church/updates?browse=1#announcement-announcement-1",
+      "/community/updates#announcement-announcement-1",
     );
     expect(
       screen.getByRole("link", { name: "View gallery" }),
     ).toHaveAttribute(
       "href",
-      "/ministry-lens-church/galleries/life-around-the-table?browse=1",
+      "/community/galleries/life-around-the-table",
     );
     expect(
       screen.queryByRole("link", { name: "Publish" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Guest connections" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps member community discovery inside the authenticated app shell", async () => {
+    const memberData = structuredClone(demoData);
+    memberData.currentUser = {
+      id: "member-auth",
+      personId: "member-2",
+      fullName: "Mara Santos",
+      email: "mara@example.com",
+      role: "member",
+      isApprovedLeader: false,
+    };
+    memberData.group = { ...memberData.group!, role: "member" };
+    memberData.groups = memberData.groups.map((group) => ({
+      ...group,
+      role: "member",
+    }));
+
+    renderWithData("/community/circles", memberData);
+
+    expect(
+      await screen.findByRole("heading", { name: "Explore Circles" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Community" })[0],
+    ).toHaveAttribute("href", "/community");
+    expect(
+      screen.getByRole("link", { name: /Learn about this Circle/ }),
+    ).toHaveAttribute("href", "/community/circles/grace-and-ground");
+    expect(
+      screen.queryByRole("button", { name: "Open navigation" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "App Home" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1534,8 +1569,8 @@ describe("Circles MVP", () => {
     expect(password).toHaveAttribute("type", "text");
     expect(confirmation).toHaveAttribute("type", "text");
   });
-  it("shows the persistent dashboard return while browsing public pages", async () => {
-    renderApp("/ministry-lens-church?browse=1");
+  it("keeps browse-mode public pages available to signed-out visitors", async () => {
+    renderApp("/ministry-lens-church?browse=1", false);
     expect(await screen.findByText("Public preview")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Back to dashboard" }),
@@ -1546,6 +1581,29 @@ describe("Circles MVP", () => {
     expect(
       screen.queryByRole("link", { name: "Sign in" }),
     ).not.toBeInTheDocument();
+  });
+  it("redirects signed-in legacy browse links into the member community", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/ministry-lens-church/circles/grace-and-ground?browse=1",
+        ]}
+      >
+        <AppProvider
+          initialData={structuredClone(demoData)}
+          initialSession={testSession}
+        >
+          <App />
+          <LocationProbe />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/community/circles/grace-and-ground",
+      ),
+    );
   });
   it("keeps the published Circle directory read-only in browse mode", async () => {
     renderApp("/ministry-lens-church/circles?browse=1");
