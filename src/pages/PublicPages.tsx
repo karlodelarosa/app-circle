@@ -1510,7 +1510,7 @@ export function PublicCirclePage() {
                   className="primary-button min-h-11 justify-center"
                   to={href(`/${space.organization.slug}/circles`)}
                 >
-                  Back to Circles
+                  Explore Circles
                 </Link>
                 <Link
                   className="secondary-button min-h-11 justify-center"

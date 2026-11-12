@@ -428,7 +428,7 @@ describe("Circles MVP", () => {
     window.__circlesUpdatePending = false;
   });
   it("stages a public guest RSVP without creating an account", async () => {
-    renderApp("/ministry-lens-church/gatherings/rooted-in-grace");
+    renderApp("/ministry-lens-church/gatherings/rooted-in-grace", false);
     fireEvent.change(await screen.findByLabelText("Your name"), {
       target: { value: "Jamie Guest" },
     });
@@ -1505,7 +1505,7 @@ describe("Circles MVP", () => {
     ).toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: "Community" })[0],
-    ).toHaveAttribute("href", "/community");
+    ).toHaveAttribute("aria-current", "page");
     expect(
       screen.getByRole("link", { name: /Learn about this Circle/ }),
     ).toHaveAttribute("href", "/community/circles/grace-and-ground");
@@ -1515,6 +1515,91 @@ describe("Circles MVP", () => {
     expect(
       screen.queryByRole("link", { name: "App Home" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("maps member community actions to authenticated destinations", async () => {
+    const memberData = structuredClone(demoData);
+    memberData.currentUser.role = "member";
+    memberData.group = { ...memberData.group!, role: "member" };
+    memberData.groups = memberData.groups.map((group) => ({
+      ...group,
+      role: "member",
+    }));
+
+    renderWithData("/community/circles/grace-and-ground", memberData);
+
+    expect(
+      await screen.findByRole("heading", { name: "Grace & Ground" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Next public gathering/ }),
+    ).toHaveAttribute("href", "/gatherings/meeting-1");
+    expect(
+      screen.getByRole("link", { name: "Explore Circles" }),
+    ).toHaveAttribute("href", "/community/circles");
+    expect(
+      screen.getByRole("link", { name: "Community home" }),
+    ).toHaveAttribute("href", "/community");
+    expect(
+      screen.queryByRole("link", { name: "Sign up for a Cell Group" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Keep exploring")).not.toBeInTheDocument();
+  });
+
+  it("uses app destinations throughout the member community overview", async () => {
+    const memberData = structuredClone(demoData);
+    memberData.currentUser.role = "member";
+    memberData.group = { ...memberData.group!, role: "member" };
+    memberData.groups = memberData.groups.map((group) => ({
+      ...group,
+      role: "member",
+    }));
+
+    renderWithData("/community", memberData);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "There is room for you here.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Find a gathering" }),
+    ).toHaveAttribute("href", "/gatherings");
+    expect(
+      screen.getByRole("link", { name: "Explore Circles" }),
+    ).toHaveAttribute("href", "/community/circles");
+    expect(
+      screen.getByRole("link", { name: "Read testimonies" }),
+    ).toHaveAttribute("href", "/community/testimonies");
+    expect(
+      screen.queryByRole("link", { name: "Sign up for a Cell Group" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses one contextual back action on standalone member community details", async () => {
+    Object.defineProperty(window.navigator, "standalone", {
+      value: true,
+      configurable: true,
+    });
+    try {
+      renderApp("/community/circles/grace-and-ground");
+      expect(
+        await screen.findByRole("heading", { name: "Grace & Ground" }),
+      ).toBeInTheDocument();
+      const backLinks = screen.getAllByRole("link", {
+        name: "Back to Circles",
+      });
+      expect(backLinks).toHaveLength(1);
+      expect(backLinks[0]).toHaveAttribute("href", "/community/circles");
+      expect(
+        screen.queryByRole("link", { name: "App Home" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window.navigator, "standalone", {
+        value: false,
+        configurable: true,
+      });
+    }
   });
 
   it("shows one contextual back action for a standalone Circle gathering", async () => {
@@ -1606,7 +1691,7 @@ describe("Circles MVP", () => {
     );
   });
   it("keeps the published Circle directory read-only in browse mode", async () => {
-    renderApp("/ministry-lens-church/circles?browse=1");
+    renderApp("/ministry-lens-church/circles?browse=1", false);
     expect(
       await screen.findByRole("heading", { name: "Join a Circle" }),
     ).toBeInTheDocument();
@@ -1942,7 +2027,10 @@ describe("Circles MVP", () => {
     expect(firstName).toHaveFocus();
   });
   it("keeps the post-RSVP public journey read-only", async () => {
-    renderApp("/ministry-lens-church/gatherings/rooted-in-grace?browse=1");
+    renderApp(
+      "/ministry-lens-church/gatherings/rooted-in-grace?browse=1",
+      false,
+    );
     expect(
       await screen.findByText("You’re viewing this gathering."),
     ).toBeInTheDocument();
@@ -1972,6 +2060,7 @@ describe("Circles MVP", () => {
     try {
       renderApp(
         "/ministry-lens-church/gatherings/rooted-in-grace?browse=1",
+        false,
       );
       expect(
         await screen.findByRole("heading", { name: "Rooted in grace" }),
