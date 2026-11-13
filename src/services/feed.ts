@@ -10,10 +10,12 @@ import type {
   FeedCursor,
   FeedNotification,
   FeedNotificationPage,
+  FeedModerationReport,
   FeedReactionType,
   FeedReportReason,
   PrayerUpdate,
   PrayerUpdateType,
+  PersonallyHiddenFeedItem,
 } from "../types";
 import { optimizeFeedPhoto, validateFeedPhotos } from "../lib/images";
 
@@ -398,13 +400,16 @@ export async function searchCommunityMembers(client: SupabaseClient, query = "")
 
 export async function searchCommunityFeed(
   client: SupabaseClient,
-  input: { query?: string; type?: string; circleId?: string; authorPersonId?: string; savedOnly?: boolean },
+  input: { query?: string; type?: string; circleId?: string; organizationOnly?: boolean; authorPersonId?: string; dateFrom?: string; dateTo?: string; savedOnly?: boolean },
 ): Promise<CommunityFeedItem[]> {
   const { data, error } = await client.rpc("search_circle_community_feed", {
     p_query: input.query?.trim() || null,
     p_type: input.type || null,
     p_circle_id: input.circleId || null,
+    p_organization_only: input.organizationOnly ?? false,
     p_author_person_id: input.authorPersonId || null,
+    p_date_from: input.dateFrom || null,
+    p_date_to: input.dateTo || null,
     p_saved_only: input.savedOnly ?? false,
     p_limit: 50,
   });
@@ -421,6 +426,30 @@ export async function getCommunityFeedItem(client: SupabaseClient, feedItemId: s
 
 export async function markCommunityFeedSeen(client: SupabaseClient) {
   const { error } = await client.rpc("mark_circle_community_feed_seen");
+  if (error) throw error;
+}
+
+export async function loadPersonallyHiddenFeedItems(client: SupabaseClient): Promise<PersonallyHiddenFeedItem[]> {
+  const { data, error } = await client.rpc("get_circle_personally_hidden_feed_items");
+  if (error) throw error;
+  return (data ?? []) as PersonallyHiddenFeedItem[];
+}
+
+export async function loadFeedModerationQueue(
+  client: SupabaseClient,
+  status: "open" | "resolved" | "dismissed" = "open",
+): Promise<FeedModerationReport[]> {
+  const { data, error } = await client.rpc("get_circle_feed_moderation_queue", { p_status: status });
+  if (error) throw error;
+  return (data ?? []) as FeedModerationReport[];
+}
+
+export async function resolveFeedReport(
+  client: SupabaseClient,
+  reportId: string,
+  status: "resolved" | "dismissed",
+) {
+  const { error } = await client.rpc("resolve_circle_feed_report", { p_report_id: reportId, p_status: status });
   if (error) throw error;
 }
 

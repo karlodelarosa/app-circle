@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  answerPrayer,
   createPrayer,
   convertGuestConnectionToSignup,
   loadGatheringAttendance,
@@ -19,6 +20,16 @@ import {
   searchGatheringAttendancePeople,
   updateGroupDetails,
 } from "./circles";
+
+describe("answerPrayer", () => {
+  it("records an answered timeline update so followers are notified", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: "update-1", error: null });
+    await answerPrayer({ rpc } as unknown as SupabaseClient, "prayer-1", "  God opened a way.  ");
+    expect(rpc).toHaveBeenCalledWith("add_circle_prayer_update", {
+      p_prayer_id: "prayer-1", p_update_type: "answered", p_body: "God opened a way.",
+    });
+  });
+});
 
 describe("deleteMeeting", () => {
   it("returns the stable deletion result from the guarded RPC", async () => {

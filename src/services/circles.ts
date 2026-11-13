@@ -636,10 +636,11 @@ export async function answerPrayer(
   prayerId: string,
   answeredNotes: string,
 ) {
-  const { error } = await client
-    .from("circle_prayer_requests")
-    .update({ is_answered: true, answered_notes: answeredNotes })
-    .eq("id", prayerId);
+  const { error } = await client.rpc("add_circle_prayer_update", {
+    p_prayer_id: prayerId,
+    p_update_type: "answered",
+    p_body: answeredNotes.trim(),
+  });
   if (error) throw error;
 }
 

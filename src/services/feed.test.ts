@@ -8,6 +8,7 @@ import {
   loadFeedNotificationPage,
   loadCommunityFeed,
   saveCommunityProfile,
+  searchCommunityFeed,
   setFeedReaction,
   setFeedSaved,
   setPrayerFollow,
@@ -115,6 +116,18 @@ describe("community feed service", () => {
     const profile = await getCommunityMemberProfile(client, "person-1");
     expect(rpc).toHaveBeenCalledWith("get_circle_community_member_profile", { p_person_id: "person-1" });
     expect(profile.fullName).toBe("Mara Santos");
+  });
+
+  it("passes structured, audience-authorized feed search filters", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    await searchCommunityFeed({ rpc } as unknown as SupabaseClient, {
+      query: "grace", type: "prayer", circleId: "circle-1", authorPersonId: "person-1",
+      dateFrom: "2026-11-01", dateTo: "2026-11-13",
+    });
+    expect(rpc).toHaveBeenCalledWith("search_circle_community_feed", {
+      p_query: "grace", p_type: "prayer", p_circle_id: "circle-1", p_organization_only: false, p_author_person_id: "person-1",
+      p_date_from: "2026-11-01", p_date_to: "2026-11-13", p_saved_only: false, p_limit: 50,
+    });
   });
 
   it("passes stable cursors to comment and notification pages", async () => {

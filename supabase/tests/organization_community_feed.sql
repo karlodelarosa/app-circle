@@ -54,7 +54,7 @@ INSERT INTO public.circle_prayer_requests(id,organization_id,cell_group_id,perso
 ('41000000-0000-0000-0000-000000000304','41000000-0000-0000-0000-000000000010','41000000-0000-0000-0000-000000000201','41000000-0000-0000-0000-000000000102','Prayer journey fixture','Please pray with us.','Family','circle');
 
 DO $$
-DECLARE rejected BOOLEAN:=false; own_feed UUID;
+DECLARE rejected BOOLEAN:=false; own_feed UUID; report_id UUID; admin_report_id UUID;
 BEGIN
   IF (SELECT count(*) FROM public.circle_feed_items WHERE source_type='post' AND source_id IN ('41000000-0000-0000-0000-000000000301','41000000-0000-0000-0000-000000000302','41000000-0000-0000-0000-000000000303','42000000-0000-0000-0000-000000000301'))<>4 THEN
     RAISE EXCEPTION 'Source triggers did not create one feed item per post';
@@ -107,13 +107,33 @@ BEGIN
   SET LOCAL ROLE authenticated;
   PERFORM public.set_circle_prayer_follow('41000000-0000-0000-0000-000000000304',true);
   PERFORM public.set_circle_feed_pinned((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000303'),true);
+  INSERT INTO public.circle_feed_comments(id,feed_item_id,author_person_id,body) VALUES(
+    '41000000-0000-0000-0000-000000000401',
+    (SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),
+    '41000000-0000-0000-0000-000000000101','A linked comment');
   RESET ROLE;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_notifications WHERE recipient_person_id='41000000-0000-0000-0000-000000000102' AND kind='comment' AND target_comment_id='41000000-0000-0000-0000-000000000401') THEN
+    RAISE EXCEPTION 'Comment notification did not retain its deep-link target';
+  END IF;
 
   PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000003',true);
   SET LOCAL ROLE authenticated;
   PERFORM public.upsert_circle_community_profile('Learning to serve faithfully.','shared_circle','hidden');
   PERFORM public.set_circle_feed_reaction((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),'amen');
   PERFORM public.set_circle_feed_saved((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),true);
+  PERFORM public.set_circle_feed_personally_hidden((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),true);
+  IF jsonb_array_length(public.search_circle_community_feed('Updated idempotently',NULL,NULL,false,NULL,NULL,NULL,false,50))<>0 THEN
+    RAISE EXCEPTION 'Personally hidden item remained searchable';
+  END IF;
+  PERFORM public.set_circle_feed_personally_hidden((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),false);
+  PERFORM public.set_circle_feed_comments_enabled((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),false);
+  rejected:=false;
+  BEGIN INSERT INTO public.circle_feed_comments(feed_item_id,author_person_id,body) VALUES((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),'41000000-0000-0000-0000-000000000102','Should be rejected');
+  EXCEPTION WHEN OTHERS THEN rejected:=true; END;
+  IF NOT rejected THEN RAISE EXCEPTION 'Closed comments accepted a new comment'; END IF;
+  PERFORM public.set_circle_feed_comments_enabled((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),true);
+  report_id:=public.report_circle_feed_item((SELECT id FROM public.circle_feed_items WHERE source_type='prayer' AND source_id='41000000-0000-0000-0000-000000000304'),'privacy','Please review this Circle post.');
+  admin_report_id:=public.report_circle_feed_item((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),'spam','Please review this organization post.');
   PERFORM public.add_circle_prayer_update('41000000-0000-0000-0000-000000000304','progress','The first appointment went well.');
   IF (public.get_circle_community_member_profile('41000000-0000-0000-0000-000000000102')->>'bio') IS DISTINCT FROM 'Learning to serve faithfully.' THEN
     RAISE EXCEPTION 'Owner could not read their profile';
@@ -136,12 +156,34 @@ BEGIN
     RAISE EXCEPTION 'Prayer update did not resurface its feed item';
   END IF;
 
+  PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000002',true);
+  SET LOCAL ROLE authenticated;
+  IF jsonb_array_length(public.get_circle_feed_moderation_queue('open'))<>1 THEN RAISE EXCEPTION 'Circle leader moderation queue boundary failed'; END IF;
+  PERFORM public.resolve_circle_feed_report(report_id,'resolved');
+  RESET ROLE;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_report_actions WHERE action='resolved') OR NOT EXISTS(SELECT 1 FROM public.circle_feed_notifications WHERE recipient_person_id='41000000-0000-0000-0000-000000000102' AND kind='report_resolved') THEN
+    RAISE EXCEPTION 'Report resolution audit or notification was not recorded';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000001',true);
+  SET LOCAL ROLE authenticated;
+  IF public.get_circle_community_member_profile('41000000-0000-0000-0000-000000000102')->>'joinDate' IS NOT NULL THEN RAISE EXCEPTION 'Hidden profile field leaked to an organization administrator'; END IF;
+  PERFORM public.set_circle_feed_pinned((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),true);
+  PERFORM public.resolve_circle_feed_report(admin_report_id,'resolved');
+  RESET ROLE;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_pins WHERE feed_item_id=(SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301') AND pinned_by_person_id IS NULL AND pinned_by_user_id='41000000-0000-0000-0000-000000000001') THEN
+    RAISE EXCEPTION 'Organization administrator without a Circle profile could not pin';
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_notifications WHERE recipient_person_id='41000000-0000-0000-0000-000000000102' AND kind='report_resolved' AND latest_actor_label='An organization administrator') THEN
+    RAISE EXCEPTION 'Administrator report resolution notification lost its actor label';
+  END IF;
+
   PERFORM set_config('request.jwt.claim.sub','42000000-0000-0000-0000-000000000001',true);
   SET LOCAL ROLE authenticated;
   IF public.get_circle_community_member_profile('41000000-0000-0000-0000-000000000102') IS NOT NULL THEN
     RAISE EXCEPTION 'Cross-organization profile disclosure detected';
   END IF;
-  IF jsonb_array_length(public.search_circle_community_feed('Prayer journey fixture',NULL,NULL,NULL,false,50))<>0 THEN
+  IF jsonb_array_length(public.search_circle_community_feed('Prayer journey fixture',NULL,NULL,false,NULL,NULL,NULL,false,50))<>0 THEN
     RAISE EXCEPTION 'Cross-organization feed search disclosure detected';
   END IF;
   RESET ROLE;

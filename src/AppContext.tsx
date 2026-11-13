@@ -608,7 +608,7 @@ export function AppProvider({
       session,
       loading,
       error,
-      demoMode: !session,
+      demoMode: !session || !isSupabaseConfigured,
       toast,
       refresh,
       signIn,

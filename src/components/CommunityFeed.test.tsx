@@ -6,6 +6,8 @@ import { CommunityFeed } from "./CommunityFeed";
 
 vi.mock("../lib/supabase", () => ({ isSupabaseConfigured: false, supabase: null }));
 
+beforeEach(() => window.sessionStorage.clear());
+
 const renderFeed = () => render(
   <MemoryRouter>
     <AppProvider initialData={structuredClone(demoData)}>
@@ -55,14 +57,112 @@ describe("CommunityFeed", () => {
     expect(within(article).getByText("A clearer reflection")).toBeInTheDocument();
   });
 
-  it("supports Likes and one-level comments", async () => {
+  it("supports reactions and one-level comments", async () => {
     renderFeed();
     const article = screen.getByRole("article", { name: /small acts of kindness/i });
-    fireEvent.click(within(article).getByRole("button", { name: /^Like/ }));
-    expect(within(article).getByRole("button", { name: /^Unlike/ })).toBeInTheDocument();
+    fireEvent.click(within(article).getByRole("button", { name: /choose a reaction/i }));
+    fireEvent.click(within(article).getByRole("menuitemradio", { name: "Like" }));
+    expect(within(article).getByRole("button", { name: /^Like/ })).toBeInTheDocument();
     fireEvent.change(within(article).getByLabelText("Write a comment"), { target: { value: "This encouraged me." } });
     fireEvent.click(within(article).getByRole("button", { name: "Comment" }));
     expect(await within(article).findByText("This encouraged me.")).toBeInTheDocument();
+  });
+
+  it("offers familiar reactions, saving, and personal hiding", async () => {
+    renderFeed();
+    const article = screen.getByRole("article", { name: /small acts of kindness/i });
+
+    fireEvent.click(within(article).getByRole("button", { name: /choose a reaction/i }));
+    fireEvent.click(within(article).getByRole("menuitemradio", { name: "Amen" }));
+    expect(within(article).getByRole("button", { name: /Amen/ })).toBeInTheDocument();
+
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    fireEvent.click(within(article).getByRole("menuitem", { name: "Save post" }));
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    expect(within(article).getByRole("menuitem", { name: "Remove from saved" })).toBeInTheDocument();
+    fireEvent.click(within(article).getByRole("menuitem", { name: "Hide this post" }));
+    expect(screen.queryByRole("article", { name: /small acts of kindness/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps member-only actions unavailable to administrators without a person profile", () => {
+    const data = structuredClone(demoData);
+    data.currentUser.personId = undefined;
+    render(
+      <MemoryRouter>
+        <AppProvider initialData={data}>
+          <CommunityFeed />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+    const article = screen.getByRole("article", { name: /small acts of kindness/i });
+    expect(within(article).getByRole("button", { name: /choose a reaction/i })).toBeDisabled();
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    expect(within(article).queryByRole("menuitem", { name: "Save post" })).not.toBeInTheDocument();
+    expect(within(article).queryByRole("menuitem", { name: "Report post" })).not.toBeInTheDocument();
+    expect(within(article).getByRole("menuitem", { name: "Copy link" })).toBeInTheDocument();
+  });
+
+  it("lets moderators pin activity and close comments without deleting it", () => {
+    renderFeed();
+    const article = screen.getByRole("article", { name: /small acts of kindness/i });
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    fireEvent.click(within(article).getByRole("menuitem", { name: "Close comments" }));
+    expect(within(article).getByText("Comments are closed for this post.")).toBeInTheDocument();
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    fireEvent.click(within(article).getByRole("menuitem", { name: "Pin post" }));
+    expect(screen.getByRole("heading", { name: "Pinned for this community" })).toBeInTheDocument();
+    expect(screen.getAllByRole("article", { name: /small acts of kindness/i })).toHaveLength(1);
+  });
+
+  it("reports safety concerns without automatically hiding the post", async () => {
+    renderFeed();
+    const article = screen.getByRole("article", { name: /small acts of kindness/i });
+    fireEvent.click(within(article).getByRole("button", { name: "Post actions" }));
+    fireEvent.click(within(article).getByRole("menuitem", { name: "Report post" }));
+    fireEvent.change(within(article).getByLabelText("Details (optional)"), { target: { value: "Please review the personal detail." } });
+    fireEvent.click(within(article).getByRole("button", { name: "Send report" }));
+    expect(await within(article).findByText("Report sent to community leaders.")).toBeInTheDocument();
+    expect(article).toBeInTheDocument();
+  });
+
+  it("keeps Pray and Follow separate and lets the author add an update", async () => {
+    const prayer = {
+      ...demoData.communityFeed![1],
+      authorPersonId: "demo-user",
+      authorName: "Karlo de la Rosa",
+      canEdit: true,
+      prayer: { ...demoData.prayers[0], userId: "demo-user", authorName: "Karlo de la Rosa" },
+    };
+    renderFeedWith([prayer]);
+    const article = screen.getByRole("article", { name: /Wisdom for a new season/ });
+
+    fireEvent.click(within(article).getByRole("button", { name: /^Follow updates/ }));
+    expect(within(article).getByRole("button", { name: /^Following/ })).toBeInTheDocument();
+    expect(within(article).getByRole("button", { name: /^Praying/ })).toBeInTheDocument();
+
+    fireEvent.click(within(article).getByRole("button", { name: "Add prayer update" }));
+    fireEvent.change(within(article).getByLabelText("Prayer update"), { target: { value: "We received clarity today." } });
+    fireEvent.click(within(article).getByRole("button", { name: "Share update" }));
+    expect(await within(article).findByText("We received clarity today.")).toBeInTheDocument();
+  });
+
+  it("filters the current feed with familiar search controls", () => {
+    renderFeed();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search community" }), { target: { value: "kindness" } });
+    expect(screen.getByRole("article", { name: /small acts of kindness/i })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /Wisdom for a new season/ })).not.toBeInTheDocument();
+  });
+
+  it("supports structured type, author, and date filters", () => {
+    renderFeed();
+    fireEvent.change(screen.getByLabelText("Activity type"), { target: { value: "prayer" } });
+    expect(screen.getByRole("article", { name: /Wisdom for a new season/ })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /small acts of kindness/i })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Activity type"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Author"), { target: { value: "member-2" } });
+    expect(screen.getByRole("article", { name: /small acts of kindness/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2999-01-01" } });
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 
   it("shows gathering reflection context and answered-prayer praise", () => {

@@ -62,7 +62,8 @@ CREATE TABLE public.circle_feed_pins (
   feed_item_id UUID PRIMARY KEY REFERENCES public.circle_feed_items(id) ON DELETE CASCADE,
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   cell_group_id UUID REFERENCES public.cell_groups(id) ON DELETE CASCADE,
-  pinned_by_person_id UUID NOT NULL REFERENCES public.people(id) ON DELETE CASCADE,
+  pinned_by_person_id UUID REFERENCES public.people(id) ON DELETE SET NULL,
+  pinned_by_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX circle_feed_pins_scope_idx ON public.circle_feed_pins(organization_id,cell_group_id,created_at DESC);
@@ -76,6 +77,7 @@ CREATE TABLE public.circle_feed_reports (
   note TEXT CHECK (note IS NULL OR char_length(note)<=1000),
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','dismissed')),
   resolved_by_person_id UUID REFERENCES public.people(id) ON DELETE SET NULL,
+  resolved_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   resolved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -86,7 +88,8 @@ CREATE INDEX circle_feed_reports_queue_idx ON public.circle_feed_reports(organiz
 CREATE TABLE public.circle_feed_report_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_id UUID NOT NULL REFERENCES public.circle_feed_reports(id) ON DELETE CASCADE,
-  actor_person_id UUID NOT NULL REFERENCES public.people(id) ON DELETE CASCADE,
+  actor_person_id UUID REFERENCES public.people(id) ON DELETE SET NULL,
+  actor_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   action TEXT NOT NULL CHECK (action IN ('reported','resolved','dismissed','reopened')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -109,6 +112,8 @@ ALTER TABLE public.circle_feed_notifications
   DROP CONSTRAINT circle_feed_notifications_kind_check,
   ADD COLUMN target_comment_id UUID REFERENCES public.circle_feed_comments(id) ON DELETE SET NULL,
   ADD COLUMN prayer_update_id UUID REFERENCES public.circle_prayer_updates(id) ON DELETE SET NULL,
+  ADD COLUMN latest_actor_label TEXT,
+  ALTER COLUMN latest_actor_person_id DROP NOT NULL,
   ADD CONSTRAINT circle_feed_notifications_kind_check CHECK (kind IN ('comment','like','pray','reaction','prayer_update','report_resolved'));
 
 ALTER TABLE public.circle_community_profiles ENABLE ROW LEVEL SECURITY;
@@ -174,7 +179,6 @@ CREATE OR REPLACE FUNCTION public.circle_can_view_profile_field(
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
   SELECT public.circle_has_active_org_access(p_organization_id) AND (
     p_target_person_id=public.circle_current_person_id(p_organization_id)
-    OR public.circle_is_org_admin(p_organization_id)
     OR p_visibility='organization'
     OR (p_visibility='shared_circle' AND EXISTS(
       SELECT 1 FROM public.cell_group_members target_member
@@ -236,7 +240,9 @@ BEGIN
       FROM public.circle_prayer_updates update_row JOIN public.people update_person ON update_person.id=update_row.author_person_id
       WHERE update_row.prayer_id=prayer.id AND update_row.hidden_at IS NULL ORDER BY update_row.created_at DESC,update_row.id DESC LIMIT 1),
     'canEdit',item.author_person_id=public.circle_current_person_id(item.organization_id),
-    'canModerate',public.circle_feed_item_moderatable(item.id),'isHidden',false
+    'canModerate',public.circle_feed_item_moderatable(item.id),
+    'canPin',CASE WHEN item.cell_group_id IS NULL THEN public.circle_is_org_admin(item.organization_id) ELSE public.circle_is_org_admin(item.organization_id) OR public.circle_can_lead_group(item.cell_group_id) END,
+    'isHidden',false
   ) INTO result
   FROM public.circle_feed_items item
   LEFT JOIN public.people person ON person.id=item.author_person_id
@@ -336,9 +342,9 @@ BEGIN
   SELECT * INTO item FROM public.circle_feed_items WHERE id=p_feed_item_id; viewer:=public.circle_current_person_id(item.organization_id);
   INSERT INTO public.circle_feed_reports(feed_item_id,organization_id,reporter_person_id,reason,note)
   VALUES(item.id,item.organization_id,viewer,p_reason,nullif(btrim(p_note),''))
-  ON CONFLICT(feed_item_id,reporter_person_id) DO UPDATE SET reason=excluded.reason,note=excluded.note,status='open',resolved_by_person_id=NULL,resolved_at=NULL,updated_at=now()
+  ON CONFLICT(feed_item_id,reporter_person_id) DO UPDATE SET reason=excluded.reason,note=excluded.note,status='open',resolved_by_person_id=NULL,resolved_by_user_id=NULL,resolved_at=NULL,updated_at=now()
   RETURNING id INTO report_id;
-  INSERT INTO public.circle_feed_report_actions(report_id,actor_person_id,action) VALUES(report_id,viewer,'reported');
+  INSERT INTO public.circle_feed_report_actions(report_id,actor_person_id,actor_user_id,action) VALUES(report_id,viewer,auth.uid(),'reported');
   RETURN report_id;
 END;
 $$;
@@ -358,13 +364,15 @@ RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE item public.circle_feed_items%ROWTYPE; viewer UUID; active_pins INTEGER;
 BEGIN
   SELECT * INTO item FROM public.circle_feed_items WHERE id=p_feed_item_id;
-  IF item.id IS NULL OR NOT public.circle_feed_item_moderatable(item.id) THEN RAISE EXCEPTION 'Pin access required'; END IF;
+  IF item.id IS NULL OR (item.cell_group_id IS NULL AND NOT public.circle_is_org_admin(item.organization_id))
+    OR (item.cell_group_id IS NOT NULL AND NOT (public.circle_is_org_admin(item.organization_id) OR public.circle_can_lead_group(item.cell_group_id))) THEN RAISE EXCEPTION 'Pin access required'; END IF;
   viewer:=public.circle_current_person_id(item.organization_id);
   IF NOT p_pinned THEN DELETE FROM public.circle_feed_pins WHERE feed_item_id=item.id; RETURN; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(item.organization_id::text||':'||coalesce(item.cell_group_id::text,'organization'),0));
   SELECT count(*) INTO active_pins FROM public.circle_feed_pins pin WHERE pin.organization_id=item.organization_id AND pin.cell_group_id IS NOT DISTINCT FROM item.cell_group_id AND pin.feed_item_id<>item.id;
   IF active_pins>=3 THEN RAISE EXCEPTION 'Unpin an item before pinning another'; END IF;
-  INSERT INTO public.circle_feed_pins(feed_item_id,organization_id,cell_group_id,pinned_by_person_id)
-  VALUES(item.id,item.organization_id,item.cell_group_id,viewer) ON CONFLICT(feed_item_id) DO NOTHING;
+  INSERT INTO public.circle_feed_pins(feed_item_id,organization_id,cell_group_id,pinned_by_person_id,pinned_by_user_id)
+  VALUES(item.id,item.organization_id,item.cell_group_id,viewer,auth.uid()) ON CONFLICT(feed_item_id) DO NOTHING;
 END;
 $$;
 
@@ -382,13 +390,15 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.add_circle_prayer_update(p_prayer_id UUID,p_update_type TEXT,p_body TEXT)
 RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE prayer public.circle_prayer_requests%ROWTYPE; update_id UUID;
+DECLARE prayer public.circle_prayer_requests%ROWTYPE; item public.circle_feed_items%ROWTYPE; update_id UUID; viewer UUID;
 BEGIN
   SELECT * INTO prayer FROM public.circle_prayer_requests WHERE id=p_prayer_id;
-  IF prayer.id IS NULL OR prayer.person_id<>public.circle_current_person_id(prayer.organization_id) THEN RAISE EXCEPTION 'Prayer author access required'; END IF;
+  SELECT * INTO item FROM public.circle_feed_items WHERE source_type='prayer' AND source_id=p_prayer_id;
+  viewer:=public.circle_current_person_id(prayer.organization_id);
+  IF prayer.id IS NULL OR (prayer.person_id<>viewer AND NOT public.circle_feed_item_moderatable(item.id)) THEN RAISE EXCEPTION 'Prayer update access required'; END IF;
   IF p_update_type NOT IN ('progress','praise','answered','reopened') OR char_length(btrim(p_body)) NOT BETWEEN 1 AND 2000 THEN RAISE EXCEPTION 'Invalid prayer update'; END IF;
   INSERT INTO public.circle_prayer_updates(prayer_id,organization_id,author_person_id,update_type,body)
-  VALUES(prayer.id,prayer.organization_id,prayer.person_id,p_update_type,btrim(p_body)) RETURNING id INTO update_id;
+  VALUES(prayer.id,prayer.organization_id,viewer,p_update_type,btrim(p_body)) RETURNING id INTO update_id;
   IF p_update_type IN ('answered','praise') THEN UPDATE public.circle_prayer_requests SET is_answered=true,answered_notes=btrim(p_body),updated_at=now() WHERE id=prayer.id;
   ELSIF p_update_type='reopened' THEN UPDATE public.circle_prayer_requests SET is_answered=false,answered_notes=NULL,updated_at=now() WHERE id=prayer.id; END IF;
   RETURN update_id;
@@ -462,7 +472,8 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.search_circle_community_feed(
-  p_query TEXT DEFAULT NULL,p_type TEXT DEFAULT NULL,p_circle_id UUID DEFAULT NULL,p_author_person_id UUID DEFAULT NULL,p_saved_only BOOLEAN DEFAULT false,p_limit INTEGER DEFAULT 50
+  p_query TEXT DEFAULT NULL,p_type TEXT DEFAULT NULL,p_circle_id UUID DEFAULT NULL,p_organization_only BOOLEAN DEFAULT false,
+  p_author_person_id UUID DEFAULT NULL,p_date_from DATE DEFAULT NULL,p_date_to DATE DEFAULT NULL,p_saved_only BOOLEAN DEFAULT false,p_limit INTEGER DEFAULT 50
 )
 RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 DECLARE result JSONB; bounded_limit INTEGER:=least(greatest(coalesce(p_limit,50),1),100);
@@ -478,7 +489,10 @@ BEGIN
     LEFT JOIN public.circle_announcements announcement ON item.source_type='announcement' AND announcement.id=item.source_id
     WHERE public.circle_feed_item_personally_visible(item.id)
       AND (p_type IS NULL OR item.source_type=p_type) AND (p_circle_id IS NULL OR item.cell_group_id=p_circle_id)
+      AND (NOT p_organization_only OR item.audience='organization')
       AND (p_author_person_id IS NULL OR item.author_person_id=p_author_person_id)
+      AND (p_date_from IS NULL OR item.activity_at::date>=p_date_from)
+      AND (p_date_to IS NULL OR item.activity_at::date<=p_date_to)
       AND (NOT p_saved_only OR EXISTS(SELECT 1 FROM public.circle_feed_saves saved WHERE saved.feed_item_id=item.id AND saved.person_id=public.circle_current_person_id(item.organization_id)))
       AND (btrim(coalesce(p_query,''))='' OR concat_ws(' ',person.first_name,person.last_name,post.body,reflection.body,prayer.title,prayer.description,gathering.title,announcement.title,announcement.body) ILIKE '%'||btrim(p_query)||'%')
     ORDER BY item.activity_at DESC,item.id DESC LIMIT bounded_limit) candidate;
@@ -494,6 +508,68 @@ BEGIN
   IF v_person_id IS NULL THEN RAISE EXCEPTION 'Active community membership required'; END IF;
   INSERT INTO public.circle_feed_read_state(organization_id,person_id,last_seen_at) VALUES(v_organization_id,v_person_id,now())
   ON CONFLICT(organization_id,person_id) DO UPDATE SET last_seen_at=excluded.last_seen_at;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_circle_personally_hidden_feed_items()
+RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE result JSONB;
+BEGIN
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'id',item.id,'type',item.source_type,'authorName',coalesce(nullif(concat_ws(' ',person.first_name,person.last_name),''),'Community leader'),
+    'title',CASE item.source_type WHEN 'prayer' THEN prayer.title WHEN 'gathering' THEN gathering.title WHEN 'announcement' THEN announcement.title END,
+    'body',CASE item.source_type WHEN 'post' THEN post.body WHEN 'reflection' THEN reflection.body WHEN 'prayer' THEN prayer.description WHEN 'announcement' THEN announcement.body END,
+    'hiddenAt',hidden.created_at
+  ) ORDER BY hidden.created_at DESC),'[]'::jsonb) INTO result
+  FROM public.circle_feed_hidden_items hidden
+  JOIN public.circle_feed_items item ON item.id=hidden.feed_item_id
+  LEFT JOIN public.people person ON person.id=item.author_person_id
+  LEFT JOIN public.circle_feed_posts post ON item.source_type='post' AND post.id=item.source_id
+  LEFT JOIN public.circle_gathering_reflections reflection ON item.source_type='reflection' AND reflection.id=item.source_id
+  LEFT JOIN public.circle_prayer_requests prayer ON item.source_type='prayer' AND prayer.id=item.source_id
+  LEFT JOIN public.circle_gatherings gathering ON item.source_type='gathering' AND gathering.id=item.source_id
+  LEFT JOIN public.circle_announcements announcement ON item.source_type='announcement' AND announcement.id=item.source_id
+  WHERE hidden.person_id=public.circle_current_person_id(item.organization_id)
+    AND public.circle_feed_item_visible(item.id);
+  RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_circle_feed_moderation_queue(p_status TEXT DEFAULT 'open')
+RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE result JSONB;
+BEGIN
+  IF p_status NOT IN ('open','resolved','dismissed') THEN RAISE EXCEPTION 'Invalid report status'; END IF;
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'id',report.id,'feedItemId',report.feed_item_id,'reporterPersonId',report.reporter_person_id,
+    'reporterName',concat_ws(' ',reporter.first_name,reporter.last_name),'reason',report.reason,'note',report.note,
+    'status',report.status,'createdAt',report.created_at,'updatedAt',report.updated_at,
+    'item',public.circle_feed_item_json_v2(report.feed_item_id)
+  ) ORDER BY report.created_at DESC),'[]'::jsonb) INTO result
+  FROM public.circle_feed_reports report
+  JOIN public.circle_feed_items item ON item.id=report.feed_item_id
+  JOIN public.people reporter ON reporter.id=report.reporter_person_id
+  WHERE report.status=p_status AND public.circle_feed_item_moderatable(item.id);
+  RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.resolve_circle_feed_report(p_report_id UUID,p_status TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE report public.circle_feed_reports%ROWTYPE; item public.circle_feed_items%ROWTYPE; viewer UUID;
+BEGIN
+  IF p_status NOT IN ('resolved','dismissed') THEN RAISE EXCEPTION 'Invalid report resolution'; END IF;
+  SELECT * INTO report FROM public.circle_feed_reports WHERE id=p_report_id;
+  SELECT * INTO item FROM public.circle_feed_items WHERE id=report.feed_item_id;
+  IF report.id IS NULL OR NOT public.circle_feed_item_moderatable(item.id) THEN RAISE EXCEPTION 'Report moderation access required'; END IF;
+  viewer:=public.circle_current_person_id(item.organization_id);
+  UPDATE public.circle_feed_reports SET status=p_status,resolved_by_person_id=viewer,resolved_by_user_id=auth.uid(),resolved_at=now(),updated_at=now() WHERE id=report.id;
+  INSERT INTO public.circle_feed_report_actions(report_id,actor_person_id,actor_user_id,action) VALUES(report.id,viewer,auth.uid(),p_status);
+  IF report.reporter_person_id IS DISTINCT FROM viewer THEN
+    INSERT INTO public.circle_feed_notifications(organization_id,recipient_person_id,feed_item_id,kind,latest_actor_person_id,latest_actor_label)
+    VALUES(item.organization_id,report.reporter_person_id,item.id,'report_resolved',viewer,CASE WHEN viewer IS NULL THEN 'An organization administrator' END)
+    ON CONFLICT(recipient_person_id,feed_item_id,kind) DO UPDATE SET latest_actor_person_id=excluded.latest_actor_person_id,latest_actor_label=excluded.latest_actor_label,actor_count=circle_feed_notifications.actor_count+1,read_at=NULL,updated_at=now();
+  END IF;
 END;
 $$;
 
@@ -527,7 +603,7 @@ CREATE OR REPLACE FUNCTION public.circle_notify_feed_reaction()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE item public.circle_feed_items%ROWTYPE;
 BEGIN
-  IF TG_OP<>'INSERT' THEN RETURN NEW; END IF;
+  IF NEW.reaction_type='like' THEN RETURN NEW; END IF;
   SELECT * INTO item FROM public.circle_feed_items WHERE id=NEW.feed_item_id;
   IF item.author_person_id IS NULL OR item.author_person_id=NEW.person_id THEN RETURN NEW; END IF;
   INSERT INTO public.circle_feed_notifications(organization_id,recipient_person_id,feed_item_id,kind,latest_actor_person_id)
@@ -536,16 +612,33 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER circle_feed_reactions_notify AFTER INSERT ON public.circle_feed_reactions
+CREATE TRIGGER circle_feed_reactions_notify AFTER INSERT OR UPDATE OF reaction_type ON public.circle_feed_reactions
 FOR EACH ROW EXECUTE FUNCTION public.circle_notify_feed_reaction();
+
+CREATE OR REPLACE FUNCTION public.circle_notify_feed_activity()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE item public.circle_feed_items%ROWTYPE; recipient UUID; activity_kind TEXT; actor UUID; comment_id UUID;
+BEGIN
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  IF TG_TABLE_NAME='circle_feed_comments' THEN activity_kind:='comment'; actor:=NEW.author_person_id; comment_id:=NEW.id; SELECT * INTO item FROM public.circle_feed_items WHERE id=NEW.feed_item_id;
+  ELSIF TG_TABLE_NAME='circle_feed_likes' THEN activity_kind:='like'; actor:=NEW.person_id; SELECT * INTO item FROM public.circle_feed_items WHERE id=NEW.feed_item_id;
+  ELSE activity_kind:='pray'; actor:=NEW.person_id; SELECT feed.* INTO item FROM public.circle_feed_items feed WHERE feed.source_type='prayer' AND feed.source_id=NEW.prayer_id; END IF;
+  recipient:=item.author_person_id;
+  IF recipient IS NULL OR recipient=actor THEN RETURN NEW; END IF;
+  INSERT INTO public.circle_feed_notifications(organization_id,recipient_person_id,feed_item_id,kind,latest_actor_person_id,target_comment_id)
+  VALUES(item.organization_id,recipient,item.id,activity_kind,actor,comment_id)
+  ON CONFLICT(recipient_person_id,feed_item_id,kind) DO UPDATE SET latest_actor_person_id=excluded.latest_actor_person_id,actor_count=circle_feed_notifications.actor_count+1,read_at=NULL,updated_at=now(),target_comment_id=excluded.target_comment_id;
+  RETURN NEW;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.get_circle_feed_notifications(p_before_updated_at TIMESTAMPTZ DEFAULT NULL,p_before_id UUID DEFAULT NULL,p_limit INTEGER DEFAULT 30)
 RETURNS JSONB LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 DECLARE result JSONB; bounded_limit INTEGER:=least(greatest(coalesce(p_limit,30),1),100);
 BEGIN
   WITH visible AS (
-    SELECT notice.updated_at,notice.id,jsonb_build_object('id',notice.id,'feedItemId',notice.feed_item_id,'kind',notice.kind,'actorCount',notice.actor_count,'actorName',concat_ws(' ',person.first_name,person.last_name),'readAt',notice.read_at,'createdAt',notice.updated_at,'targetCommentId',notice.target_comment_id,'prayerUpdateId',notice.prayer_update_id) payload
-    FROM public.circle_feed_notifications notice JOIN public.people person ON person.id=notice.latest_actor_person_id
+    SELECT notice.updated_at,notice.id,jsonb_build_object('id',notice.id,'feedItemId',notice.feed_item_id,'kind',notice.kind,'actorCount',notice.actor_count,'actorName',coalesce(nullif(concat_ws(' ',person.first_name,person.last_name),''),notice.latest_actor_label,'A community member'),'readAt',notice.read_at,'createdAt',notice.updated_at,'targetCommentId',notice.target_comment_id,'prayerUpdateId',notice.prayer_update_id) payload
+    FROM public.circle_feed_notifications notice LEFT JOIN public.people person ON person.id=notice.latest_actor_person_id
     WHERE notice.recipient_person_id=public.circle_current_person_id(notice.organization_id)
       AND (p_before_updated_at IS NULL OR (notice.updated_at,notice.id)<(p_before_updated_at,p_before_id))
     ORDER BY notice.updated_at DESC,notice.id DESC LIMIT bounded_limit+1
@@ -559,7 +652,7 @@ $$;
 
 REVOKE ALL ON public.circle_community_profiles,public.circle_feed_reactions,public.circle_feed_saves,public.circle_feed_hidden_items,public.circle_feed_subscriptions,public.circle_feed_read_state,public.circle_feed_pins,public.circle_feed_reports,public.circle_feed_report_actions,public.circle_prayer_updates FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.circle_feed_item_personally_visible(UUID),public.circle_can_view_profile_field(UUID,UUID,TEXT),public.circle_feed_item_json_v2(UUID),public.circle_sync_legacy_like_to_reaction(),public.circle_sync_reaction_to_legacy_like(),public.circle_resurface_prayer_update(),public.circle_notify_feed_reaction() FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.get_circle_community_feed_v2(TIMESTAMPTZ,UUID,TIMESTAMPTZ,INTEGER,UUID,BOOLEAN),public.get_circle_community_feed_item(UUID),public.set_circle_feed_reaction(UUID,TEXT),public.set_circle_feed_saved(UUID,BOOLEAN),public.set_circle_feed_personally_hidden(UUID,BOOLEAN),public.report_circle_feed_item(UUID,TEXT,TEXT),public.set_circle_feed_comments_enabled(UUID,BOOLEAN),public.set_circle_feed_pinned(UUID,BOOLEAN),public.set_circle_prayer_follow(UUID,BOOLEAN),public.add_circle_prayer_update(UUID,TEXT,TEXT),public.get_circle_prayer_updates(UUID),public.upsert_circle_community_profile(TEXT,TEXT,TEXT),public.get_circle_community_member_profile(UUID),public.search_circle_community_members(TEXT,INTEGER),public.search_circle_community_feed(TEXT,TEXT,UUID,UUID,BOOLEAN,INTEGER),public.mark_circle_community_feed_seen() FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.get_circle_community_feed_v2(TIMESTAMPTZ,UUID,TIMESTAMPTZ,INTEGER,UUID,BOOLEAN),public.get_circle_community_feed_item(UUID),public.set_circle_feed_reaction(UUID,TEXT),public.set_circle_feed_saved(UUID,BOOLEAN),public.set_circle_feed_personally_hidden(UUID,BOOLEAN),public.report_circle_feed_item(UUID,TEXT,TEXT),public.set_circle_feed_comments_enabled(UUID,BOOLEAN),public.set_circle_feed_pinned(UUID,BOOLEAN),public.set_circle_prayer_follow(UUID,BOOLEAN),public.add_circle_prayer_update(UUID,TEXT,TEXT),public.get_circle_prayer_updates(UUID),public.upsert_circle_community_profile(TEXT,TEXT,TEXT),public.get_circle_community_member_profile(UUID),public.search_circle_community_members(TEXT,INTEGER),public.search_circle_community_feed(TEXT,TEXT,UUID,UUID,BOOLEAN,INTEGER),public.mark_circle_community_feed_seen() TO authenticated;
+REVOKE ALL ON FUNCTION public.get_circle_community_feed_v2(TIMESTAMPTZ,UUID,TIMESTAMPTZ,INTEGER,UUID,BOOLEAN),public.get_circle_community_feed_item(UUID),public.set_circle_feed_reaction(UUID,TEXT),public.set_circle_feed_saved(UUID,BOOLEAN),public.set_circle_feed_personally_hidden(UUID,BOOLEAN),public.report_circle_feed_item(UUID,TEXT,TEXT),public.set_circle_feed_comments_enabled(UUID,BOOLEAN),public.set_circle_feed_pinned(UUID,BOOLEAN),public.set_circle_prayer_follow(UUID,BOOLEAN),public.add_circle_prayer_update(UUID,TEXT,TEXT),public.get_circle_prayer_updates(UUID),public.upsert_circle_community_profile(TEXT,TEXT,TEXT),public.get_circle_community_member_profile(UUID),public.search_circle_community_members(TEXT,INTEGER),public.search_circle_community_feed(TEXT,TEXT,UUID,BOOLEAN,UUID,DATE,DATE,BOOLEAN,INTEGER),public.mark_circle_community_feed_seen(),public.get_circle_personally_hidden_feed_items(),public.get_circle_feed_moderation_queue(TEXT),public.resolve_circle_feed_report(UUID,TEXT) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_circle_community_feed_v2(TIMESTAMPTZ,UUID,TIMESTAMPTZ,INTEGER,UUID,BOOLEAN),public.get_circle_community_feed_item(UUID),public.set_circle_feed_reaction(UUID,TEXT),public.set_circle_feed_saved(UUID,BOOLEAN),public.set_circle_feed_personally_hidden(UUID,BOOLEAN),public.report_circle_feed_item(UUID,TEXT,TEXT),public.set_circle_feed_comments_enabled(UUID,BOOLEAN),public.set_circle_feed_pinned(UUID,BOOLEAN),public.set_circle_prayer_follow(UUID,BOOLEAN),public.add_circle_prayer_update(UUID,TEXT,TEXT),public.get_circle_prayer_updates(UUID),public.upsert_circle_community_profile(TEXT,TEXT,TEXT),public.get_circle_community_member_profile(UUID),public.search_circle_community_members(TEXT,INTEGER),public.search_circle_community_feed(TEXT,TEXT,UUID,BOOLEAN,UUID,DATE,DATE,BOOLEAN,INTEGER),public.mark_circle_community_feed_seen(),public.get_circle_personally_hidden_feed_items(),public.get_circle_feed_moderation_queue(TEXT),public.resolve_circle_feed_report(UUID,TEXT) TO authenticated;
 
 COMMIT;

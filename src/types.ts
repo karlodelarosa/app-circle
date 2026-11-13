@@ -303,6 +303,21 @@ export interface FeedReport {
   createdAt: string;
 }
 
+export interface FeedModerationReport extends FeedReport {
+  reporterName: string;
+  updatedAt: string;
+  item?: CommunityFeedItem;
+}
+
+export interface PersonallyHiddenFeedItem {
+  id: string;
+  type: FeedItemType;
+  authorName: string;
+  title?: string;
+  body?: string;
+  hiddenAt: string;
+}
+
 export interface FeedSubscription {
   feedItemId: string;
   personId: string;
@@ -357,6 +372,7 @@ export interface CommunityFeedItem {
   latestPrayerUpdate?: PrayerUpdate;
   canEdit: boolean;
   canModerate: boolean;
+  canPin?: boolean;
   isHidden?: boolean;
 }
 

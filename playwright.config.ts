@@ -11,12 +11,21 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile-chromium", use: { ...devices["Pixel 5"] } },
+    { name: "desktop-chromium", testIgnore: /authenticated-community\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chromium", testIgnore: /authenticated-community\.spec\.ts/, use: { ...devices["Pixel 5"] } },
+    { name: "community-desktop", testMatch: /authenticated-community\.spec\.ts/, use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:4174" } },
+    { name: "community-mobile", testMatch: /authenticated-community\.spec\.ts/, use: { ...devices["Pixel 5"], baseURL: "http://127.0.0.1:4174" } },
   ],
-  webServer: {
-    command: "npm run preview:vite -- --host 127.0.0.1",
-    port: 4173,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: "npm run preview:vite -- --host 127.0.0.1",
+      port: 4173,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: "VITE_DEMO_MODE=true npx vite --mode e2e --host 127.0.0.1 --port 4174",
+      port: 4174,
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
 });

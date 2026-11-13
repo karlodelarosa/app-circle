@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { useCircles } from "./AppContext";
 import { AppShell } from "./components/AppShell";
 import { CirclePage } from "./pages/CirclePage";
@@ -7,7 +7,6 @@ import { ContentPage } from "./pages/ContentPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { GatheringDetailPage } from "./pages/GatheringDetailPage";
 import { GatheringsPage } from "./pages/GatheringsPage";
-import { HomePage } from "./pages/HomePage";
 import { SignInPage } from "./pages/SignInPage";
 import { PrayerPage } from "./pages/PrayerPage";
 import { MemberTestimonyPage } from "./pages/MemberTestimonyPage";
@@ -32,6 +31,13 @@ import {
   TestimoniesPage,
   TestimonyPage,
 } from "./pages/PublicPages";
+
+const MembersPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.MembersPage })));
+const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
+const MemberProfilePage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.MemberProfilePage })));
+const FeedItemPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.FeedItemPage })));
+const CommunitySettingsPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.CommunitySettingsPage })));
+const ModerationPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.ModerationPage })));
 
 function LoadingScreen() {
   return (
@@ -101,13 +107,16 @@ function ProtectedApp() {
   return <AppShell />;
 }
 function HomeEntry() {
-  return <HomePage />;
+  return <DeferredPage><HomePage /></DeferredPage>;
 }
 function LeaderOnly({ children }: { children: ReactNode }) {
   const { data } = useCircles();
   if (!data) return null;
   const canLead = data.currentUser.role === "admin" || data.currentUser.isApprovedLeader;
   return canLead ? children : <Navigate to="/circles" replace />;
+}
+function DeferredPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<div className="paper-panel p-8 text-center text-sm text-muted" role="status">Loading…</div>}>{children}</Suspense>;
 }
 
 export default function App() {
@@ -129,6 +138,11 @@ export default function App() {
         <Route path="/gatherings/:id/:mode" element={<GatheringDetailPage />} />
         <Route path="/people" element={<Navigate to="/circles" replace />} />
         <Route path="/prayer" element={<PrayerPage />} />
+        <Route path="/members" element={<DeferredPage><MembersPage /></DeferredPage>} />
+        <Route path="/members/:personId" element={<DeferredPage><MemberProfilePage /></DeferredPage>} />
+        <Route path="/feed/:feedItemId" element={<DeferredPage><FeedItemPage /></DeferredPage>} />
+        <Route path="/community-settings" element={<DeferredPage><CommunitySettingsPage /></DeferredPage>} />
+        <Route path="/moderation" element={<LeaderOnly><DeferredPage><ModerationPage /></DeferredPage></LeaderOnly>} />
         <Route path="/share-testimony" element={<MemberTestimonyPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
         <Route path="/more" element={<LeaderOnly><MorePage /></LeaderOnly>} />

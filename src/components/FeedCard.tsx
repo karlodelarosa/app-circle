@@ -1,14 +1,17 @@
-import { CalendarDays, Check, Heart, LockKeyhole, Megaphone, MessageCircle, MoreHorizontal, Pencil, Quote, Trash2, Users, X } from "lucide-react";
+import { Bookmark, CalendarDays, Check, Copy, EyeOff, Flag, Heart, LockKeyhole, Megaphone, MessageCircle, MoreHorizontal, Pencil, Pin, Quote, Trash2, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { getErrorMessage } from "../lib/errors";
+import { setDemoFeedPreference } from "../lib/demoFeedPreferences";
 import { formatDate, formatTime, relativeDate } from "../lib/format";
 import { supabase } from "../lib/supabase";
-import { deleteFeedPost, removeFeedPhoto, setFeedItemHidden, setFeedLike, updateFeedPost } from "../services/feed";
-import type { CommunityFeedItem, FeedComment } from "../types";
+import { deleteFeedPost, removeFeedPhoto, reportFeedItem, setFeedCommentsEnabled, setFeedItemHidden, setFeedPersonallyHidden, setFeedPinned, setFeedReaction, setFeedSaved, updateFeedPost } from "../services/feed";
+import type { CommunityFeedItem, FeedComment, FeedReactionType, FeedReportReason } from "../types";
 import { Avatar } from "./Avatar";
 import { FeedComments } from "./FeedComments";
+import { PrayerJourney } from "./PrayerJourney";
+import { ReactionPicker } from "./ReactionPicker";
 
 const labels = { post: "Update", reflection: "Gathering reflection", prayer: "Prayer request", gathering: "Gathering", announcement: "Announcement" } as const;
 
@@ -17,17 +20,27 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.body ?? "");
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState<FeedReportReason>("privacy");
+  const [reportNote, setReportNote] = useState("");
   if (!data) return null;
+  const canParticipate = Boolean(data.currentUser.personId);
 
-  const like = async () => {
-    if (!data.currentUser.personId) return;
-    const liked = !item.likedByMe;
-    onUpdate({ ...item, likedByMe: liked, likeCount: Math.max(0, item.likeCount + (liked ? 1 : -1)) });
+  const react = async (reaction?: FeedReactionType) => {
+    const previous = item.myReaction ?? (item.likedByMe ? "like" : undefined);
+    const summary = item.reactionSummary
+      ? { ...item.reactionSummary }
+      : { like: item.likeCount, amen: 0, celebrate: 0, support: 0 };
+    if (previous) summary[previous] = Math.max(0, summary[previous] - 1);
+    if (reaction) summary[reaction] += 1;
+    const total = Object.values(summary).reduce((sum, count) => sum + count, 0);
+    onUpdate({ ...item, myReaction: reaction, likedByMe: Boolean(reaction), likeCount: total, reactionSummary: summary });
     if (supabase && !demoMode) {
-      try { await setFeedLike(supabase, item.id, data.currentUser.personId, liked); }
-      catch (cause) { onUpdate(item); setError(getErrorMessage(cause, "The Like could not be saved.")); }
+      try { await setFeedReaction(supabase, item.id, reaction); }
+      catch (cause) { onUpdate(item); setError(getErrorMessage(cause, "The reaction could not be saved.")); }
     }
   };
   const pray = async () => {
@@ -44,6 +57,51 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
     setBusy(true); setError("");
     try { if (supabase && !demoMode) await setFeedItemHidden(supabase, item.id, true); onRemove(); }
     catch (cause) { setError(getErrorMessage(cause, "This item could not be hidden.")); }
+    finally { setBusy(false); }
+  };
+  const hideForMe = async () => {
+    setBusy(true); setError("");
+    try { if (supabase && !demoMode) await setFeedPersonallyHidden(supabase, item.id, true); else setDemoFeedPreference("hidden", item.id, true); onRemove(); }
+    catch (cause) { setError(getErrorMessage(cause, "This post could not be hidden.")); }
+    finally { setBusy(false); }
+  };
+  const saveForLater = async () => {
+    const saved = !item.savedByMe;
+    onUpdate({ ...item, savedByMe: saved }); setMenu(false);
+    if (demoMode || !supabase) setDemoFeedPreference("saved", item.id, saved);
+    else if (supabase) {
+      try { await setFeedSaved(supabase, item.id, saved); }
+      catch (cause) { onUpdate(item); setError(getErrorMessage(cause, "Your saved posts could not be updated.")); }
+    }
+  };
+  const copyLink = async () => {
+    const url = new URL(`/feed/${item.id}`, window.location.origin).toString();
+    try { await navigator.clipboard.writeText(url); setNotice("Link copied."); }
+    catch { setNotice("Copy this link: " + url); }
+    setMenu(false);
+  };
+  const toggleComments = async () => {
+    const enabled = item.commentsEnabled === false;
+    onUpdate({ ...item, commentsEnabled: enabled }); setMenu(false);
+    if (supabase && !demoMode) {
+      try { await setFeedCommentsEnabled(supabase, item.id, enabled); }
+      catch (cause) { onUpdate(item); setError(getErrorMessage(cause, "Comment settings could not be changed.")); }
+    }
+  };
+  const togglePinned = async () => {
+    const pinned = !item.isPinned;
+    onUpdate({ ...item, isPinned: pinned }); setMenu(false);
+    if (supabase && !demoMode) {
+      try { await setFeedPinned(supabase, item.id, pinned); }
+      catch (cause) { onUpdate(item); setError(getErrorMessage(cause, "This post could not be pinned.")); }
+    }
+  };
+  const submitReport = async () => {
+    setBusy(true); setError("");
+    try {
+      if (supabase && !demoMode) await reportFeedItem(supabase, item.id, reportReason, reportNote);
+      setReporting(false); setReportNote(""); setNotice("Report sent to community leaders.");
+    } catch (cause) { setError(getErrorMessage(cause, "The report could not be sent.")); }
     finally { setBusy(false); }
   };
   const remove = async () => {
@@ -94,7 +152,7 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
         <Avatar person={{ id: item.authorPersonId || item.id, fullName: item.authorName, avatarUrl: item.authorAvatarUrl }} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <strong className="text-sm font-medium">{item.authorName}</strong>
+            {item.authorPersonId ? <Link className="text-sm font-medium hover:text-olive hover:underline" to={`/members/${item.authorPersonId}`}>{item.authorName}</Link> : <strong className="text-sm font-medium">{item.authorName}</strong>}
             <span className="role-label">{item.destinationName}</span>
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
@@ -102,16 +160,20 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
             {item.audience === "circle" && <LockKeyhole size={12} aria-label="Circle only" />}
           </p>
         </div>
-        {(item.canEdit || item.canModerate) && (
-          <div className="relative">
+        <div className="relative">
             <button className="icon-button" aria-label="Post actions" aria-expanded={menu} onClick={() => setMenu((open) => !open)}><MoreHorizontal size={18} /></button>
             {menu && <div className="action-menu right-0" role="menu">
+              {canParticipate && <button role="menuitem" disabled={busy} onClick={() => void saveForLater()}><Bookmark size={14} /> {item.savedByMe ? "Remove from saved" : "Save post"}</button>}
+              <button role="menuitem" disabled={busy} onClick={() => void copyLink()}><Copy size={14} /> Copy link</button>
+              {canParticipate && <button role="menuitem" disabled={busy} onClick={() => void hideForMe()}><EyeOff size={14} /> Hide this post</button>}
+              {canParticipate && <button role="menuitem" disabled={busy} onClick={() => { setReporting(true); setMenu(false); }}><Flag size={14} /> Report post</button>}
               {item.type === "post" && item.canEdit && <button role="menuitem" disabled={busy} onClick={() => { setEditing(true); setMenu(false); }}><Pencil size={14} /> Edit update</button>}
               {item.type === "post" && (item.canEdit || item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void remove()}><Trash2 size={14} /> Delete update</button>}
+              {(item.canEdit || item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void toggleComments()}><MessageCircle size={14} /> {item.commentsEnabled === false ? "Reopen comments" : "Close comments"}</button>}
+              {(item.canPin ?? item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void togglePinned()}><Pin size={14} /> {item.isPinned ? "Unpin post" : "Pin post"}</button>}
               {item.canModerate && <button role="menuitem" disabled={busy} onClick={() => void hide()}>Hide from feed</button>}
             </div>}
-          </div>
-        )}
+        </div>
       </header>
 
       <div className="px-4 pb-4 sm:px-5 sm:pb-5">
@@ -138,12 +200,13 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
           </div>
         )}
         {item.prayer && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-line py-3 text-xs">
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
             <span className="role-label">{item.prayer.category}</span>
             {item.prayer.isAnswered && <span className="status-badge">Answered prayer</span>}
             {item.prayer.isAnswered && item.prayer.answeredNotes && <p className="w-full pt-2 text-sm leading-6 text-muted"><strong className="text-ink">Praise:</strong> {item.prayer.answeredNotes}</p>}
           </div>
         )}
+        {item.prayer && <PrayerJourney item={item} onUpdate={onUpdate} />}
         {item.meeting && (
           <div className="mt-4 border-y border-line py-4">
             <p className="flex items-center gap-2 text-sm"><CalendarDays size={16} className="text-olive" />{formatDate(item.meeting.meetingDate)} at {formatTime(item.meeting.meetingDate)}</p>
@@ -160,13 +223,21 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
       </div>
 
       <div className="flex items-center gap-1 border-t border-line px-3 py-2 sm:px-4">
-        <button type="button" className={`secondary-button border-0 ${item.likedByMe ? "text-olive" : ""}`} onClick={() => void like()}>
-          <Heart size={16} fill={item.likedByMe ? "currentColor" : "none"} /> {item.likedByMe ? "Unlike" : "Like"}{item.likeCount ? ` · ${item.likeCount}` : ""}
-        </button>
-        {item.prayer && <button type="button" className={`secondary-button border-0 ${item.prayer.prayedByMe ? "text-olive" : ""}`} disabled={busy} onClick={() => void pray()}><Heart size={16} /> {item.prayer.prayedByMe ? "Praying" : "Pray"} · {item.prayer.prayerCount}</button>}
+        <ReactionPicker value={item.myReaction ?? (item.likedByMe ? "like" : undefined)} summary={item.reactionSummary} total={item.likeCount} disabled={busy || !canParticipate} onChange={(reaction) => void react(reaction)} />
+        {item.prayer && <button type="button" className={`secondary-button border-0 ${item.prayer.prayedByMe ? "text-olive" : ""}`} disabled={busy || !canParticipate} onClick={() => void pray()}><Heart size={16} /> {item.prayer.prayedByMe ? "Praying" : "Pray"} · {item.prayer.prayerCount}</button>}
         <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted"><MessageCircle size={14} /> {item.commentCount}</span>
       </div>
       <FeedComments item={item} onChange={updateComments} />
+      {reporting && <div className="border-t border-line bg-parchment p-4 sm:p-5">
+        <h3 className="font-display text-xl">Report this post</h3>
+        <p className="mt-1 text-xs text-muted">A leader will review it. The post stays visible unless you also hide it.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="field-label text-xs">Reason<select className="field" value={reportReason} onChange={(event) => setReportReason(event.target.value as FeedReportReason)}><option value="privacy">Privacy concern</option><option value="spam">Spam</option><option value="harassment">Harassment</option><option value="inappropriate">Inappropriate content</option><option value="other">Other</option></select></label>
+          <label className="field-label text-xs">Details (optional)<textarea className="field min-h-20 resize-y" maxLength={1000} value={reportNote} onChange={(event) => setReportNote(event.target.value)} /></label>
+        </div>
+        <div className="mt-3 flex justify-end gap-2"><button type="button" className="secondary-button" onClick={() => setReporting(false)}>Cancel</button><button type="button" className="primary-button" disabled={busy} onClick={() => void submitReport()}>Send report</button></div>
+      </div>}
+      {notice && <p className="mx-4 mb-4 text-sm text-muted" role="status">{notice}</p>}
       {error && <p className="form-error mx-4 mb-4" role="alert">{error}</p>}
     </article>
   );

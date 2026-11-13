@@ -1,5 +1,6 @@
-import { Bell, Heart, MessageCircle } from "lucide-react";
+import { Bell, Heart, MessageCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { relativeDate } from "../lib/format";
 import { supabase } from "../lib/supabase";
@@ -10,8 +11,13 @@ const activityLabel = (notice: FeedNotification) => {
   const others = notice.actorCount > 1 ? ` and ${notice.actorCount - 1} ${notice.actorCount === 2 ? "other" : "others"}` : "";
   if (notice.kind === "comment") return `${notice.actorName}${others} commented on your post`;
   if (notice.kind === "pray") return `${notice.actorName}${others} prayed for your request`;
+  if (notice.kind === "prayer_update") return `${notice.actorName}${others} updated a prayer you follow`;
+  if (notice.kind === "report_resolved") return `${notice.actorName} reviewed your community report`;
+  if (notice.kind === "reaction") return `${notice.actorName}${others} reacted to your post`;
   return `${notice.actorName}${others} liked your post`;
 };
+
+const noticeHref = (notice: FeedNotification) => `/feed/${notice.feedItemId}${notice.targetCommentId ? `#comment-${notice.targetCommentId}` : notice.prayerUpdateId ? `#prayer-update-${notice.prayerUpdateId}` : ""}`;
 
 export function FeedNotifications() {
   const { demoMode } = useCircles();
@@ -39,9 +45,11 @@ export function FeedNotifications() {
   const toggle = async () => {
     const next = !open;
     setOpen(next);
-    if (next && unread && supabase && !demoMode) {
-      setNotices((current) => current.map((notice) => ({ ...notice, readAt: notice.readAt ?? new Date().toISOString() })));
-      await markFeedNotificationsRead(supabase).catch(() => undefined);
+    if (next && supabase && !demoMode) {
+      const latest = await loadFeedNotifications(supabase).catch(() => notices);
+      const hasUnread = latest.some((notice) => !notice.readAt);
+      setNotices(latest.map((notice) => ({ ...notice, readAt: hasUnread ? notice.readAt ?? new Date().toISOString() : notice.readAt })));
+      if (hasUnread) await markFeedNotificationsRead(supabase).catch(() => undefined);
     }
   };
 
@@ -55,10 +63,10 @@ export function FeedNotifications() {
         <div role="menu" className="absolute right-0 top-[calc(100%+.5rem)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-paper shadow-quiet">
           <div className="border-b border-line px-4 py-3"><h2 className="font-display text-2xl">Activity</h2></div>
           {notices.length ? <div className="max-h-96 divide-y divide-line overflow-y-auto">
-            {notices.map((notice) => <div key={notice.id} role="menuitem" className="flex gap-3 px-4 py-3">
-              {notice.kind === "comment" ? <MessageCircle size={16} className="mt-1 shrink-0 text-olive" /> : <Heart size={16} className="mt-1 shrink-0 text-olive" />}
+            {notices.map((notice) => <Link key={notice.id} to={noticeHref(notice)} role="menuitem" onClick={() => setOpen(false)} className="flex min-h-14 gap-3 px-4 py-3 hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-olive">
+              {notice.kind === "comment" ? <MessageCircle size={16} className="mt-1 shrink-0 text-olive" /> : notice.kind === "prayer_update" ? <Sparkles size={16} className="mt-1 shrink-0 text-olive" /> : notice.kind === "report_resolved" ? <ShieldCheck size={16} className="mt-1 shrink-0 text-olive" /> : <Heart size={16} className="mt-1 shrink-0 text-olive" />}
               <div><p className="text-sm leading-5">{activityLabel(notice)}</p><p className="mt-1 text-xs text-muted">{relativeDate(notice.createdAt)}</p></div>
-            </div>)}
+            </Link>)}
           </div> : <p className="px-4 py-8 text-center text-sm text-muted">No activity yet.</p>}
         </div>
       )}

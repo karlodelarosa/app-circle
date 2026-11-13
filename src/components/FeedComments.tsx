@@ -1,5 +1,6 @@
 import { Check, Pencil, Send, Trash2, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { getErrorMessage } from "../lib/errors";
 import { supabase } from "../lib/supabase";
@@ -9,13 +10,30 @@ import { Avatar } from "./Avatar";
 
 export function FeedComments({ item, onChange }: { item: CommunityFeedItem; onChange: (comments: FeedComment[], commentCount?: number) => void }) {
   const { data, demoMode } = useCircles();
+  const { hash } = useLocation();
+  const targetedCommentId = hash.startsWith("#comment-") ? hash.slice("#comment-".length) : undefined;
   const [body, setBody] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(Boolean(targetedCommentId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string>();
   const [editingBody, setEditingBody] = useState("");
   const comments = item.comments;
+
+  useEffect(() => {
+    if (!targetedCommentId || !supabase || demoMode || comments.some((comment) => comment.id === targetedCommentId)) return;
+    let active = true;
+    loadFeedComments(supabase, item.id).then((loaded) => {
+      if (!active) return;
+      onChange(loaded, item.commentCount);
+      window.requestAnimationFrame(() => document.getElementById(`comment-${targetedCommentId}`)?.scrollIntoView({ block: "center" }));
+    }).catch((cause) => active && setError(getErrorMessage(cause, "The linked comment could not be loaded.")));
+    return () => { active = false; };
+  }, [comments, demoMode, item.commentCount, item.id, onChange, targetedCommentId]);
+  useEffect(() => {
+    if (!targetedCommentId || !comments.some((comment) => comment.id === targetedCommentId)) return;
+    window.requestAnimationFrame(() => document.getElementById(`comment-${targetedCommentId}`)?.scrollIntoView({ block: "center" }));
+  }, [comments, targetedCommentId]);
   if (!data?.currentUser.personId) return null;
 
   const expand = async () => {
@@ -73,11 +91,11 @@ export function FeedComments({ item, onChange }: { item: CommunityFeedItem; onCh
       )}
       <div className="space-y-3">
         {shown.map((comment) => (
-          <div className="flex gap-2" key={comment.id}>
+          <div className="flex scroll-mt-28 gap-2" key={comment.id} id={`comment-${comment.id}`}>
             <Avatar person={{ id: comment.authorPersonId, fullName: comment.authorName, avatarUrl: comment.authorAvatarUrl }} size="sm" />
             <div className="min-w-0 flex-1 rounded-xl bg-parchment px-3 py-2">
               <div className="flex items-start justify-between gap-3">
-                <strong className="text-xs font-medium">{comment.authorName}</strong>
+                <Link className="text-xs font-medium hover:text-olive hover:underline" to={`/members/${comment.authorPersonId}`}>{comment.authorName}</Link>
                 <div className="flex gap-2">
                   {comment.canEdit && editingId !== comment.id && <button type="button" aria-label={`Edit ${comment.authorName}'s comment`} onClick={() => { setEditingId(comment.id); setEditingBody(comment.body); }}><Pencil size={13} className="text-muted" /></button>}
                   {(comment.canEdit || comment.canModerate) && <button type="button" aria-label={`Remove ${comment.authorName}'s comment`} disabled={busy} onClick={() => void remove(comment)}><Trash2 size={13} className="text-muted" /></button>}
@@ -95,11 +113,11 @@ export function FeedComments({ item, onChange }: { item: CommunityFeedItem; onCh
           </div>
         ))}
       </div>
-      <form className="mt-4 flex gap-2" onSubmit={submit}>
+      {item.commentsEnabled === false ? <p className="mt-4 text-xs text-muted" role="status">Comments are closed for this post.</p> : <form className="mt-4 flex gap-2" onSubmit={submit}>
         <label className="sr-only" htmlFor={`comment-${item.id}`}>Write a comment</label>
         <input id={`comment-${item.id}`} aria-label="Write a comment" className="field mt-0" maxLength={2000} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment…" />
         <button className="icon-button shrink-0" disabled={busy || !body.trim()} aria-label="Comment"><Send size={16} /></button>
-      </form>
+      </form>}
       {error && <p className="form-error mt-3" role="alert">{error}</p>}
     </div>
   );
