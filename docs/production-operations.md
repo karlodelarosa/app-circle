@@ -6,7 +6,7 @@ Circles shares SheepCount's canonical Supabase database. SheepCount owns the bas
 
 1. Link only a non-production SheepCount staging project.
 2. Import the canonical SheepCount migration files without renaming version prefixes.
-3. Run `npm run db:verify:linked`. Any remote-only or local-only version blocks deployment.
+3. Run `npm run db:verify:linked`. Any remote-only version or interleaved history blocks deployment; a contiguous local-only tail is reported as the pending release.
 4. Run `supabase db push --dry-run --linked`; review the SQL and require an empty unexpected schema diff.
 5. Create a clean staging project from the canonical baseline plus Circles migrations. Run both SQL files under `supabase/tests/`.
 
@@ -37,5 +37,7 @@ successfully while every submission fails before reaching the database.
 ## Monitoring and alerts
 
 Monitor `GET /healthz` from at least two regions every minute. Alert after two consecutive failures. Route structured Cloudflare and Supabase function logs to the SheepCount log sink and alert on `auth_failure`, `public_submission_rate_limited`, `public_submission_bot_rejected`, `public_submission_failed`, `member_account_operation_failed`, and database health latency above 1,000 ms. Keep request IDs in incident notes.
+
+For the authenticated community release, watch authorization failures, error rate, and p95 latency for `get_circle_community_feed_v2`, `get_circle_community_feed_item`, `search_circle_community_feed`, `add_circle_prayer_update`, and the reaction/comment/report RPCs. Investigate any new error type, an error rate above 1% for five minutes, or p95 latency above 1,000 ms. Never include post bodies, prayer text, profile bios, report notes, access tokens, or person identifiers in application logs; use the Cloudflare request ID and database statement name to correlate failures.
 
 Run retention on a schedule by calling `apply_circle_pii_retention(organization_id)` as the service role for each tenant. Review privacy requests and security audit events through SheepCount administration.

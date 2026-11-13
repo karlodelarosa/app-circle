@@ -32,14 +32,20 @@ function resultOutput(value) {
 }
 const missingLocally = rows.filter((row) => !row.local && row.remote).map((row) => row.remote);
 const missingRemotely = rows.filter((row) => row.local && !row.remote).map((row) => row.local);
-if (missingLocally.length || missingRemotely.length) {
+const firstPendingIndex = rows.findIndex((row) => row.local && !row.remote);
+const pendingIsContiguousTail = firstPendingIndex < 0 || rows
+  .slice(firstPendingIndex)
+  .every((row) => row.local && !row.remote);
+if (missingLocally.length || !pendingIsContiguousTail) {
   console.error("Canonical SheepCount migration history is not reconciled.");
   if (missingLocally.length) console.error(`Remote-only versions: ${missingLocally.join(", ")}`);
-  if (missingRemotely.length) console.error(`Local-only versions: ${missingRemotely.join(", ")}`);
+  if (!pendingIsContiguousTail) console.error("Pending local migrations are interleaved with applied history.");
   process.exit(1);
 }
 if (!rows.length) {
   console.error("Supabase returned no comparable migration rows.");
   process.exit(1);
 }
-console.log(`Migration history reconciled: ${rows.length} versions match.`);
+const matched = rows.length - missingRemotely.length;
+console.log(`Migration history reconciled: ${matched} applied versions match.`);
+if (missingRemotely.length) console.log(`Pending local migrations: ${missingRemotely.join(", ")}.`);

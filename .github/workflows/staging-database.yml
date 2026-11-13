@@ -28,18 +28,29 @@ jobs:
       - run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
       - run: npm run db:verify:linked
       - run: supabase db push --dry-run --linked
+      - name: Apply additive migrations to staging
+        run: supabase db push --linked
       - name: Run cross-tenant authorization suite
         run: psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
       - name: Run authenticated write smoke suite
         run: psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/remote_write_smoke.sql
+      - name: Run community social authorization suite
+        run: psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/organization_community_feed.sql
       - name: Create and validate backup
         run: |
           pg_dump "$STAGING_DATABASE_URL" --format=custom --no-owner --no-acl --file=/tmp/circles-staging.dump
           pg_restore --list /tmp/circles-staging.dump >/tmp/circles-staging.contents
           test -s /tmp/circles-staging.contents
+          backup_checksum="$(sha256sum /tmp/circles-staging.dump | cut -d' ' -f1)"
+          echo "### Staging backup" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Identifier: \`staging-${GITHUB_RUN_ID}-${backup_checksum:0:12}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release SHA: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Operator: \`${GITHUB_ACTOR}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Rehearse restore in an isolated Supabase database
         run: |
           supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
           psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS circles_restore_check' -c 'CREATE DATABASE circles_restore_check'
           pg_restore --exit-on-error --no-owner --no-acl --dbname=postgresql://postgres:postgres@127.0.0.1:54322/circles_restore_check /tmp/circles-staging.dump
           psql postgresql://postgres:postgres@127.0.0.1:54322/circles_restore_check -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.organizations'
+          psql postgresql://postgres:postgres@127.0.0.1:54322/circles_restore_check -v ON_ERROR_STOP=1 -f supabase/tests/organization_community_feed.sql
+          echo "- Restore result: passed" >> "$GITHUB_STEP_SUMMARY"
