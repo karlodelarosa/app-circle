@@ -784,7 +784,7 @@ export function CirclePage() {
                   </button>
                 )}
                 <Link role="menuitem" to="/circles" onClick={() => setCircleMenuOpen(false)}>
-                  View all Circles
+                  <UsersRound size={16} /> View all Circles
                 </Link>
               </div>
             )}

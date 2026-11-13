@@ -58,3 +58,37 @@ test("the authenticated feed is responsive without horizontal overflow", async (
   await expect(page.getByRole("heading", { name: "Community feed" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("action menus keep icons, labels, and links in compact aligned rows", async ({ page }) => {
+  await page.goto("/");
+  const update = page.getByRole("article", { name: /Update: I was reminded/ });
+  await update.getByRole("button", { name: "Post actions" }).click();
+
+  const feedMenu = update.getByRole("menu");
+  await expect(feedMenu).toBeVisible();
+  await expect(feedMenu.getByRole("menuitem", { name: "Hide from feed" })).toBeVisible();
+  expect(await feedMenu.evaluate((menu) => {
+    const rect = menu.getBoundingClientRect();
+    return rect.left >= 0 && rect.right <= window.innerWidth;
+  })).toBe(true);
+  const saveItem = feedMenu.getByRole("menuitem", { name: "Save post" });
+  await expect(saveItem).toHaveCSS("display", "flex");
+  await expect(saveItem).toHaveCSS("align-items", "center");
+  expect(await saveItem.evaluate((item) => {
+    const icon = item.querySelector("svg");
+    if (!icon) return false;
+    const itemRect = item.getBoundingClientRect();
+    const iconRect = icon.getBoundingClientRect();
+    return Math.abs(
+      iconRect.top + iconRect.height / 2 - (itemRect.top + itemRect.height / 2),
+    ) < 1;
+  })).toBe(true);
+
+  await page.goto("/circles/demo-group");
+  await page.getByRole("button", { name: "Circle actions" }).click();
+  const circleMenu = page.getByRole("menu");
+  await expect(circleMenu.getByRole("menuitem", { name: "View all Circles" })).toHaveCSS(
+    "display",
+    "flex",
+  );
+});

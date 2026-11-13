@@ -629,7 +629,7 @@ describe("Circles MVP", () => {
         name: "Actions for A life of prayer",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Delete gathering" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete gathering" }));
 
     const dialog = screen.getByRole("dialog", {
       name: "Delete A life of prayer?",
