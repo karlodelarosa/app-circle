@@ -1,15 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  addPrayerUpdate,
   createFeedPost,
   deleteFeedPost,
+  getCommunityMemberProfile,
   loadFeedCommentsPage,
   loadFeedNotificationPage,
   loadCommunityFeed,
-  setFeedLike,
+  saveCommunityProfile,
+  setFeedReaction,
+  setFeedSaved,
+  setPrayerFollow,
 } from "./feed";
 
 describe("community feed service", () => {
-  it("loads a stable cursor page and normalizes comments and photos", async () => {
+  it("loads a snapshot-stable activity page and normalizes comments and photos", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: {
         items: [
@@ -31,7 +36,7 @@ describe("community feed service", () => {
             canEdit: true,
           },
         ],
-        nextCursor: { createdAt: "2026-11-13T02:00:00.000Z", id: "feed-1" },
+        nextCursor: { activityAt: "2026-11-13T02:00:00.000Z", id: "feed-1", snapshotAt: "2026-11-13T03:00:00.000Z" },
       },
       error: null,
     });
@@ -41,9 +46,10 @@ describe("community feed service", () => {
       { limit: 20, circleId: "circle-1" },
     );
 
-    expect(rpc).toHaveBeenCalledWith("get_circle_community_feed", {
-      p_before_created_at: null,
+    expect(rpc).toHaveBeenCalledWith("get_circle_community_feed_v2", {
+      p_before_activity_at: null,
       p_before_id: null,
+      p_snapshot_at: null,
       p_limit: 20,
       p_circle_id: "circle-1",
       p_organization_only: false,
@@ -70,23 +76,45 @@ describe("community feed service", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("uses an idempotent upsert for Likes and deletes when unliking", async () => {
-    const upsert = vi.fn().mockResolvedValue({ error: null });
-    const deleteEqPerson = vi.fn().mockResolvedValue({ error: null });
-    const deleteEqItem = vi.fn().mockReturnValue({ eq: deleteEqPerson });
-    const remove = vi.fn().mockReturnValue({ eq: deleteEqItem });
-    const from = vi.fn().mockReturnValue({ upsert, delete: remove });
-    const client = { from } as unknown as SupabaseClient;
+  it("writes reactions, saves, and follows through authorized RPCs", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
 
-    await setFeedLike(client, "feed-1", "person-1", true);
-    expect(upsert).toHaveBeenCalledWith(
-      { feed_item_id: "feed-1", person_id: "person-1" },
-      { onConflict: "feed_item_id,person_id" },
-    );
+    await setFeedReaction(client, "feed-1", "amen");
+    await setFeedSaved(client, "feed-1", true);
+    await setPrayerFollow(client, "prayer-1", true);
 
-    await setFeedLike(client, "feed-1", "person-1", false);
-    expect(deleteEqItem).toHaveBeenCalledWith("feed_item_id", "feed-1");
-    expect(deleteEqPerson).toHaveBeenCalledWith("person_id", "person-1");
+    expect(rpc).toHaveBeenNthCalledWith(1, "set_circle_feed_reaction", { p_feed_item_id: "feed-1", p_reaction: "amen" });
+    expect(rpc).toHaveBeenNthCalledWith(2, "set_circle_feed_saved", { p_feed_item_id: "feed-1", p_saved: true });
+    expect(rpc).toHaveBeenNthCalledWith(3, "set_circle_prayer_follow", { p_prayer_id: "prayer-1", p_followed: true });
+  });
+
+  it("validates profile and prayer update input before calling RPCs", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { id: "update-1" }, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+
+    await saveCommunityProfile(client, {
+      bio: "Learning to serve faithfully.",
+      bioVisibility: "organization",
+      joinDateVisibility: "shared_circle",
+    });
+    await addPrayerUpdate(client, "prayer-1", "progress", "The procedure went well.");
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "upsert_circle_community_profile", {
+      p_bio: "Learning to serve faithfully.", p_bio_visibility: "organization", p_join_date_visibility: "shared_circle",
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, "add_circle_prayer_update", {
+      p_prayer_id: "prayer-1", p_update_type: "progress", p_body: "The procedure went well.",
+    });
+    await expect(addPrayerUpdate(client, "prayer-1", "progress", " ")).rejects.toThrow("Prayer updates");
+  });
+
+  it("loads an audience-sanitized community profile", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { personId: "person-1", fullName: "Mara Santos", circles: [], recentItems: [] }, error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+    const profile = await getCommunityMemberProfile(client, "person-1");
+    expect(rpc).toHaveBeenCalledWith("get_circle_community_member_profile", { p_person_id: "person-1" });
+    expect(profile.fullName).toBe("Mara Santos");
   });
 
   it("passes stable cursors to comment and notification pages", async () => {

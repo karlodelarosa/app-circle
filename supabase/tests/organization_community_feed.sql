@@ -50,6 +50,9 @@ INSERT INTO public.circle_feed_posts(id,organization_id,cell_group_id,author_per
 ('41000000-0000-0000-0000-000000000303','41000000-0000-0000-0000-000000000010','41000000-0000-0000-0000-000000000202','41000000-0000-0000-0000-000000000101','circle','Other Circle fixture'),
 ('42000000-0000-0000-0000-000000000301','42000000-0000-0000-0000-000000000010',NULL,'42000000-0000-0000-0000-000000000101','organization','Other organization fixture');
 
+INSERT INTO public.circle_prayer_requests(id,organization_id,cell_group_id,person_id,title,description,category,scope) VALUES
+('41000000-0000-0000-0000-000000000304','41000000-0000-0000-0000-000000000010','41000000-0000-0000-0000-000000000201','41000000-0000-0000-0000-000000000102','Prayer journey fixture','Please pray with us.','Family','circle');
+
 DO $$
 DECLARE rejected BOOLEAN:=false; own_feed UUID;
 BEGIN
@@ -98,6 +101,50 @@ BEGIN
   IF (SELECT count(*) FROM public.circle_feed_notifications WHERE recipient_person_id='41000000-0000-0000-0000-000000000102' AND kind='like')<>1 THEN
     RAISE EXCEPTION 'Self activity created a notification';
   END IF;
+
+  -- New social interactions use authenticated, resource-authorized RPCs.
+  PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000002',true);
+  SET LOCAL ROLE authenticated;
+  PERFORM public.set_circle_prayer_follow('41000000-0000-0000-0000-000000000304',true);
+  PERFORM public.set_circle_feed_pinned((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000303'),true);
+  RESET ROLE;
+
+  PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000003',true);
+  SET LOCAL ROLE authenticated;
+  PERFORM public.upsert_circle_community_profile('Learning to serve faithfully.','shared_circle','hidden');
+  PERFORM public.set_circle_feed_reaction((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),'amen');
+  PERFORM public.set_circle_feed_saved((SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301'),true);
+  PERFORM public.add_circle_prayer_update('41000000-0000-0000-0000-000000000304','progress','The first appointment went well.');
+  IF (public.get_circle_community_member_profile('41000000-0000-0000-0000-000000000102')->>'bio') IS DISTINCT FROM 'Learning to serve faithfully.' THEN
+    RAISE EXCEPTION 'Owner could not read their profile';
+  END IF;
+  RESET ROLE;
+  IF (SELECT count(*) FROM public.circle_feed_reactions WHERE feed_item_id=(SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000301') AND person_id='41000000-0000-0000-0000-000000000102')<>1 THEN
+    RAISE EXCEPTION 'Reaction uniqueness or authorization failed';
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_saves WHERE person_id='41000000-0000-0000-0000-000000000102') THEN
+    RAISE EXCEPTION 'Private save was not recorded';
+  END IF;
+
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_pins pin WHERE pin.feed_item_id=(SELECT id FROM public.circle_feed_items WHERE source_id='41000000-0000-0000-0000-000000000303')) THEN
+    RAISE EXCEPTION 'Circle leader pin was not recorded';
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.circle_feed_notifications notice WHERE notice.recipient_person_id='41000000-0000-0000-0000-000000000101' AND notice.kind='prayer_update') THEN
+    RAISE EXCEPTION 'Prayer follower did not receive an update notification';
+  END IF;
+  IF (SELECT item.activity_at=(SELECT max(update_row.created_at) FROM public.circle_prayer_updates update_row WHERE update_row.prayer_id=item.source_id) FROM public.circle_feed_items item WHERE item.source_type='prayer' AND item.source_id='41000000-0000-0000-0000-000000000304') IS NOT TRUE THEN
+    RAISE EXCEPTION 'Prayer update did not resurface its feed item';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub','42000000-0000-0000-0000-000000000001',true);
+  SET LOCAL ROLE authenticated;
+  IF public.get_circle_community_member_profile('41000000-0000-0000-0000-000000000102') IS NOT NULL THEN
+    RAISE EXCEPTION 'Cross-organization profile disclosure detected';
+  END IF;
+  IF jsonb_array_length(public.search_circle_community_feed('Prayer journey fixture',NULL,NULL,NULL,false,50))<>0 THEN
+    RAISE EXCEPTION 'Cross-organization feed search disclosure detected';
+  END IF;
+  RESET ROLE;
 
   UPDATE public.circle_user_links SET status='inactive' WHERE organization_id='41000000-0000-0000-0000-000000000010' AND user_id='41000000-0000-0000-0000-000000000003';
   PERFORM set_config('request.jwt.claim.sub','41000000-0000-0000-0000-000000000003',true);

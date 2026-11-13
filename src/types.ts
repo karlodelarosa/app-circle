@@ -238,6 +238,10 @@ export interface GatheringReflection {
 }
 
 export type FeedAudience = "organization" | "circle";
+export type FeedReactionType = "like" | "amen" | "celebrate" | "support";
+export type CommunityProfileVisibility = "organization" | "shared_circle" | "hidden";
+export type PrayerUpdateType = "progress" | "praise" | "answered" | "reopened";
+export type FeedReportReason = "spam" | "harassment" | "privacy" | "inappropriate" | "other";
 export type FeedItemType =
   | "post"
   | "reflection"
@@ -269,6 +273,55 @@ export interface FeedCommentPage {
   nextCursor?: FeedCursor;
 }
 
+export interface FeedReactionSummary {
+  like: number;
+  amen: number;
+  celebrate: number;
+  support: number;
+}
+
+export interface PrayerUpdate {
+  id: string;
+  prayerId: string;
+  authorPersonId: string;
+  authorName: string;
+  type: PrayerUpdateType;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  canEdit?: boolean;
+  canModerate?: boolean;
+}
+
+export interface FeedReport {
+  id: string;
+  feedItemId: string;
+  reporterPersonId: string;
+  reason: FeedReportReason;
+  note?: string;
+  status: "open" | "resolved" | "dismissed";
+  createdAt: string;
+}
+
+export interface FeedSubscription {
+  feedItemId: string;
+  personId: string;
+  createdAt: string;
+}
+
+export interface CommunityMemberProfile {
+  personId: string;
+  fullName: string;
+  avatarUrl?: string;
+  bio?: string;
+  bioVisibility: CommunityProfileVisibility;
+  joinDate?: string;
+  joinDateVisibility: CommunityProfileVisibility;
+  circles: Array<{ id: string; name: string; role?: string }>;
+  recentItems: CommunityFeedItem[];
+  canEdit: boolean;
+}
+
 export interface CommunityFeedItem {
   id: string;
   type: FeedItemType;
@@ -282,6 +335,7 @@ export interface CommunityFeedItem {
   title?: string;
   body?: string;
   createdAt: string;
+  activityAt?: string;
   updatedAt?: string;
   gatheringId?: string;
   gatheringTitle?: string;
@@ -291,31 +345,45 @@ export interface CommunityFeedItem {
   photos: FeedPhoto[];
   comments: FeedComment[];
   commentCount: number;
+  commentsEnabled?: boolean;
   likeCount: number;
   likedByMe: boolean;
+  reactionSummary?: FeedReactionSummary;
+  myReaction?: FeedReactionType;
+  savedByMe?: boolean;
+  followedByMe?: boolean;
+  isPinned?: boolean;
+  isNew?: boolean;
+  latestPrayerUpdate?: PrayerUpdate;
   canEdit: boolean;
   canModerate: boolean;
   isHidden?: boolean;
 }
 
 export interface FeedCursor {
-  createdAt: string;
+  createdAt?: string;
+  activityAt?: string;
+  snapshotAt?: string;
   id: string;
 }
 
 export interface CommunityFeedPage {
   items: CommunityFeedItem[];
+  pinnedItems?: CommunityFeedItem[];
   nextCursor?: FeedCursor;
+  snapshotAt?: string;
 }
 
 export interface FeedNotification {
   id: string;
   feedItemId: string;
-  kind: "comment" | "like" | "pray";
+  kind: "comment" | "like" | "pray" | "reaction" | "prayer_update" | "report_resolved";
   actorCount: number;
   actorName: string;
   readAt?: string;
   createdAt: string;
+  targetCommentId?: string;
+  prayerUpdateId?: string;
 }
 
 export interface FeedNotificationPage {
