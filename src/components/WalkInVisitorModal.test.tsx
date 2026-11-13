@@ -21,18 +21,25 @@ describe("WalkInVisitorModal", () => {
     }
 
     render(<FailureHarness />);
-    fireEvent.change(screen.getByLabelText("Full name"), {
-      target: { value: "Jamie Walkin" },
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: "Jamie" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add visitor" }));
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: "Walkin" },
+    });
+    fireEvent.change(screen.getByLabelText("Birthdate"), {
+      target: { value: "1998-06-14" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add newcomer" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "The visitor could not be added.",
     );
-    expect(screen.getByLabelText("Full name")).toHaveValue("Jamie Walkin");
+    expect(screen.getByLabelText("First name")).toHaveValue("Jamie");
+    expect(screen.getByLabelText("Last name")).toHaveValue("Walkin");
   });
 
-  it("validates a preferred contact method only after contact is supplied", async () => {
+  it("requires first name, last name, and birthdate", async () => {
     render(
       <WalkInVisitorModal
         scope="circle"
@@ -42,25 +49,18 @@ describe("WalkInVisitorModal", () => {
         onAdd={async () => true}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Full name"), {
-      target: { value: "Alex Visitor" },
+    expect(screen.getByRole("button", { name: "Add newcomer" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("First name"), {
+      target: { value: "Alex" },
     });
-    expect(screen.getByRole("button", { name: "Add visitor" })).toBeEnabled();
-
-    fireEvent.click(screen.getByText("Add contact details (optional)"));
-    fireEvent.change(screen.getByLabelText("Phone"), {
-      target: { value: "+63 900 000 0000" },
+    fireEvent.change(screen.getByLabelText("Last name"), {
+      target: { value: "Visitor" },
     });
-    fireEvent.change(screen.getByLabelText("Preferred contact"), {
-      target: { value: "email" },
-    });
-    expect(screen.getByRole("button", { name: "Add visitor" })).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Email"), {
-      target: { value: "alex@example.com" },
+    fireEvent.change(screen.getByLabelText("Birthdate"), {
+      target: { value: "1995-04-18" },
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Add visitor" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Add newcomer" })).toBeEnabled(),
     );
   });
 });

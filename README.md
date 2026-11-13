@@ -71,6 +71,7 @@ Add these as build variables before deploying:
 | --- | --- |
 | `VITE_SUPABASE_URL` | The Supabase project URL used by SheepCount |
 | `VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY` | The Supabase publishable or anon key used by SheepCount |
+| `VITE_TURNSTILE_SITE_KEY` | The Cloudflare Turnstile site key for public forms |
 
 These are build-time values. Add them under the Worker's build settings.
 
@@ -124,7 +125,13 @@ Functions used for account creation and password changes:
 npx supabase db push
 npx supabase functions deploy circle-member-access --project-ref qrmpogczieanpahxxxkc
 npx supabase functions deploy circle-change-password --project-ref qrmpogczieanpahxxxkc
+npx supabase functions deploy circle-public-submit --project-ref qrmpogczieanpahxxxkc
 ```
+
+Set `CIRCLES_ALLOWED_ORIGINS`, `CLOUDFLARE_TURNSTILE_SECRET`, and
+`PUBLIC_RATE_LIMIT_SALT` as Supabase Edge Function secrets before deploying.
+See [production operations](docs/production-operations.md) for migration,
+tenant-test, backup/restore, monitoring, rollback, and retention procedures.
 
 The functions use Supabase’s built-in project secrets. Do not add or expose a
 service-role key in Cloudflare or in browser environment variables.

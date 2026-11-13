@@ -41,6 +41,8 @@ describe("GatheringReflections", () => {
     expect(screen.getByRole("heading", { name: "After the gathering" })).toBeInTheDocument();
     expect(screen.getByLabelText("What stayed with you?")).toHaveAttribute("maxlength", "2000");
     expect(screen.getByRole("button", { name: "Share reflection" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Entire organization/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Grace & Ground only/ })).not.toBeChecked();
   });
 
   it("adds a trimmed reflection and offers private next steps", async () => {
@@ -84,5 +86,27 @@ describe("GatheringReflections", () => {
       expect(screen.getByText("A renewed commitment to listen.")).toBeInTheDocument();
       expect(screen.getByText(/Edited/)).toBeInTheDocument();
     });
+  });
+
+  it("lets a view-only organization member read reflections without contributing", () => {
+    render(
+      <MemoryRouter>
+        <AppProvider initialData={structuredClone(demoData)}>
+          <GatheringReflections
+            meeting={{
+              ...demoData.meetings[2],
+              status: "completed",
+              accessLevel: "view",
+            }}
+            canModerate={false}
+            initialReflections={[reflection]}
+          />
+        </AppProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(reflection.body)).toBeInTheDocument();
+    expect(screen.queryByLabelText("What stayed with you?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
   });
 });

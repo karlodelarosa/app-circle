@@ -1,9 +1,10 @@
-export const formatDate = (value: string, options?: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en', options ?? {
-  weekday: 'long', month: 'long', day: 'numeric'
+export const formatDate = (value: string, options?: Intl.DateTimeFormatOptions, timeZone?: string) => new Intl.DateTimeFormat('en', {
+  ...(options ?? { weekday: 'long', month: 'long', day: 'numeric' }),
+  ...(timeZone ? { timeZone } : {}),
 }).format(new Date(value))
 
-export const formatTime = (value: string) => new Intl.DateTimeFormat('en', {
-  hour: 'numeric', minute: '2-digit'
+export const formatTime = (value: string, timeZone?: string) => new Intl.DateTimeFormat('en', {
+  hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {})
 }).format(new Date(value))
 
 export const toDateTimeLocal = (value: string) => {

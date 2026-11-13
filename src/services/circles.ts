@@ -7,6 +7,7 @@ import type {
   Member,
   PrayerInput,
   PrayerRequest,
+  DeleteMeetingResult,
   Role,
   RsvpStatus,
   PersonSearchResult,
@@ -18,6 +19,11 @@ import type {
   ContentAssignment,
   CellGroupSignup,
   GatheringReflection,
+  CloseoutNewcomerInput,
+  GatheringCloseout,
+  CircleDetailsInput,
+  AttendancePersonSummary,
+  FeedAudience,
 } from "../types";
 import { optimizeGatheringCover, publicStoragePath } from "../lib/images";
 
@@ -48,21 +54,27 @@ export async function loadGatheringReflections(
 ): Promise<GatheringReflection[]> {
   const { data, error } = await client
     .from("circle_gathering_reflections")
-    .select("id,gathering_id,organization_id,author_person_id,body,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)")
+    .select(
+      "id,gathering_id,organization_id,author_person_id,body,scope,cell_group_id,created_at,updated_at,people!circle_gathering_reflections_author_person_id_fkey(first_name,last_name)",
+    )
     .eq("gathering_id", gatheringId)
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    gatheringId: row.gathering_id,
-    organizationId: row.organization_id,
-    authorPersonId: row.author_person_id,
-    authorName: fullName(one(row.people)),
-    body: row.body,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  })).reverse();
+  return (data ?? [])
+    .map((row: any) => ({
+      id: row.id,
+      gatheringId: row.gathering_id,
+      organizationId: row.organization_id,
+      authorPersonId: row.author_person_id,
+      authorName: fullName(one(row.people)),
+      body: row.body,
+      scope: row.scope,
+      groupId: row.cell_group_id ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+    .reverse();
 }
 
 export async function loadGatheringReflectionActivity(
@@ -88,17 +100,23 @@ export async function loadGatheringReflectionActivity(
 
 export async function createGatheringReflection(
   client: SupabaseClient,
-  organizationId: string,
-  gatheringId: string,
+  gathering: Pick<Meeting, "id" | "organizationId" | "groupId">,
   authorPersonId: string,
   body: string,
+  scope: FeedAudience = "organization",
 ) {
   const value = reflectionBody(body);
+  if (!gathering.organizationId)
+    throw new Error("This gathering has no organization identity.");
+  if (scope === "circle" && !gathering.groupId)
+    throw new Error("This gathering is not connected to a Circle.");
   const { error } = await client.from("circle_gathering_reflections").insert({
-    organization_id: organizationId,
-    gathering_id: gatheringId,
+    organization_id: gathering.organizationId,
+    gathering_id: gathering.id,
     author_person_id: authorPersonId,
     body: value,
+    scope,
+    cell_group_id: scope === "circle" ? gathering.groupId : null,
   });
   if (error) throw error;
 }
@@ -137,16 +155,15 @@ export async function loadGuestRsvpCounts(
     .select("gathering_id,status")
     .in("gathering_id", gatheringIds);
   if (error) throw error;
-  return (data ?? []).reduce<Record<string, Partial<Record<RsvpStatus, number>>>>(
-    (counts, row: any) => {
-      const gatheringCounts = counts[row.gathering_id] ?? {};
-      const status = row.status as RsvpStatus;
-      gatheringCounts[status] = (gatheringCounts[status] ?? 0) + 1;
-      counts[row.gathering_id] = gatheringCounts;
-      return counts;
-    },
-    {},
-  );
+  return (data ?? []).reduce<
+    Record<string, Partial<Record<RsvpStatus, number>>>
+  >((counts, row: any) => {
+    const gatheringCounts = counts[row.gathering_id] ?? {};
+    const status = row.status as RsvpStatus;
+    gatheringCounts[status] = (gatheringCounts[status] ?? 0) + 1;
+    counts[row.gathering_id] = gatheringCounts;
+    return counts;
+  }, {});
 }
 
 export async function loadPrayerRequests(
@@ -160,15 +177,30 @@ export async function loadPrayerRequests(
   return ((data ?? []) as any[]).map(normalizePrayer);
 }
 
+export function resolveCurrentUserRole(input: {
+  isAdmin: boolean;
+  isApprovedLeader: boolean;
+  groups: Array<{ role: Role }>;
+}): Role {
+  if (input.isAdmin) return "admin";
+  if (
+    input.isApprovedLeader ||
+    input.groups.some((group) => group.role === "leader")
+  )
+    return "leader";
+  return "member";
+}
+
 export async function loadAppData(
   client: SupabaseClient,
   userId: string,
   preferredGroupId?: string,
 ): Promise<AppData> {
-  const [{ data: rawContext, error: contextError }, accountResult] = await Promise.all([
-    client.rpc("get_my_circle_context"),
-    client.rpc("get_my_circle_account_state"),
-  ]);
+  const [{ data: rawContext, error: contextError }, accountResult] =
+    await Promise.all([
+      client.rpc("get_my_circle_context"),
+      client.rpc("get_my_circle_account_state"),
+    ]);
   if (contextError) throw contextError;
   if (accountResult.error) throw accountResult.error;
   const context = rawContext as any;
@@ -199,11 +231,12 @@ export async function loadAppData(
       "Circle member",
     email: "",
     avatarUrl: profile.avatarUrl ?? undefined,
-    role: (context.isAdmin
-      ? "admin"
-      : groups.some((item) => item.role === "leader")
-        ? "leader"
-        : "member") as Role,
+    role: resolveCurrentUserRole({
+      isAdmin: Boolean(context.isAdmin),
+      isApprovedLeader: Boolean(context.isApprovedLeader),
+      groups,
+    }),
+    isApprovedLeader: Boolean(context.isApprovedLeader),
   };
 
   const base: AppData = {
@@ -236,17 +269,29 @@ export async function loadAppData(
       status: accountResult.data?.status,
     },
   };
-  const [attentionResult, signupAttentionResult, listingsResult, approvedLeadersResult, assignmentsResult, dashboardResult, prayers] = await Promise.all([
+  const [
+    attentionResult,
+    signupAttentionResult,
+    listingsResult,
+    approvedLeadersResult,
+    assignmentsResult,
+    dashboardResult,
+    prayers,
+  ] = await Promise.all([
     client.rpc("get_circle_connection_attention_count"),
     client.rpc("get_circle_group_signup_attention_count", {
       p_organization_id: context.organization.id,
     }),
     client
       .from("circle_public_listings")
-      .select("id,organization_id,cell_group_id,public_slug,description,cover_url,is_published")
+      .select(
+        "id,organization_id,cell_group_id,public_slug,description,cover_url,is_published",
+      )
       .eq("organization_id", context.organization.id),
     context.isAdmin
-      ? client.rpc("get_circle_approved_leaders")
+      ? client.rpc("get_circle_approved_leaders", {
+          p_organization_id: context.organization.id,
+        })
       : Promise.resolve({ data: [], error: null }),
     context.isAdmin
       ? client.rpc("get_circle_content_assignments")
@@ -263,7 +308,8 @@ export async function loadAppData(
   if (assignmentsResult.error) throw assignmentsResult.error;
   if (dashboardResult.error) throw dashboardResult.error;
   base.approvedLeaders = (approvedLeadersResult.data ?? []) as ApprovedLeader[];
-  base.contentAssignments = (assignmentsResult.data ?? []) as ContentAssignment[];
+  base.contentAssignments = (assignmentsResult.data ??
+    []) as ContentAssignment[];
   base.publicCircleListings = (listingsResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -274,7 +320,9 @@ export async function loadAppData(
     isPublished: Boolean(row.is_published),
   }));
   const dashboard = (dashboardResult.data ?? {}) as any;
-  const dashboardPrayers = (dashboard.prayers ?? []).map(normalizePrayer) as PrayerRequest[];
+  const dashboardPrayers = (dashboard.prayers ?? []).map(
+    normalizePrayer,
+  ) as PrayerRequest[];
   const organizationPrayers = prayers.filter(
     (prayer) => prayer.scope === "organization" && !prayer.isAnswered,
   );
@@ -288,9 +336,16 @@ export async function loadAppData(
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const dashboardMeetings = (dashboard.meetings ?? []) as Meeting[];
   const managedGatheringIds = dashboardMeetings
-    .filter((meeting) => meeting.canManage)
+    .filter(
+      (meeting) =>
+        meeting.accessLevel === "manage" ||
+        (meeting.accessLevel === undefined && meeting.canManage),
+    )
     .map((meeting) => meeting.id);
-  const guestRsvpCounts = await loadGuestRsvpCounts(client, managedGatheringIds);
+  const guestRsvpCounts = await loadGuestRsvpCounts(
+    client,
+    managedGatheringIds,
+  );
   base.accessibleMeetings = dashboardMeetings.map((meeting) => ({
     ...meeting,
     guestRsvpCounts: guestRsvpCounts[meeting.id] ?? {},
@@ -306,29 +361,38 @@ export async function loadAppData(
     prayers: combinedDashboardPrayers,
     announcements: dashboard.announcements ?? [],
     galleries: dashboard.galleries ?? [],
+    highlights: dashboard.highlights ?? [],
   };
   base.prayers = prayers;
   if (!group) return base;
 
-  const [membersResult, gatheringsResult, accountStatusesResult, badgesResult] = await Promise.all([
-    client
-      .from("cell_group_members")
-      .select(
-        "id, person_id, role, people!cell_group_members_person_id_fkey(id, first_name, last_name, email)",
-      )
-      .eq("cell_group_id", group.id),
-    client
-      .from("circle_gatherings")
-      .select("*")
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .order("starts_at"),
-    currentUser.role === "admin" || group.role === "leader"
-      ? client.rpc("get_circle_member_account_statuses", { p_cell_group_id: group.id })
-      : Promise.resolve({ data: [], error: null }),
-    client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
-  ]);
-  for (const result of [membersResult, gatheringsResult, accountStatusesResult, badgesResult])
+  const [membersResult, gatheringsResult, accountStatusesResult, badgesResult] =
+    await Promise.all([
+      client
+        .from("cell_group_members")
+        .select(
+          "id, person_id, role, people!cell_group_members_person_id_fkey(id, first_name, last_name, email)",
+        )
+        .eq("cell_group_id", group.id),
+      client
+        .from("circle_gatherings")
+        .select("*")
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .order("starts_at"),
+      currentUser.role === "admin" || group.role === "leader"
+        ? client.rpc("get_circle_member_account_statuses", {
+            p_cell_group_id: group.id,
+          })
+        : Promise.resolve({ data: [], error: null }),
+      client.rpc("get_circle_member_badges", { p_cell_group_id: group.id }),
+    ]);
+  for (const result of [
+    membersResult,
+    gatheringsResult,
+    accountStatusesResult,
+    badgesResult,
+  ])
     if (result.error) throw result.error;
 
   const gatheringIds = (gatheringsResult.data ?? []).map((row: any) => row.id);
@@ -340,8 +404,15 @@ export async function loadAppData(
     : { data: [], error: null };
   if (rsvpsResult.error) throw rsvpsResult.error;
 
-  const accountStatuses = new Map((accountStatusesResult.data ?? []).map((item: any) => [item.personId, item]));
-  const badges = new Map((badgesResult.data ?? []).map((item: any) => [item.personId, item]));
+  const accountStatuses = new Map(
+    (accountStatusesResult.data ?? []).map((item: any) => [
+      item.personId,
+      item,
+    ]),
+  );
+  const badges = new Map(
+    (badgesResult.data ?? []).map((item: any) => [item.personId, item]),
+  );
   const members: Member[] = (membersResult.data ?? []).map((row: any) => {
     const person = one(row.people);
     const badge = badges.get(row.person_id) as any;
@@ -367,6 +438,10 @@ export async function loadAppData(
     scope: row.scope ?? "circle",
     destinationName: group.name,
     canManage: currentUser.role === "admin" || group.role === "leader",
+    accessLevel:
+      currentUser.role === "admin" || group.role === "leader"
+        ? "manage"
+        : "participate",
     title: row.title,
     meetingDate: row.starts_at,
     endsAt: row.ends_at,
@@ -395,37 +470,42 @@ export async function loadAppData(
     guestRsvpEnabled: Boolean(row.guest_rsvp_enabled),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
   }));
-  const [announcementsResult, testimoniesResult, galleriesResult] = await Promise.all([
-    client
-      .from("circle_announcements")
-      .select("*")
-      .eq("organization_id", context.organization.id)
-      .or(`cell_group_id.is.null,cell_group_id.eq.${group.id}`)
-      .not("assignment_confirmed_at", "is", null)
-      .order("published_at", { ascending: false })
-      .limit(12),
-    client
-      .from("circle_testimonies")
-      .select("*")
-      .eq("organization_id", context.organization.id)
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .in("status", ["draft", "published"])
-      .order("created_at", { ascending: false })
-      .limit(6),
-    client
-      .from("circle_galleries")
-      .select("id,organization_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,circle_gallery_photos(id,image_url,caption,alt_text)")
-      .eq("organization_id", context.organization.id)
-      .eq("cell_group_id", group.id)
-      .not("assignment_confirmed_at", "is", null)
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
-      .limit(6),
-  ]);
+  const [announcementsResult, testimoniesResult, galleriesResult] =
+    await Promise.all([
+      client
+        .from("circle_announcements")
+        .select("*")
+        .eq("organization_id", context.organization.id)
+        .or(`cell_group_id.is.null,cell_group_id.eq.${group.id}`)
+        .not("assignment_confirmed_at", "is", null)
+        .order("published_at", { ascending: false })
+        .limit(12),
+      client
+        .from("circle_testimonies")
+        .select("*")
+        .eq("organization_id", context.organization.id)
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .in("status", ["draft", "published"])
+        .order("created_at", { ascending: false })
+        .limit(6),
+      client
+        .from("circle_galleries")
+        .select(
+          "id,organization_id,gathering_id,cell_group_id,public_slug,title,description,cover_url,published_at,assignment_confirmed_at,is_organization_highlight,highlighted_at,circle_gallery_photos(id,image_url,caption,alt_text)",
+        )
+        .eq("organization_id", context.organization.id)
+        .eq("cell_group_id", group.id)
+        .not("assignment_confirmed_at", "is", null)
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .limit(6),
+    ]);
   const now = Date.now();
   const announcements = (announcementsResult.data ?? [])
-    .filter((row: any) => !row.expires_at || new Date(row.expires_at).getTime() > now)
+    .filter(
+      (row: any) => !row.expires_at || new Date(row.expires_at).getTime() > now,
+    )
     .map((row: any) => ({
       id: row.id,
       organizationId: row.organization_id,
@@ -454,6 +534,7 @@ export async function loadAppData(
   const galleries: Gallery[] = (galleriesResult.data ?? []).map((row: any) => ({
     id: row.id,
     organizationId: row.organization_id,
+    gatheringId: row.gathering_id ?? undefined,
     groupId: row.cell_group_id ?? undefined,
     slug: row.public_slug,
     title: row.title,
@@ -467,8 +548,18 @@ export async function loadAppData(
       altText: photo.alt_text ?? "",
     })),
     assignmentConfirmedAt: row.assignment_confirmed_at ?? undefined,
+    isOrganizationHighlight: Boolean(row.is_organization_highlight),
+    highlightedAt: row.highlighted_at ?? undefined,
   }));
-  return { ...base, members, meetings, prayers, announcements, testimonies, galleries };
+  return {
+    ...base,
+    members,
+    meetings,
+    prayers,
+    announcements,
+    testimonies,
+    galleries,
+  };
 }
 
 export async function acceptAccess(client: SupabaseClient) {
@@ -484,17 +575,15 @@ export async function saveRsvp(
   personId: string,
   status: RsvpStatus,
 ) {
-  const { error } = await client
-    .from("circle_gathering_rsvps")
-    .upsert(
-      {
-        organization_id: organizationId,
-        gathering_id: gatheringId,
-        person_id: personId,
-        status,
-      },
-      { onConflict: "gathering_id,person_id" },
-    );
+  const { error } = await client.from("circle_gathering_rsvps").upsert(
+    {
+      organization_id: organizationId,
+      gathering_id: gatheringId,
+      person_id: personId,
+      status,
+    },
+    { onConflict: "gathering_id,person_id" },
+  );
   if (error) throw error;
 }
 
@@ -525,16 +614,14 @@ export async function setPrayerClick(
   prayed: boolean,
 ) {
   const query = prayed
-    ? client
-        .from("circle_prayer_clicks")
-        .upsert(
-          {
-            organization_id: organizationId,
-            prayer_id: prayerId,
-            person_id: personId,
-          },
-          { onConflict: "prayer_id,person_id" },
-        )
+    ? client.from("circle_prayer_clicks").upsert(
+        {
+          organization_id: organizationId,
+          prayer_id: prayerId,
+          person_id: personId,
+        },
+        { onConflict: "prayer_id,person_id" },
+      )
     : client
         .from("circle_prayer_clicks")
         .delete()
@@ -549,10 +636,11 @@ export async function answerPrayer(
   prayerId: string,
   answeredNotes: string,
 ) {
-  const { error } = await client
-    .from("circle_prayer_requests")
-    .update({ is_answered: true, answered_notes: answeredNotes })
-    .eq("id", prayerId);
+  const { error } = await client.rpc("add_circle_prayer_update", {
+    p_prayer_id: prayerId,
+    p_update_type: "answered",
+    p_body: answeredNotes.trim(),
+  });
   if (error) throw error;
 }
 
@@ -631,6 +719,24 @@ export async function cancelMeeting(client: SupabaseClient, id: string) {
   if (error) throw error;
 }
 
+export async function deleteMeeting(
+  client: SupabaseClient,
+  id: string,
+): Promise<DeleteMeetingResult> {
+  const { data, error } = await client.rpc("delete_empty_circle_gathering", {
+    p_gathering_id: id,
+  });
+  if (error) throw error;
+  if (
+    data &&
+    typeof data === "object" &&
+    ((data.deleted === true && data.reason === undefined) ||
+      (data.deleted === false && data.reason === "has_activity"))
+  )
+    return data as DeleteMeetingResult;
+  throw new Error("The gathering deletion returned an unexpected response.");
+}
+
 export async function saveCirclePublicListing(
   client: SupabaseClient,
   organizationId: string,
@@ -656,7 +762,12 @@ export async function saveCirclePublicListing(
   }
   const slug =
     input.current?.slug ||
-    `${group.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "circle"}-${group.id.slice(0, 8)}`;
+    `${
+      group.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "circle"
+    }-${group.id.slice(0, 8)}`;
   const { error } = await client.from("circle_public_listings").upsert(
     {
       organization_id: organizationId,
@@ -709,6 +820,25 @@ export async function createGroup(
   });
   if (error) throw error;
   return data as string;
+}
+
+export async function updateGroupDetails(
+  client: SupabaseClient,
+  groupId: string,
+  input: CircleDetailsInput,
+) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Circle name is required.");
+  const { error } = await client
+    .from("cell_groups")
+    .update({
+      name,
+      description: input.description.trim(),
+      location: input.location.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", groupId);
+  if (error) throw error;
 }
 
 export async function requestMemberAccess(
@@ -861,23 +991,52 @@ export async function loadGatheringAttendance(
     p_gathering_id: gatheringId,
   });
   if (error) throw error;
-  return data as {
-    saved: boolean;
-    personIds: string[];
-    guestRsvpIds: string[];
-  };
+  return data as GatheringCloseout;
 }
 
-export async function setGatheringCompletion(
+export async function searchGatheringAttendancePeople(
   client: SupabaseClient,
   gatheringId: string,
-  completed: boolean,
+  query: string,
+): Promise<AttendancePersonSummary[]> {
+  const value = query.trim();
+  if (value.length < 2) return [];
+  const { data, error } = await client.rpc(
+    "search_circle_attendance_people",
+    {
+      p_gathering_id: gatheringId,
+      p_query: value,
+    },
+  );
+  if (error) throw error;
+  return (data ?? []) as AttendancePersonSummary[];
+}
+
+export async function saveGatheringCloseout(
+  client: SupabaseClient,
+  gatheringId: string,
+  input: {
+    personIds: string[];
+    guestRsvpIds: string[];
+    newcomers: CloseoutNewcomerInput[];
+    notes: string;
+    complete: boolean;
+  },
 ) {
-  const { error } = await client.rpc("set_circle_gathering_completion", {
+  const { data, error } = await client.rpc("save_circle_gathering_closeout", {
     p_gathering_id: gatheringId,
-    p_completed: completed,
+    p_person_ids: input.personIds,
+    p_guest_rsvp_ids: input.guestRsvpIds,
+    p_newcomers: input.newcomers.map((newcomer) => ({
+      firstName: newcomer.firstName.trim(),
+      lastName: newcomer.lastName.trim(),
+      birthdate: newcomer.birthdate,
+    })),
+    p_notes: input.notes.trim(),
+    p_complete: input.complete,
   });
   if (error) throw error;
+  return data as GatheringCloseout;
 }
 
 export async function loadGuestConnections(

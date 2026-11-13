@@ -4,6 +4,7 @@ import {
   CircleUserRound,
   ClipboardList,
   FileText,
+  Globe2,
   Home,
   HeartHandshake,
   Heart,
@@ -11,7 +12,8 @@ import {
   LogIn,
   LogOut,
   MoreHorizontal,
-  Quote,
+  Settings,
+  Users,
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -20,6 +22,8 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useCircles } from "../AppContext";
 import { Avatar } from "./Avatar";
 import { RouteOutlet, StandaloneRouteBar } from "./RouteExperience";
+import { PwaRefreshController } from "./PwaRefreshController";
+import { FeedNotifications } from "./FeedNotifications";
 
 export function Brand() {
   return (
@@ -44,7 +48,7 @@ function AccountMenu({
   demoMode,
   signOut,
 }: {
-  person: { id: string; fullName: string; avatarUrl?: string; role: string };
+  person: { id: string; personId?: string; fullName: string; avatarUrl?: string; role: string };
   demoMode: boolean;
   signOut: () => Promise<void>;
 }) {
@@ -77,6 +81,7 @@ function AccountMenu({
         onClick={() => setOpen((value) => !value)}
       >
         <Avatar person={person} />
+        <span className="sr-only">Open account menu</span>
         <span className="hidden min-w-0 sm:block">
           <span className="block max-w-44 truncate text-sm font-medium">
             {person.fullName}
@@ -101,6 +106,8 @@ function AccountMenu({
               {person.role}
             </p>
           </div>
+          {person.personId && <Link to={`/members/${person.personId}`} role="menuitem" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-parchment" onClick={()=>setOpen(false)}><CircleUserRound size={16}/>Community profile</Link>}
+          <Link to="/community-settings" role="menuitem" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-parchment" onClick={()=>setOpen(false)}><Settings size={16}/>Community settings</Link>
           {demoMode ? (
             <>
               <p className="px-3 py-2 text-xs text-muted">Demo session</p>
@@ -135,13 +142,13 @@ function AccountMenu({
 }
 
 export function AppShell() {
-  const { data, demoMode, signOut, toast } = useCircles();
+  const { data, demoMode, refresh, signOut, toast } = useCircles();
   const { pathname } = useLocation();
   if (!data) return null;
   const base = "/";
   const canLead =
     data.currentUser.role === "admin" ||
-    data.groups.some((g) => g.role === "leader");
+    data.currentUser.isApprovedLeader;
   const isMember = !canLead;
   const memberHome = data.group ? `/circles/${data.group.id}` : "/circles";
   type NavigationItem = {
@@ -156,30 +163,77 @@ export function AppShell() {
     { to: "/circles", label: "My Circles", mobileLabel: "Circles", icon: CircleUserRound },
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
     { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
+    { to: "/members", label: "Members", mobileLabel: "Members", icon: Users },
     { to: "/connections", label: "Guest connections", mobileLabel: "Guests", icon: HeartHandshake, badge: data.connectionAttentionCount },
     { to: "/signups", label: "Cell Group signups", mobileLabel: "Signups", icon: ClipboardList, badge: data.signupAttentionCount },
     { to: "/content", label: "Publish", mobileLabel: "Publish", icon: FileText },
   ];
   const memberLinks: NavigationItem[] = [
+    { to: base, label: "Home", mobileLabel: "Home", icon: Home },
     { to: memberHome, label: "My Circle", mobileLabel: "My Circle", icon: CircleUserRound },
     { to: "/gatherings", label: "Gatherings", mobileLabel: "Gatherings", icon: CalendarDays },
     { to: "/prayer", label: "Prayer", mobileLabel: "Prayer", icon: Heart },
-    { to: "/share-testimony", label: "Share testimony", mobileLabel: "Share", icon: Quote },
+    { to: "/members", label: "Members", mobileLabel: "Members", icon: Users },
+    { to: "/community", label: "Community", mobileLabel: "Community", icon: Globe2 },
   ];
   const links = isMember ? memberLinks : leaderLinks;
-  const mobileLinks: NavigationItem[] = isMember ? memberLinks : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
-  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/share-testimony", "/connections", "/signups", "/content", "/more"];
+  const mobileLinks: NavigationItem[] = isMember ? memberLinks.filter((item) => item.to !== "/community") : leaderLinks.slice(0,4).concat([{to:"/more",label:"More",mobileLabel:"More",icon:MoreHorizontal}]);
+  const topLevel = ["/", "/circles", "/gatherings", "/prayer", "/members", "/share-testimony", "/connections", "/signups", "/content", "/more", "/community", "/community-settings", "/moderation"];
   const standaloneFallback = pathname.startsWith("/gatherings/")
     ? "/gatherings"
     : pathname.startsWith("/circles/")
       ? "/circles"
       : pathname.startsWith("/connections/")
         ? "/connections"
-        : "/";
+        : pathname.startsWith("/community/")
+          ? "/community"
+        : pathname.startsWith("/members/")
+          ? "/members"
+          : pathname.startsWith("/feed/")
+            ? "/"
+            : "/";
+  const gatheringId = pathname.match(/^\/gatherings\/([^/]+)/)?.[1];
+  const gathering = gatheringId
+    ? (data.accessibleMeetings ?? data.meetings).find(
+        (meeting) => meeting.id === gatheringId,
+      )
+    : undefined;
+  const gatheringGroup = gathering?.groupId
+    ? data.groups.find((group) => group.id === gathering.groupId)
+    : undefined;
+  const communityDetail = pathname.match(
+    /^\/community\/(circles|testimonies|galleries)\/[^/]+$/,
+  );
+  const communityBack = communityDetail
+    ? {
+        to: `/community/${communityDetail[1]}`,
+        label: `Back to ${
+          communityDetail[1] === "galleries"
+            ? "Gallery"
+            : communityDetail[1][0].toUpperCase() + communityDetail[1].slice(1)
+        }`,
+      }
+    : { to: "/community", label: "Back to Community" };
+  const standaloneBack = pathname.startsWith("/community/")
+    ? communityBack
+    : gathering
+    ? gathering.groupId
+      ? {
+          to: `/circles/${gathering.groupId}`,
+          label: `Back to ${gathering.destinationName || gatheringGroup?.name || "Circle"}`,
+        }
+      : { to: "/gatherings", label: "Back to Gatherings" }
+    : pathname.startsWith("/circles/")
+      ? { to: "/circles", label: "Back to Circles" }
+      : pathname.startsWith("/connections/")
+        ? { to: "/connections", label: "Back to Guests" }
+        : { to: standaloneFallback, label: "Back" };
+  const ContentContainer = pathname.startsWith("/community") ? "div" : "main";
   return (
     <div className="min-h-screen bg-parchment text-ink">
+      <PwaRefreshController refresh={refresh} />
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-paper/95 px-6 py-7 lg:flex lg:flex-col">
-        <Link to={isMember ? memberHome : "/"}>
+        <Link to="/">
           <Brand />
         </Link>
         <div className="mt-10 border-t border-line pt-5">
@@ -221,6 +275,7 @@ export function AppShell() {
                 <WifiOff size={13} /> Demo mode
               </span>
             )}
+            <FeedNotifications />
             <AccountMenu
               person={data.currentUser}
               demoMode={demoMode}
@@ -231,15 +286,16 @@ export function AppShell() {
         <StandaloneRouteBar
           homeTo={isMember ? memberHome : "/"}
           homeLabel={isMember ? "My Circle" : "Dashboard"}
-          fallbackTo={standaloneFallback}
+          backTo={standaloneBack.to}
+          backLabel={standaloneBack.label}
           hidden={topLevel.includes(pathname) || (isMember && pathname === memberHome)}
         />
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
+        <ContentContainer className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
           <RouteOutlet />
-        </main>
+        </ContentContainer>
       </div>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden ${isMember ? "grid-cols-4" : "grid-cols-5"}`}
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-paper/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md lg:hidden"
         aria-label="Main navigation"
       >
         {mobileLinks.map(({ to, mobileLabel, icon: Icon, ...item }) => (

@@ -1,5 +1,6 @@
 const SUPPORTED_COVER_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export const MAX_COVER_BYTES = 10 * 1024 * 1024;
+export const MAX_FEED_PHOTOS = 4;
 export const GATHERING_PLACEHOLDERS = [
   "/assets/gathering-placeholder-1.webp",
   "/assets/gathering-placeholder-2.webp",
@@ -19,6 +20,41 @@ export function validateGatheringCover(file: File) {
     throw new Error("Choose a JPG, PNG, or WebP image.");
   if (file.size > MAX_COVER_BYTES)
     throw new Error("The cover image must be 10 MB or smaller.");
+}
+
+export function validateFeedPhotos(files: File[]) {
+  if (files.length > MAX_FEED_PHOTOS)
+    throw new Error("Add up to four photos to one update.");
+  files.forEach((file) => {
+    if (!SUPPORTED_COVER_TYPES.includes(file.type))
+      throw new Error("Choose JPG, PNG, or WebP photos.");
+    if (file.size > MAX_COVER_BYTES)
+      throw new Error("Each photo must be 10 MB or smaller.");
+  });
+}
+
+export async function optimizeFeedPhoto(file: File): Promise<Blob> {
+  validateFeedPhotos([file]);
+  const bitmap = await createImageBitmap(file);
+  const maximum = 1600;
+  const scale = Math.min(1, maximum / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("This browser could not prepare the photo.");
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("This browser could not prepare the photo.")),
+      "image/webp",
+      0.84,
+    ),
+  );
 }
 
 export async function optimizeGatheringCover(file: File): Promise<Blob> {

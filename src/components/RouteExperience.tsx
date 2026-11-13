@@ -4,7 +4,6 @@ import {
   Link,
   Outlet,
   useLocation,
-  useNavigate,
 } from "react-router-dom";
 import { useStandalone } from "../hooks/useStandalone";
 
@@ -35,36 +34,29 @@ export function RouteOutlet() {
 export function StandaloneRouteBar({
   homeTo,
   homeLabel,
-  fallbackTo,
+  backTo,
+  backLabel,
   hidden = false,
 }: {
   homeTo: string;
   homeLabel: string;
-  fallbackTo: string;
+  backTo: string;
+  backLabel: string;
   hidden?: boolean;
 }) {
   const standalone = useStandalone();
-  const navigate = useNavigate();
   if (!standalone || hidden) return null;
-  const goBack = () => {
-    const historyIndex = Number(
-      (window.history.state as { idx?: number } | null)?.idx ?? 0,
-    );
-    if (historyIndex > 0) navigate(-1);
-    else navigate(fallbackTo, { replace: true });
-  };
   return (
     <nav
       aria-label="App navigation"
       className="flex min-h-12 items-center justify-between border-b border-line bg-paper px-4"
     >
-      <button
-        type="button"
-        onClick={goBack}
+      <Link
+        to={backTo}
         className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-olive"
       >
-        <ArrowLeft size={17} /> Back
-      </button>
+        <ArrowLeft size={17} /> {backLabel}
+      </Link>
       <Link
         to={homeTo}
         className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-olive"

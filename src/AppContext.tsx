@@ -11,8 +11,16 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { getErrorMessage } from "./lib/errors";
+import { reportSecurityEvent } from "./lib/telemetry";
 import * as api from "./services/circles";
-import type { AppData, MeetingInput, PrayerInput, RsvpStatus } from "./types";
+import type {
+  AppData,
+  CircleDetailsInput,
+  DeleteMeetingResult,
+  MeetingInput,
+  PrayerInput,
+  RsvpStatus,
+} from "./types";
 
 interface AppContextValue {
   data: AppData | null;
@@ -21,7 +29,7 @@ interface AppContextValue {
   error: string | null;
   demoMode: boolean;
   toast: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectGroup: (groupId: string) => Promise<void>;
@@ -31,12 +39,17 @@ interface AppContextValue {
     location: string;
     leaderPersonId?: string;
   }) => Promise<void>;
+  updateGroupDetails: (
+    groupId: string,
+    input: CircleDetailsInput,
+  ) => Promise<void>;
   setRsvp: (meetingId: string, status: RsvpStatus) => Promise<void>;
   addPrayer: (input: PrayerInput) => Promise<void>;
   togglePrayer: (prayerId: string) => Promise<void>;
   markAnswered: (prayerId: string, notes: string) => Promise<void>;
   saveMeeting: (input: MeetingInput, id?: string) => Promise<void>;
   cancelMeeting: (id: string) => Promise<void>;
+  deleteMeeting: (id: string) => Promise<DeleteMeetingResult>;
   requestMemberAccess: (personId: string) => Promise<void>;
   removeMember: (membershipId: string) => Promise<void>;
   openCheckin: (meetingId: string) => Promise<string>;
@@ -72,7 +85,7 @@ export function AppProvider({
   const sessionUserId = session?.user.id;
   const sessionEmail = session?.user.email ?? "";
   const refresh = useCallback(async () => {
-    if (!supabase || !sessionUserId) return;
+    if (!supabase || !sessionUserId) return false;
     setError(null);
     try {
       const next = await api.loadAppData(
@@ -83,12 +96,14 @@ export function AppProvider({
       next.currentUser.email = sessionEmail;
       setData(next);
       setSelectedGroupId(next.group?.id);
+      return true;
     } catch (cause) {
       setError(
         !navigator.onLine
           ? "You’re offline. The Circles shell is available, but private group data needs a connection. Reconnect and try again."
           : getErrorMessage(cause, "Circles could not load your group."),
       );
+      return false;
     } finally {
       setLoading(false);
     }
@@ -145,7 +160,10 @@ export function AppProvider({
       email,
       password,
     });
-    if (authError) throw authError;
+    if (authError) {
+      reportSecurityEvent("auth_failure");
+      throw authError;
+    }
     if (!authData.session)
       throw new Error("SheepCount signed in without starting a session.");
     setLoading(true);
@@ -225,8 +243,44 @@ export function AppProvider({
     notify("Cell group created in SheepCount.");
   };
 
+  const updateGroupDetails = async (
+    groupId: string,
+    input: CircleDetailsInput,
+  ) => {
+    if (!data) return;
+    const details = {
+      name: input.name.trim(),
+      description: input.description.trim(),
+      location: input.location.trim(),
+    };
+    if (supabase && session) {
+      await api.updateGroupDetails(supabase, groupId, details);
+      await selectGroup(groupId);
+    } else {
+      const groups = data.groups.map((group) =>
+        group.id === groupId ? { ...group, ...details } : group,
+      );
+      setData({
+        ...data,
+        groups,
+        group:
+          data.group?.id === groupId
+            ? { ...data.group, ...details }
+            : data.group,
+      });
+    }
+    notify("Circle details updated.");
+  };
+
   const setRsvp = async (meetingId: string, status: RsvpStatus) => {
     if (!data) return;
+    const meeting = (data.accessibleMeetings ?? data.meetings).find(
+      (item) => item.id === meetingId,
+    );
+    if (meeting?.accessLevel === "view")
+      throw new Error(
+        "Only members of this gathering’s Circle can change an RSVP.",
+      );
     const personId = requirePerson();
     const previous = data;
     setData({
@@ -467,6 +521,37 @@ export function AppProvider({
     notify("Gathering cancelled.");
   };
 
+  const deleteMeeting = async (id: string): Promise<DeleteMeetingResult> => {
+    if (!data) return { deleted: false, reason: "has_activity" };
+    const meeting = (data.accessibleMeetings ?? data.meetings).find(
+      (item) => item.id === id,
+    );
+    const result =
+      supabase && session
+        ? await api.deleteMeeting(supabase, id)
+        : meeting &&
+            Object.keys(meeting.rsvps).length === 0 &&
+            !data.galleries.some((gallery) => gallery.gatheringId === id)
+          ? ({ deleted: true } as const)
+          : ({ deleted: false, reason: "has_activity" } as const);
+    if (!result.deleted) return result;
+    setData({
+      ...data,
+      meetings: data.meetings.filter((item) => item.id !== id),
+      accessibleMeetings: data.accessibleMeetings?.filter(
+        (item) => item.id !== id,
+      ),
+      dashboard: data.dashboard
+        ? {
+            ...data.dashboard,
+            meetings: data.dashboard.meetings.filter((item) => item.id !== id),
+          }
+        : undefined,
+    });
+    notify("Gathering permanently deleted.");
+    return result;
+  };
+
   const requestMemberAccess = async (personId: string) => {
     if (!data?.group) return;
     if (supabase && session)
@@ -523,19 +608,21 @@ export function AppProvider({
       session,
       loading,
       error,
-      demoMode: !session,
+      demoMode: !session || !isSupabaseConfigured,
       toast,
       refresh,
       signIn,
       signOut,
       selectGroup,
       createGroup,
+      updateGroupDetails,
       setRsvp,
       addPrayer,
       togglePrayer,
       markAnswered,
       saveMeeting,
       cancelMeeting,
+      deleteMeeting,
       requestMemberAccess,
       removeMember,
       openCheckin,

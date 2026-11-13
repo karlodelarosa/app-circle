@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { useCircles } from "./AppContext";
 import { AppShell } from "./components/AppShell";
 import { CirclePage } from "./pages/CirclePage";
@@ -7,7 +7,6 @@ import { ContentPage } from "./pages/ContentPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { GatheringDetailPage } from "./pages/GatheringDetailPage";
 import { GatheringsPage } from "./pages/GatheringsPage";
-import { HomePage } from "./pages/HomePage";
 import { SignInPage } from "./pages/SignInPage";
 import { PrayerPage } from "./pages/PrayerPage";
 import { MemberTestimonyPage } from "./pages/MemberTestimonyPage";
@@ -15,6 +14,8 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { MorePage } from "./pages/MorePage";
 import { CellGroupSignupPage } from "./pages/CellGroupSignupPage";
 import { SignupsPage } from "./pages/SignupsPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/AccountRecoveryPages";
 import { PwaUpdatePrompt, RouteScrollManager } from "./components/RouteExperience";
 import {
   GalleriesPage,
@@ -25,10 +26,18 @@ import {
   PublicGatheringsPage,
   PublicHomePage,
   PublicUpdatesPage,
+  CommunityShell,
   PublicShell,
   TestimoniesPage,
   TestimonyPage,
 } from "./pages/PublicPages";
+
+const MembersPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.MembersPage })));
+const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
+const MemberProfilePage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.MemberProfilePage })));
+const FeedItemPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.FeedItemPage })));
+const CommunitySettingsPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.CommunitySettingsPage })));
+const ModerationPage = lazy(() => import("./pages/CommunityPages").then((module) => ({ default: module.ModerationPage })));
 
 function LoadingScreen() {
   return (
@@ -98,17 +107,16 @@ function ProtectedApp() {
   return <AppShell />;
 }
 function HomeEntry() {
-  const { data } = useCircles();
-  if (!data) return null;
-  if (data.currentUser.role === "member")
-    return <Navigate to={data.group ? `/circles/${data.group.id}` : "/circles"} replace />;
-  return <HomePage />;
+  return <DeferredPage><HomePage /></DeferredPage>;
 }
 function LeaderOnly({ children }: { children: ReactNode }) {
   const { data } = useCircles();
   if (!data) return null;
-  const canLead = data.currentUser.role === "admin" || data.groups.some((group) => group.role === "leader");
+  const canLead = data.currentUser.role === "admin" || data.currentUser.isApprovedLeader;
   return canLead ? children : <Navigate to="/circles" replace />;
+}
+function DeferredPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<div className="paper-panel p-8 text-center text-sm text-muted" role="status">Loading…</div>}>{children}</Suspense>;
 }
 
 export default function App() {
@@ -118,6 +126,8 @@ export default function App() {
       <PwaUpdatePrompt />
       <Routes>
       <Route path="/sign-in" element={<RootEntry />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedApp />}>
         <Route path="/" element={<HomeEntry />} />
         <Route path="/circles" element={<CirclePage />} />
@@ -128,6 +138,11 @@ export default function App() {
         <Route path="/gatherings/:id/:mode" element={<GatheringDetailPage />} />
         <Route path="/people" element={<Navigate to="/circles" replace />} />
         <Route path="/prayer" element={<PrayerPage />} />
+        <Route path="/members" element={<DeferredPage><MembersPage /></DeferredPage>} />
+        <Route path="/members/:personId" element={<DeferredPage><MemberProfilePage /></DeferredPage>} />
+        <Route path="/feed/:feedItemId" element={<DeferredPage><FeedItemPage /></DeferredPage>} />
+        <Route path="/community-settings" element={<DeferredPage><CommunitySettingsPage /></DeferredPage>} />
+        <Route path="/moderation" element={<LeaderOnly><DeferredPage><ModerationPage /></DeferredPage></LeaderOnly>} />
         <Route path="/share-testimony" element={<MemberTestimonyPage />} />
         <Route path="/change-password" element={<ChangePasswordPage />} />
         <Route path="/more" element={<LeaderOnly><MorePage /></LeaderOnly>} />
@@ -135,6 +150,16 @@ export default function App() {
         <Route path="/connections" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
         <Route path="/connections/:connectionId" element={<LeaderOnly><ConnectionsPage /></LeaderOnly>} />
         <Route path="/signups" element={<LeaderOnly><SignupsPage /></LeaderOnly>} />
+        <Route path="/community" element={<CommunityShell />}>
+          <Route index element={<PublicHomePage />} />
+          <Route path="updates" element={<PublicUpdatesPage />} />
+          <Route path="testimonies" element={<TestimoniesPage />} />
+          <Route path="testimonies/:testimonySlug" element={<TestimonyPage />} />
+          <Route path="galleries" element={<GalleriesPage />} />
+          <Route path="galleries/:gallerySlug" element={<GalleryPage />} />
+          <Route path="circles" element={<PublicCirclesPage />} />
+          <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
+        </Route>
       </Route>
       <Route path="/app/*" element={<Navigate to="/" replace />} />
       <Route path="/:orgSlug" element={<PublicShell />}>
@@ -152,6 +177,7 @@ export default function App() {
         <Route path="circles" element={<PublicCirclesPage />} />
         <Route path="circles/:circleSlug" element={<PublicCirclePage />} />
         <Route path="cell-group-signup" element={<CellGroupSignupPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
       </Route>
       </Routes>
     </>

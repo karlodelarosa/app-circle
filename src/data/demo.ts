@@ -32,13 +32,15 @@ export const demoData: AppData = {
     personId: 'demo-user',
     fullName: 'Karlo de la Rosa',
     email: 'karlo@example.com',
-    role: 'leader'
+    role: 'leader',
+    isApprovedLeader: true
   },
   connectionAttentionCount: 1,
   signupAttentionCount: 1,
   account: { kind: 'existing', mustChangePassword: false, status: 'active' },
   approvedLeaders: [{ personId: 'demo-user', fullName: 'Karlo de la Rosa', email: 'karlo@example.com' }],
   contentAssignments: [],
+  communityFeed: [],
   members: [
     { id: 'demo-user', membershipId: 'membership-1', fullName: 'Karlo de la Rosa', email: 'karlo@example.com', role: 'leader', discipleshipBadge: true, badgeSource: 'system_grandfathered', leadershipStatus: 'approved', account: { status: 'active', kind: 'existing', mustChangePassword: false, transitions: [] } },
     { id: 'member-2', membershipId: 'membership-2', fullName: 'Mara Santos', email: 'mara@example.com', role: 'member', discipleshipBadge: true, badgeSource: 'manual', account: { status: 'active', kind: 'generated', loginId: 'mara.santos-k7p4', mustChangePassword: false, transitions: [] } },
@@ -68,7 +70,7 @@ export const demoData: AppData = {
   ],
   announcements: [{ id: 'announcement-1', organizationId: 'demo-org', groupId: 'demo-group', title: 'Bring a story from your week', body: 'This Thursday we will begin around the table at 7:00 PM. Dinner is covered.', publishedAt: addDays(-1), isPublic: true }],
   testimonies: [{ id: 'testimony-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-in-the-ordinary', title: 'Grace in the ordinary', body: 'In a season that felt hurried, our Circle became a place to slow down, listen, and notice how faithfully God was already at work.', authorName: 'Mara Santos', authorPersonId: 'member-2', imageUrl: '/assets/devotional-table.webp', publishedAt: addDays(-8), status: 'published' }],
-  galleries: [{ id: 'gallery-1', organizationId: 'demo-org', groupId: 'demo-group', slug: 'life-around-the-table', title: 'Life around the table', description: 'Ordinary evenings made sacred by presence, prayer, and a shared meal.', coverUrl: '/assets/devotional-table.webp', publishedAt: addDays(-4), photos: [{ id: 'photo-1', imageUrl: '/assets/devotional-table.webp', altText: 'An open Bible and warm drink on a wooden table', caption: 'Making room to listen.' }] }],
+  galleries: [{ id: 'gallery-1', organizationId: 'demo-org', gatheringId: 'meeting-3', groupId: 'demo-group', slug: 'life-around-the-table', title: 'Life around the table', description: 'Ordinary evenings made sacred by presence, prayer, and a shared meal.', coverUrl: '/assets/devotional-table.webp', publishedAt: addDays(-4), isOrganizationHighlight: true, highlightedAt: addDays(-4), destinationName: 'Grace & Ground', photos: [{ id: 'photo-1', imageUrl: '/assets/devotional-table.webp', altText: 'An open Bible and warm drink on a wooden table', caption: 'Making room to listen.' }] }],
   publicCircleListings: [{ id: 'demo-listing', organizationId: 'demo-org', groupId: 'demo-group', slug: 'grace-and-ground', description: 'A place for honest conversation, shared meals, and growing faith.', coverUrl: '/assets/devotional-table.webp', isPublished: true }],
   prayers: [
     {
@@ -89,3 +91,25 @@ export const demoData: AppData = {
     }
   ]
 }
+
+demoData.communityFeed = ([
+  {
+    id: 'feed-post-1', type: 'post', sourceId: 'post-1', audience: 'organization',
+    destinationName: 'Entire organization', authorPersonId: 'member-2', authorName: 'Mara Santos',
+    body: 'I was reminded this morning that small acts of kindness can become someone else’s answered prayer.',
+    createdAt: addDays(-1, 8), photos: [], comments: [{ id: 'comment-1', authorPersonId: 'member-3', authorName: 'Joaquin Reyes', body: 'Thank you for sharing this.', createdAt: addDays(-1, 9), canEdit: false, canModerate: true }],
+    commentCount: 1, likeCount: 4, likedByMe: false, canEdit: false, canModerate: true,
+  },
+  {
+    id: 'feed-prayer-1', type: 'prayer', sourceId: 'prayer-1', audience: 'circle', groupId: 'demo-group',
+    destinationName: 'Grace & Ground', authorPersonId: 'member-2', authorName: 'Mara Santos', title: demoData.prayers[0].title,
+    body: demoData.prayers[0].description, prayer: demoData.prayers[0], createdAt: demoData.prayers[0].createdAt,
+    photos: [], comments: [], commentCount: 0, likeCount: 2, likedByMe: true, canEdit: false, canModerate: true,
+  },
+  {
+    id: 'feed-announcement-1', type: 'announcement', sourceId: 'announcement-1', audience: 'circle', groupId: 'demo-group',
+    destinationName: 'Grace & Ground', authorPersonId: 'demo-user', authorName: 'Karlo de la Rosa', title: demoData.announcements[0].title,
+    body: demoData.announcements[0].body, createdAt: demoData.announcements[0].publishedAt,
+    photos: [], comments: [], commentCount: 0, likeCount: 1, likedByMe: false, canEdit: false, canModerate: true,
+  },
+] satisfies NonNullable<AppData['communityFeed']>).sort((a, b) => b.createdAt.localeCompare(a.createdAt));

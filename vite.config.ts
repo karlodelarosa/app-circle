@@ -4,14 +4,16 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
-  const supabaseUrl = env.VITE_SUPABASE_URL || "";
-  const supabaseKey = env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY || "";
+  const supabaseUrl = mode === "e2e" ? "" : env.VITE_SUPABASE_URL || "";
+  const supabaseKey = mode === "e2e" ? "" : env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY || "";
+  const turnstileSiteKey = mode === "e2e" ? "" : env.VITE_TURNSTILE_SITE_KEY || "";
 
   return {
     define: {
       "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(supabaseUrl),
       "import.meta.env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY":
         JSON.stringify(supabaseKey),
+      "import.meta.env.VITE_TURNSTILE_SITE_KEY": JSON.stringify(turnstileSiteKey),
     },
     plugins: [
       react(),
@@ -28,7 +30,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: "Circles — Cell Group",
           short_name: "Circles",
-          description: "Gather, pray, and grow together.",
+          description: "Gather, pray, and grow together. Internet connection required for current data.",
           theme_color: "#596047",
           background_color: "#F3EFE5",
           display: "standalone",
@@ -52,5 +54,19 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("@supabase")) return "supabase";
+            if (id.includes("react") || id.includes("scheduler")) return "react";
+            if (id.includes("qrcode")) return "qrcode";
+            if (id.includes("lucide-react")) return "icons";
+            return "vendor";
+          },
+        },
+      },
+    },
   };
 });

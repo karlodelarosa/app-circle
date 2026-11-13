@@ -11,7 +11,7 @@ import {
   loadGatheringReflections,
   updateGatheringReflection,
 } from "../services/circles";
-import type { GatheringReflection, Meeting } from "../types";
+import type { FeedAudience, GatheringReflection, Meeting } from "../types";
 import { Avatar } from "./Avatar";
 
 const MAX_LENGTH = 2000;
@@ -118,13 +118,14 @@ export function GatheringReflections({
   const { data, demoMode } = useCircles();
   const [reflections, setReflections] = useState(initialReflections);
   const [body, setBody] = useState("");
+  const [scope, setScope] = useState<FeedAudience>("organization");
   const [loading, setLoading] = useState(!demoMode && Boolean(supabase));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const personId = data?.currentUser.personId;
-  const canParticipate = Boolean(personId);
+  const canParticipate = Boolean(personId && meeting.accessLevel !== "view");
 
   const reload = async () => {
     if (!supabase) return;
@@ -170,21 +171,25 @@ export function GatheringReflections({
           authorPersonId: personId,
           authorName: data.currentUser.fullName,
           body: value,
+          scope,
+          groupId: scope === "circle" ? meeting.groupId : undefined,
           createdAt: now,
           updatedAt: now,
         }]);
       } else {
         await createGatheringReflection(
           supabase,
-          data.organization.id,
-          meeting.id,
+          meeting,
           personId,
           value,
+          scope,
         );
         await reload();
       }
       setBody("");
-      setNotice("Your reflection was shared with this gathering’s community.");
+      setNotice(scope === "organization"
+        ? "Your reflection was shared with the entire organization."
+        : "Your reflection was shared with this Circle.");
     } catch (cause) {
       setError(getErrorMessage(cause, "Your reflection could not be shared."));
     } finally {
@@ -235,14 +240,14 @@ export function GatheringReflections({
 
   return (
     <section className="mt-7 border-y border-line py-8" aria-labelledby="after-gathering-heading">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,.75fr)_minmax(0,1.25fr)]">
+      <div className="mx-auto max-w-3xl">
         <div>
           <p className="page-kicker">Continue together</p>
           <h2 id="after-gathering-heading" className="mt-2 font-display text-4xl">
             After the gathering
           </h2>
           <p className="mt-3 max-w-md leading-7 text-muted">
-            A private place for members to remember what mattered and carry it into the week.
+            Remember what mattered, then choose whether to share it with the organization or this Circle.
           </p>
           {canParticipate ? (
             <form className="mt-6" onSubmit={submit}>
@@ -257,6 +262,27 @@ export function GatheringReflections({
                 onChange={(event) => setBody(event.target.value)}
                 placeholder="A thought, question, or practice you want to remember…"
               />
+              {meeting.groupId && (
+                <fieldset className="mt-4">
+                  <legend className="field-label">Who should see this reflection?</legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <label className={`cursor-pointer rounded-xl border p-3 text-sm ${scope === "organization" ? "border-olive bg-parchment" : "border-line"}`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name="reflection-scope" checked={scope === "organization"} onChange={() => setScope("organization")} />
+                        Entire organization
+                      </span>
+                      <span className="mt-1 block pl-6 text-xs text-muted">Appears in every member’s community feed.</span>
+                    </label>
+                    <label className={`cursor-pointer rounded-xl border p-3 text-sm ${scope === "circle" ? "border-olive bg-parchment" : "border-line"}`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name="reflection-scope" checked={scope === "circle"} onChange={() => setScope("circle")} />
+                        {meeting.destinationName || data?.group?.name || "This Circle"} only
+                      </span>
+                      <span className="mt-1 block pl-6 text-xs text-muted">Visible only to members of this Circle.</span>
+                    </label>
+                  </div>
+                </fieldset>
+              )}
               <div className="mt-2 flex items-center justify-between gap-4">
                 <span className="text-xs text-muted">{body.length.toLocaleString()} / 2,000</span>
                 <button className="primary-button" disabled={busy || !body.trim()}>
@@ -266,12 +292,16 @@ export function GatheringReflections({
             </form>
           ) : (
             <p className="mt-6 rounded-xl bg-paper p-4 text-sm leading-6 text-muted">
-              Link this account to a People record before sharing a reflection.
+              {personId
+                ? "Reflections are read-only because this gathering belongs to another Circle."
+                : "Link this account to a People record before sharing a reflection."}
             </p>
           )}
+          {notice && <p className="mt-4 text-sm text-olive" role="status">{notice}</p>}
+          {error && <p className="form-error mt-4" role="alert">{error}</p>}
         </div>
 
-        <div aria-live="polite">
+        <div className="mt-8" aria-live="polite">
           {loading ? (
             <div className="space-y-3" aria-busy="true" aria-label="Loading reflections">
               <div className="h-24 animate-pulse rounded-2xl bg-paper" />
@@ -280,8 +310,9 @@ export function GatheringReflections({
           ) : reflections.length ? (
             <div className="divide-y divide-line border-y border-line">
               {reflections.map((reflection) => {
-                const isAuthor = reflection.authorPersonId === personId;
+                const isAuthor = canParticipate && reflection.authorPersonId === personId;
                 const member = data?.members.find((item) => item.id === reflection.authorPersonId)
+                  ?? data?.organizationMembers?.find((item) => item.id === reflection.authorPersonId)
                   ?? { id: reflection.authorPersonId, fullName: reflection.authorName, role: "member" };
                 return (
                   <ReflectionCard
@@ -308,9 +339,7 @@ export function GatheringReflections({
               </div>
             </div>
           )}
-          {notice && <p className="mt-4 text-sm text-olive" role="status">{notice}</p>}
-          {error && <p className="form-error mt-4" role="alert">{error}</p>}
-          {reflections.length > 0 && (
+          {canParticipate && reflections.length > 0 && (
             <p className="mt-5 text-sm leading-6 text-muted">
               Want to carry this further? <Link className="text-link" to="/prayer">Turn this into a prayer request</Link>
               {" or "}<Link className="text-link" to="/share-testimony">submit it as a testimony</Link>.

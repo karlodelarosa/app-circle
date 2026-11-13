@@ -2,17 +2,11 @@ export type Role = "admin" | "leader" | "member";
 export type RsvpStatus = "attending" | "tentative" | "declined";
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";
 export type ConnectionStatus =
-  | "new"
-  | "contacted"
-  | "visited"
-  | "connected"
-  | "closed";
+  "new" | "contacted" | "visited" | "connected" | "closed";
 export type ContactPreference = "email" | "phone" | "either";
 export type CellGroupSignupStatus = "unassigned" | "placed";
 export type CellGroupSignupSource =
-  | "public"
-  | "guest_self"
-  | "leader_conversion";
+  "public" | "guest_self" | "leader_conversion";
 export type PrayerCategory =
   "Family" | "Work or School" | "Health" | "Spiritual Growth" | "Other";
 export type PrayerScope = "circle" | "organization";
@@ -58,6 +52,9 @@ export interface ApprovedLeader {
   personId: string;
   fullName: string;
   email: string;
+  accountStatus?: "none" | "active" | "inactive";
+  accountKind?: "existing" | "generated";
+  activeGroupCount?: number;
 }
 
 export interface Group {
@@ -72,6 +69,18 @@ export interface Group {
   slug?: string;
   coverUrl?: string;
   isPublic?: boolean;
+}
+
+export interface CircleDetailsInput {
+  name: string;
+  description: string;
+  location: string;
+}
+
+export interface AttendancePersonSummary {
+  id: string;
+  fullName: string;
+  email: string;
 }
 
 export interface CirclePublicListing {
@@ -124,7 +133,12 @@ export interface GuestConnection {
     status: RsvpStatus;
     attendedAt?: string;
   }[];
-  interests?: { id: string; message: string; status: string; createdAt: string }[];
+  interests?: {
+    id: string;
+    message: string;
+    status: string;
+    createdAt: string;
+  }[];
   activities?: GuestConnectionActivity[];
 }
 
@@ -172,10 +186,13 @@ export interface Organization {
   subscriptionStatus: string;
   circlesEnabled: boolean;
   slug: string;
+  timezone?: string;
+  publicDescription?: string;
 }
 
 export interface Meeting {
   id: string;
+  accessLevel?: "manage" | "participate" | "view";
   groupId?: string;
   scope?: "circle" | "organization";
   destinationName?: string;
@@ -203,6 +220,10 @@ export interface Meeting {
   assignmentConfirmedAt?: string;
 }
 
+export type DeleteMeetingResult =
+  | { deleted: true }
+  | { deleted: false; reason: "has_activity" };
+
 export interface GatheringReflection {
   id: string;
   gatheringId: string;
@@ -212,6 +233,202 @@ export interface GatheringReflection {
   body: string;
   createdAt: string;
   updatedAt: string;
+  scope?: FeedAudience;
+  groupId?: string;
+}
+
+export type FeedAudience = "organization" | "circle";
+export type FeedReactionType = "like" | "amen" | "celebrate" | "support";
+export type CommunityProfileVisibility = "organization" | "shared_circle" | "hidden";
+export type PrayerUpdateType = "progress" | "praise" | "answered" | "reopened";
+export type FeedReportReason = "spam" | "harassment" | "privacy" | "inappropriate" | "other";
+export type FeedItemType =
+  | "post"
+  | "reflection"
+  | "prayer"
+  | "gathering"
+  | "announcement";
+
+export interface FeedPhoto {
+  id: string;
+  url: string;
+  altText: string;
+  displayOrder: number;
+}
+
+export interface FeedComment {
+  id: string;
+  authorPersonId: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  canEdit?: boolean;
+  canModerate?: boolean;
+}
+
+export interface FeedCommentPage {
+  comments: FeedComment[];
+  nextCursor?: FeedCursor;
+}
+
+export interface FeedReactionSummary {
+  like: number;
+  amen: number;
+  celebrate: number;
+  support: number;
+}
+
+export interface PrayerUpdate {
+  id: string;
+  prayerId: string;
+  authorPersonId: string;
+  authorName: string;
+  type: PrayerUpdateType;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  canEdit?: boolean;
+  canModerate?: boolean;
+}
+
+export interface FeedReport {
+  id: string;
+  feedItemId: string;
+  reporterPersonId: string;
+  reason: FeedReportReason;
+  note?: string;
+  status: "open" | "resolved" | "dismissed";
+  createdAt: string;
+}
+
+export interface FeedModerationReport extends FeedReport {
+  reporterName: string;
+  updatedAt: string;
+  item?: CommunityFeedItem;
+}
+
+export interface PersonallyHiddenFeedItem {
+  id: string;
+  type: FeedItemType;
+  authorName: string;
+  title?: string;
+  body?: string;
+  hiddenAt: string;
+}
+
+export interface FeedSubscription {
+  feedItemId: string;
+  personId: string;
+  createdAt: string;
+}
+
+export interface CommunityMemberProfile {
+  personId: string;
+  fullName: string;
+  avatarUrl?: string;
+  bio?: string;
+  bioVisibility: CommunityProfileVisibility;
+  joinDate?: string;
+  joinDateVisibility: CommunityProfileVisibility;
+  circles: Array<{ id: string; name: string; role?: string }>;
+  recentItems: CommunityFeedItem[];
+  canEdit: boolean;
+}
+
+export interface CommunityFeedItem {
+  id: string;
+  type: FeedItemType;
+  sourceId?: string;
+  audience: FeedAudience;
+  groupId?: string;
+  destinationName: string;
+  authorPersonId?: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  title?: string;
+  body?: string;
+  createdAt: string;
+  activityAt?: string;
+  updatedAt?: string;
+  gatheringId?: string;
+  gatheringTitle?: string;
+  gatheringDate?: string;
+  prayer?: PrayerRequest;
+  meeting?: Meeting;
+  photos: FeedPhoto[];
+  comments: FeedComment[];
+  commentCount: number;
+  commentsEnabled?: boolean;
+  likeCount: number;
+  likedByMe: boolean;
+  reactionSummary?: FeedReactionSummary;
+  myReaction?: FeedReactionType;
+  savedByMe?: boolean;
+  followedByMe?: boolean;
+  isPinned?: boolean;
+  isNew?: boolean;
+  latestPrayerUpdate?: PrayerUpdate;
+  canEdit: boolean;
+  canModerate: boolean;
+  canPin?: boolean;
+  isHidden?: boolean;
+}
+
+export interface FeedCursor {
+  createdAt?: string;
+  activityAt?: string;
+  snapshotAt?: string;
+  id: string;
+}
+
+export interface CommunityFeedPage {
+  items: CommunityFeedItem[];
+  pinnedItems?: CommunityFeedItem[];
+  nextCursor?: FeedCursor;
+  snapshotAt?: string;
+}
+
+export interface FeedNotification {
+  id: string;
+  feedItemId: string;
+  kind: "comment" | "like" | "pray" | "reaction" | "prayer_update" | "report_resolved";
+  actorCount: number;
+  actorName: string;
+  readAt?: string;
+  createdAt: string;
+  targetCommentId?: string;
+  prayerUpdateId?: string;
+}
+
+export interface FeedNotificationPage {
+  notifications: FeedNotification[];
+  nextCursor?: FeedCursor;
+}
+
+export interface CloseoutNewcomerInput {
+  firstName: string;
+  lastName: string;
+  birthdate: string;
+}
+
+export interface GatheringCloseoutAttendee {
+  personId: string;
+  fullName: string;
+  isProspect: boolean;
+}
+
+export interface GatheringCloseout {
+  saved: boolean;
+  status: MeetingStatus;
+  personIds: string[];
+  guestRsvpIds: string[];
+  attendees: GatheringCloseoutAttendee[];
+  notes: string;
+  finalizedAt?: string;
+  editableUntil?: string;
+  canEdit: boolean;
 }
 
 export interface Announcement {
@@ -261,13 +478,12 @@ export interface Gallery {
   photos: GalleryPhoto[];
   assignmentConfirmedAt?: string;
   destinationName?: string;
+  isOrganizationHighlight?: boolean;
+  highlightedAt?: string;
 }
 
 export type ContentAssignmentType =
-  | "gathering"
-  | "gallery"
-  | "testimony"
-  | "announcement";
+  "gathering" | "gallery" | "testimony" | "announcement";
 
 export interface ContentAssignment {
   id: string;
@@ -338,6 +554,7 @@ export interface AppData {
     prayers: PrayerRequest[];
     announcements: Announcement[];
     galleries: Gallery[];
+    highlights?: Gallery[];
   };
   prayers: PrayerRequest[];
   announcements: Announcement[];
@@ -346,7 +563,8 @@ export interface AppData {
   publicCircleListings: CirclePublicListing[];
   approvedLeaders: ApprovedLeader[];
   contentAssignments: ContentAssignment[];
-  currentUser: Profile & { role: Role };
+  communityFeed?: CommunityFeedItem[];
+  currentUser: Profile & { role: Role; isApprovedLeader: boolean };
   connectionAttentionCount: number;
   signupAttentionCount: number;
   account: {

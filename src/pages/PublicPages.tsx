@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -23,13 +24,16 @@ import {
 } from "lucide-react";
 import {
   Link,
+  Navigate,
   NavLink,
   useLocation,
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import { useCircles } from "../AppContext";
 import { Brand } from "../components/AppShell";
 import { RouteOutlet, StandaloneRouteBar } from "../components/RouteExperience";
+import { Turnstile } from "../components/Turnstile";
 import { useStandalone } from "../hooks/useStandalone";
 import { formatDate, formatTime } from "../lib/format";
 import {
@@ -39,12 +43,15 @@ import {
 } from "../lib/gatheringLifecycle";
 import { gatheringCoverImage } from "../lib/images";
 import {
+  announcementShareUrl,
+  galleryImageUrl,
   gatheringShareUrl,
   LAST_PUBLIC_ORG_KEY,
   publicCommunityUrl,
   withBrowseMode,
 } from "../lib/publicLinks";
 import { copyText, shareLink } from "../lib/share";
+import { downloadGatheringIcs } from "../lib/calendar";
 import { supabase } from "../lib/supabase";
 import {
   galleryBySlug,
@@ -53,10 +60,16 @@ import {
   requestCircleConnection,
   submitGuestRsvp,
 } from "../services/public";
-import type { ContactPreference, PublicSpace, RsvpStatus } from "../types";
+import type {
+  ContactPreference,
+  GalleryPhoto,
+  PublicSpace,
+  RsvpStatus,
+} from "../types";
 
 interface PublicContextValue {
   space: PublicSpace;
+  experience: "public" | "member";
   browse: boolean;
   href: (path: string) => string;
 }
@@ -67,6 +80,113 @@ const usePublic = () => {
   if (!value) throw new Error("Public space unavailable");
   return value;
 };
+
+function memberCommunityHref(path: string, space: PublicSpace) {
+  const [pathWithoutHash, hash] = path.split("#", 2);
+  const pathname = pathWithoutHash.split("?", 1)[0];
+  const base = `/${space.organization.slug}`;
+  const relative = pathname.startsWith(base)
+    ? pathname.slice(base.length)
+    : pathname;
+  const hashSuffix = hash ? `#${hash}` : "";
+
+  if (!relative || relative === "/") return `/community${hashSuffix}`;
+  if (relative === "/gatherings") return `/gatherings${hashSuffix}`;
+  if (relative.startsWith("/gatherings/")) {
+    const slug = relative.slice("/gatherings/".length);
+    const gathering = space.gatherings.find((item) => item.slug === slug);
+    return gathering
+      ? `/gatherings/${gathering.id}${hashSuffix}`
+      : `/gatherings${hashSuffix}`;
+  }
+  return `/community${relative}${hashSuffix}`;
+}
+
+function CommunityContextProvider({
+  space,
+  experience,
+  browse,
+  children,
+}: {
+  space: PublicSpace;
+  experience: "public" | "member";
+  browse: boolean;
+  children: ReactNode;
+}) {
+  const href = (path: string) =>
+    experience === "member"
+      ? memberCommunityHref(path, space)
+      : withBrowseMode(path, browse);
+  return (
+    <PublicContext.Provider value={{ space, experience, browse, href }}>
+      {children}
+    </PublicContext.Provider>
+  );
+}
+
+function useCommunitySpace(orgSlug: string) {
+  const [space, setSpace] = useState<PublicSpace | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setSpace(null);
+    setError("");
+    void loadPublicSpace(supabase, orgSlug)
+      .then((next) => {
+        if (!active) return;
+        setSpace(next);
+        localStorage.setItem(LAST_PUBLIC_ORG_KEY, next.organization.slug);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Community page unavailable.",
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [orgSlug]);
+
+  return { space, error };
+}
+
+function CommunityLoading({ embedded = false }: { embedded?: boolean }) {
+  return (
+    <main
+      className={`grid place-items-center ${embedded ? "min-h-64" : "min-h-screen bg-parchment"}`}
+      aria-busy="true"
+    >
+      <div role="status" aria-label="Loading community">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
+      </div>
+    </main>
+  );
+}
+
+function CommunityError({
+  message,
+  embedded = false,
+}: {
+  message: string;
+  embedded?: boolean;
+}) {
+  return (
+    <main
+      className={`grid place-items-center p-6 ${embedded ? "min-h-64" : "min-h-screen bg-parchment"}`}
+    >
+      <div className="max-w-md text-center" role="alert">
+        <h1 className="font-display text-4xl">
+          This community page is unavailable.
+        </h1>
+        <p className="mt-3 text-muted">{message}</p>
+      </div>
+    </main>
+  );
+}
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -98,42 +218,20 @@ export function PublicShell() {
   const { orgSlug = "ministry-lens-church" } = useParams();
   const [searchParams] = useSearchParams();
   const browse = searchParams.get("browse") === "1";
-  const [space, setSpace] = useState<PublicSpace | null>(null);
-  const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
-  const { pathname } = useLocation();
-  useEffect(() => {
-    setSpace(null);
-    setError("");
-    void loadPublicSpace(supabase, orgSlug)
-      .then((next) => {
-        setSpace(next);
-        localStorage.setItem(LAST_PUBLIC_ORG_KEY, next.organization.slug);
-      })
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Community page unavailable.",
-        ),
-      );
-  }, [orgSlug]);
+  const { pathname, hash } = useLocation();
+  const { session } = useCircles();
+  const { space, error } = useCommunitySpace(orgSlug);
+  const standalone = useStandalone();
   if (error)
+    return <CommunityError message={error} />;
+  if (!space) return <CommunityLoading />;
+  if (browse && session)
     return (
-      <main className="grid min-h-screen place-items-center bg-parchment p-6">
-        <div className="max-w-md text-center">
-          <h1 className="font-display text-4xl">
-            This community page is unavailable.
-          </h1>
-          <p className="mt-3 text-muted">{error}</p>
-        </div>
-      </main>
-    );
-  if (!space)
-    return (
-      <div className="grid min-h-screen place-items-center bg-parchment">
-        <div className="h-9 w-9 animate-spin rounded-full border-2 border-line border-t-olive" />
-      </div>
+      <Navigate
+        to={memberCommunityHref(`${pathname}${hash}`, space)}
+        replace
+      />
     );
   const base = `/${orgSlug}`;
   const href = (path: string) => withBrowseMode(path, browse);
@@ -153,11 +251,24 @@ export function PublicShell() {
         : pathname.match(/\/circles\/[^/]+$/)
           ? `${base}/circles`
           : base;
+  const publicBackLabel = pathname.match(/\/gatherings\/[^/]+$/)
+    ? "Back to Gatherings"
+    : pathname.match(/\/testimonies\/[^/]+$/)
+      ? "Back to Testimonies"
+      : pathname.match(/\/galleries\/[^/]+$/)
+        ? "Back to Gallery"
+        : pathname.match(/\/circles\/[^/]+$/)
+          ? "Back to Circles"
+          : "Back to Community";
   return (
-    <PublicContext.Provider value={{ space, browse, href }}>
+    <CommunityContextProvider
+      space={space}
+      experience="public"
+      browse={browse}
+    >
       <div className="min-h-screen bg-parchment text-ink">
         <div className="sticky top-0 z-40">
-        {browse && (
+        {browse && !standalone && (
           <div className="bg-olive text-paper">
             <div className="mx-auto flex min-h-11 max-w-7xl items-center justify-between gap-4 px-5 text-xs lg:px-10">
               <span>Public preview</span>
@@ -187,23 +298,27 @@ export function PublicShell() {
                   {label}
                 </NavLink>
               ))}
-              <Link
-                className="secondary-button"
-                to={`/sign-in?organization=${orgSlug}`}
-              >
-                Sign in
-              </Link>
+              {!browse && (
+                <Link
+                  className="secondary-button"
+                  to={`/sign-in?organization=${orgSlug}`}
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
             <button
               className="icon-button md:hidden"
               onClick={() => setMenu(!menu)}
-              aria-label="Open navigation"
+              aria-label={menu ? "Close navigation" : "Open navigation"}
+              aria-expanded={menu}
+              aria-controls="public-mobile-navigation"
             >
               {menu ? <X /> : <Menu />}
             </button>
           </div>
           {menu && (
-            <nav className="grid gap-1 border-t border-line p-4 md:hidden">
+            <nav id="public-mobile-navigation" aria-label="Public mobile navigation" className="grid gap-1 border-t border-line p-4 md:hidden">
               {links.map(([label, to]) => (
                 <Link
                   key={to}
@@ -214,19 +329,22 @@ export function PublicShell() {
                   {label}
                 </Link>
               ))}
-              <Link
-                to={`/sign-in?organization=${orgSlug}`}
-                className="primary-button mt-2"
-              >
-                Sign in
-              </Link>
+              {!browse && (
+                <Link
+                  to={`/sign-in?organization=${orgSlug}`}
+                  className="primary-button mt-2"
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
           )}
         </header>
         <StandaloneRouteBar
-          homeTo={href(base)}
-          homeLabel="Home"
-          fallbackTo={href(publicFallback)}
+          homeTo={browse ? "/" : href(base)}
+          homeLabel={browse ? "App Home" : "Home"}
+          backTo={href(publicFallback)}
+          backLabel={publicBackLabel}
           hidden={pathname === base}
         />
         </div>
@@ -241,12 +359,30 @@ export function PublicShell() {
           </div>
         </footer>
       </div>
-    </PublicContext.Provider>
+    </CommunityContextProvider>
+  );
+}
+
+export function CommunityShell() {
+  const { data } = useCircles();
+  const orgSlug = data?.organization.slug ?? "";
+  const { space, error } = useCommunitySpace(orgSlug);
+
+  if (error) return <CommunityError message={error} embedded />;
+  if (!space) return <CommunityLoading embedded />;
+  return (
+    <CommunityContextProvider
+      space={space}
+      experience="member"
+      browse
+    >
+      <RouteOutlet />
+    </CommunityContextProvider>
   );
 }
 
 export function PublicHomePage() {
-  const { space, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
   const slug = space.organization.slug;
   return (
     <main>
@@ -277,15 +413,17 @@ export function PublicHomePage() {
                   className="secondary-button min-h-11 justify-center"
                   to={href(`/${slug}/circles`)}
                 >
-                  Join a Circle
+                  {experience === "member" ? "Explore Circles" : "Join a Circle"}
                 </Link>
               )}
-              <Link
-                className="secondary-button min-h-11 justify-center"
-                to={`/${slug}/cell-group-signup`}
-              >
-                Sign up for a Cell Group
-              </Link>
+              {!browse && (
+                <Link
+                  className="secondary-button min-h-11 justify-center"
+                  to={`/${slug}/cell-group-signup`}
+                >
+                  Sign up for a Cell Group
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -346,7 +484,7 @@ export function PublicHomePage() {
               to={href(`/${slug}/galleries/${space.galleries[0].slug}`)}
               className="group relative min-h-80 overflow-hidden rounded-[2rem]"
             >
-              <img src={space.galleries[0].coverUrl || "/assets/devotional-table.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={galleryImageUrl(space.organization.slug, space.galleries[0].slug)} alt="" className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-transparent to-transparent" />
               <h3 className="absolute inset-x-0 bottom-0 p-7 font-display text-4xl text-paper">
                 {space.galleries[0].title}
@@ -545,7 +683,7 @@ function DiscoverySection({
             className="group grid min-h-64 overflow-hidden rounded-[2rem] border border-line bg-paper sm:grid-cols-[1fr_.8fr] lg:col-span-7"
           >
             <img
-              src={gallery.coverUrl || "/assets/devotional-table.webp"}
+              src={galleryImageUrl(space.organization.slug, gallery.slug)}
               alt=""
               className="h-full min-h-56 w-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.02]"
             />
@@ -581,6 +719,10 @@ export function PublicGatheringPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [returnStatus, setReturnStatus] = useState("");
+  const [rsvpBotToken, setRsvpBotToken] = useState("");
+  const [connectionBotToken, setConnectionBotToken] = useState("");
+  const updateRsvpBotToken = useCallback((token: string) => setRsvpBotToken(token), []);
+  const updateConnectionBotToken = useCallback((token: string) => setConnectionBotToken(token), []);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -646,7 +788,7 @@ export function PublicGatheringPage() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    void submitGuestRsvp(supabase, item.id, form)
+    void submitGuestRsvp(supabase, item.id, form, { botToken: rsvpBotToken })
       .then((result) => {
         setRsvpId(result.id);
         setDone(true);
@@ -673,7 +815,7 @@ export function PublicGatheringPage() {
       email: form.email,
       phone: form.phone,
       ...connectForm,
-    })
+    }, { botToken: connectionBotToken })
       .then(() => setConnectDone(true))
       .catch((cause) =>
         setConnectError(
@@ -693,15 +835,21 @@ export function PublicGatheringPage() {
       setReturnStatus("The invitation could not be shared.");
     }
   };
+  const saveToCalendar = () => downloadGatheringIcs(
+    item,
+    gatheringShareUrl(space.organization.slug, item.slug || ""),
+  );
   return (
     <main>
       <section className="public-section pb-10">
-        <Link
-          to={href(`/${space.organization.slug}/gatherings`)}
-          className="text-link"
-        >
-          Back to gatherings
-        </Link>
+        {!install.standalone && (
+          <Link
+            to={href(`/${space.organization.slug}/gatherings`)}
+            className="text-link"
+          >
+            Back to gatherings
+          </Link>
+        )}
         <div className="mt-7 overflow-hidden rounded-[2rem] border border-line bg-paper sm:rounded-[2.25rem]">
           <img
             src={gatheringCoverImage(item.slug || item.id, item.coverUrl)}
@@ -711,19 +859,23 @@ export function PublicGatheringPage() {
           <div className="grid gap-10 p-6 sm:p-10 lg:grid-cols-[1.2fr_.8fr]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <p className="page-kicker">{formatDate(item.meetingDate)}</p>
+                <p className="page-kicker">{formatDate(item.meetingDate, undefined, space.organization.timezone)}</p>
                 {item.destinationName && <span className="status-badge">{item.destinationName}</span>}
               </div>
               <h1 className="mt-2 break-words font-display text-5xl leading-none sm:text-7xl">
                 {item.title}
               </h1>
+              <p className="mt-4 text-sm text-muted">Times shown in {space.organization.timezone || "UTC"}.</p>
+              <button type="button" className="secondary-button mt-5" onClick={saveToCalendar}>
+                <CalendarDays size={16} /> Add to calendar
+              </button>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-muted">
                 {item.summary || item.notes}
               </p>
               <div className="mt-8 space-y-3 text-sm">
                 <p className="flex gap-3">
                   <CalendarDays className="shrink-0 text-olive" size={18} />
-                  {formatGatheringDateTime(item.meetingDate, item.endsAt)}
+                  {formatGatheringDateTime(item.meetingDate, item.endsAt, space.organization.timezone)}
                 </p>
                 <p className="flex gap-3">
                   <MapPin className="shrink-0 text-olive" size={18} />
@@ -861,6 +1013,7 @@ export function PublicGatheringPage() {
                           <input
                             className="mt-1 h-4 w-4 shrink-0"
                             type="checkbox"
+                            aria-label="I agree that a Circle leader may contact me about this community."
                             required
                             checked={connectForm.consent}
                             onChange={(event) =>
@@ -868,10 +1021,12 @@ export function PublicGatheringPage() {
                             }
                           />
                           I agree that a Circle leader may contact me about this community.
+                          <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
                         </label>
+                        <Turnstile onToken={updateConnectionBotToken} />
                         {connectError && <p className="form-error" role="alert">{connectError}</p>}
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                          <button className="primary-button min-h-11" disabled={connectBusy || !connectForm.consent}>
+                          <button className="primary-button min-h-11" disabled={connectBusy || !connectForm.consent || !connectionBotToken}>
                             {connectBusy ? "Sending…" : "Ask a leader to contact me"}
                           </button>
                           <button type="button" className="secondary-button min-h-11" onClick={() => setConnectOpen(false)}>
@@ -906,12 +1061,15 @@ export function PublicGatheringPage() {
                       </button>
                     </div>
                     {install.canInstall && !install.standalone && (
-                      <button
-                        className="secondary-button mt-2 min-h-11 w-full justify-center"
-                        onClick={() => void install.install()}
-                      >
-                        <Smartphone size={16} /> Add Circles to your home screen
-                      </button>
+                      <>
+                        <button
+                          className="secondary-button mt-2 min-h-11 w-full justify-center"
+                          onClick={() => void install.install()}
+                        >
+                          <Smartphone size={16} /> Add Circles to your home screen
+                        </button>
+                        <p className="mt-2 text-xs leading-5 text-muted">Circles is installable but requires an internet connection for current community data and submissions.</p>
+                      </>
                     )}
                     {install.isIos && !install.standalone && (
                       <p className="mt-3 text-xs leading-5 text-muted">
@@ -974,7 +1132,7 @@ export function PublicGatheringPage() {
                   </div>
                   <p className="text-xs text-muted">
                     Add an email or phone number so the leader can identify your
-                    RSVP.
+                    RSVP. <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
                   </p>
                   <label className="field-label">
                     Response
@@ -993,10 +1151,11 @@ export function PublicGatheringPage() {
                       <option value="declined">Can’t make it</option>
                     </select>
                   </label>
+                  <Turnstile onToken={updateRsvpBotToken} />
                   {error && <p className="form-error">{error}</p>}
                   <button
                     className="primary-button min-h-11 w-full justify-center"
-                    disabled={busy || (!form.email && !form.phone)}
+                    disabled={busy || !rsvpBotToken || (!form.email && !form.phone)}
                   >
                     {busy ? "Saving…" : "Save my RSVP"}
                   </button>
@@ -1023,6 +1182,36 @@ export function PublicGatheringPage() {
 
 export function PublicUpdatesPage() {
   const { space, href } = usePublic();
+  const location = useLocation();
+  const [shareStatus, setShareStatus] = useState("");
+  useEffect(() => {
+    if (!location.hash) return;
+    const target = document.getElementById(location.hash.slice(1));
+    if (!target) return;
+    target.scrollIntoView?.({ block: "center" });
+    target.focus({ preventScroll: true });
+  }, [location.hash, space.announcements]);
+  const shareAnnouncement = async (id: string, title: string) => {
+    setShareStatus("");
+    try {
+      const result = await shareLink(
+        title,
+        announcementShareUrl(space.organization.slug, id),
+      );
+      if (result === "copied") setShareStatus("Announcement link copied.");
+    } catch {
+      setShareStatus("The announcement could not be shared.");
+    }
+  };
+  const copyAnnouncement = async (id: string) => {
+    setShareStatus("");
+    try {
+      await copyText(announcementShareUrl(space.organization.slug, id));
+      setShareStatus("Announcement link copied.");
+    } catch {
+      setShareStatus("The announcement link could not be copied.");
+    }
+  };
   if (!space.announcements.length)
     return (
       <PublicIndex
@@ -1036,12 +1225,21 @@ export function PublicUpdatesPage() {
     );
   return (
     <PublicIndex title="Updates" intro="Current notes and invitations from our community.">
+      {shareStatus && <p className="mx-auto mb-5 max-w-4xl text-sm text-muted" role="status">{shareStatus}</p>}
       <div className="mx-auto max-w-4xl divide-y divide-line border-y border-line">
         {space.announcements.map((item) => (
-          <article key={item.id} className="py-7 sm:py-10">
+          <article id={`announcement-${item.id}`} tabIndex={-1} key={item.id} className="scroll-mt-24 py-7 outline-none focus-visible:ring-2 focus-visible:ring-olive sm:py-10">
             <p className="text-sm text-olive">{formatDate(item.publishedAt)}</p>
             <h2 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">{item.title}</h2>
             <p className="mt-4 whitespace-pre-line leading-7 text-muted">{item.body}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button className="secondary-button" type="button" onClick={() => void shareAnnouncement(item.id, item.title)}>
+                <Share2 size={15} /> Share
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void copyAnnouncement(item.id)}>
+                <Copy size={15} /> Copy link
+              </button>
+            </div>
           </article>
         ))}
       </div>
@@ -1121,7 +1319,7 @@ export function GalleriesPage() {
             className="group relative min-h-80 overflow-hidden rounded-[2rem] sm:min-h-96"
           >
             <img
-              src={gallery.coverUrl || "/assets/devotional-table.webp"}
+              src={galleryImageUrl(space.organization.slug, gallery.slug)}
               alt=""
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.02]"
             />
@@ -1144,7 +1342,7 @@ export function GalleryPage() {
   const { space } = usePublic();
   const { gallerySlug } = useParams();
   const gallery = galleryBySlug(space, gallerySlug || "");
-  const [active, setActive] = useState<string>();
+  const [active, setActive] = useState<GalleryPhoto>();
   if (!gallery)
     return (
       <PublicIndex
@@ -1158,11 +1356,11 @@ export function GalleryPage() {
         {gallery.photos.map((photo) => (
           <button
             key={photo.id}
-            onClick={() => setActive(photo.imageUrl)}
+            onClick={() => setActive(photo)}
             className="overflow-hidden rounded-3xl"
           >
             <img
-              src={photo.imageUrl}
+              src={galleryImageUrl(space.organization.slug, gallery.slug, photo.id)}
               alt={photo.altText}
               className="h-80 w-full object-cover"
             />
@@ -1179,8 +1377,8 @@ export function GalleryPage() {
           aria-label="Close image"
         >
           <img
-            src={active}
-            alt=""
+            src={galleryImageUrl(space.organization.slug, gallery.slug, active.id)}
+            alt={active.altText}
             className="m-auto max-h-full max-w-full object-contain"
           />
         </button>
@@ -1190,7 +1388,8 @@ export function GalleryPage() {
 }
 
 export function PublicCirclesPage() {
-  const { space, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
+  const memberExperience = experience === "member";
   if (!space.circles.length)
     return (
       <PublicIndex
@@ -1204,18 +1403,27 @@ export function PublicCirclesPage() {
     );
   return (
     <PublicIndex
-      title="Join a Circle"
-      intro="Learn about each smaller community, then let a leader know where you would like to belong."
+      title={memberExperience ? "Explore Circles" : "Join a Circle"}
+      intro={
+        memberExperience
+          ? "Meet the smaller communities gathering across our church."
+          : "Learn about each smaller community, then let a leader know where you would like to belong."
+      }
     >
-      <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-2xl text-sm leading-6 text-muted">
-          Ready to be placed in a Cell Group? Complete the official signup for
-          the shared leader placement list.
-        </p>
-        <Link className="primary-button shrink-0" to={`/${space.organization.slug}/cell-group-signup`}>
-          Sign up for a Cell Group
-        </Link>
-      </div>
+      {!browse && (
+        <div className="mb-8 flex flex-col gap-4 border-y border-line py-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-sm leading-6 text-muted">
+            Ready to be placed in a Cell Group? Complete the official signup
+            for the shared leader placement list.
+          </p>
+          <Link
+            className="primary-button shrink-0"
+            to={`/${space.organization.slug}/cell-group-signup`}
+          >
+            Sign up for a Cell Group
+          </Link>
+        </div>
+      )}
       <div className="grid gap-5 md:grid-cols-2">
         {space.circles.map((group) => (
           <Link
@@ -1243,13 +1451,15 @@ export function PublicCirclesPage() {
 }
 
 export function PublicCirclePage() {
-  const { space, browse, href } = usePublic();
+  const { space, experience, browse, href } = usePublic();
   const { circleSlug } = useParams();
   const group = space.circles.find((entry) => entry.slug === circleSlug);
   const [done, setDone] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [botToken, setBotToken] = useState("");
+  const updateBotToken = useCallback((token: string) => setBotToken(token), []);
   const nameRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
@@ -1298,7 +1508,28 @@ export function PublicCirclePage() {
               <span className="mt-1 block text-sm text-muted">{formatDate(nextGathering.meetingDate)} at {formatTime(nextGathering.meetingDate)}</span>
             </Link>
           )}
-          {browse ? (
+          {experience === "member" ? (
+            <div className="mt-10 border-t border-line pt-7">
+              <p className="font-display text-3xl">Continue exploring</p>
+              <p className="mt-3 leading-7 text-muted">
+                Return to the Circle directory or the wider community.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <Link
+                  className="primary-button min-h-11 justify-center"
+                  to={href(`/${space.organization.slug}/circles`)}
+                >
+                  Explore Circles
+                </Link>
+                <Link
+                  className="secondary-button min-h-11 justify-center"
+                  to={href(`/${space.organization.slug}`)}
+                >
+                  Community home
+                </Link>
+              </div>
+            </div>
+          ) : browse ? (
             <div className="mt-10 border-t border-line pt-7">
               <p className="font-display text-3xl">Keep exploring</p>
               <p className="mt-3 leading-7 text-muted">
@@ -1340,7 +1571,7 @@ export function PublicCirclePage() {
                 void requestCircleConnection(supabase, {
                   groupId: group.id,
                   ...form,
-                })
+                }, { botToken })
                   .then(() => setDone(true))
                   .catch((cause) =>
                     setError(
@@ -1420,6 +1651,7 @@ export function PublicCirclePage() {
                 <input
                   className="mt-1 h-4 w-4 shrink-0"
                   type="checkbox"
+                  aria-label="I agree that a Circle leader may contact me about this community."
                   required
                   checked={form.consent}
                   onChange={(event) =>
@@ -1427,12 +1659,15 @@ export function PublicCirclePage() {
                   }
                 />
                 I agree that a Circle leader may contact me about this community.
+                <Link className="text-link" to={`/${space.organization.slug}/privacy`}>Privacy details</Link>
               </label>
+              <Turnstile onToken={updateBotToken} />
               {error && <p className="form-error" role="alert">{error}</p>}
               <button
                 className="primary-button min-h-11 w-full"
                 disabled={
                   busy ||
+                  !botToken ||
                   !form.consent ||
                   (!form.email && !form.phone) ||
                   (form.preferredContact === "email" && !form.email) ||

@@ -42,7 +42,7 @@ describe("PrayerForm", () => {
     expect(screen.getByRole("button", { name: "Share request" })).toBeEnabled();
   });
 
-  it("keeps a regular member's private destination fixed to the active Circle", () => {
+  it("defaults a regular member to the organization while keeping the active Circle available", () => {
     const data = structuredClone(demoData);
     data.currentUser.role = "member";
     data.groups.push({
@@ -61,9 +61,9 @@ describe("PrayerForm", () => {
     );
 
     expect(screen.queryByRole("combobox", { name: /choose circle/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /my circle/i })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /my circle/i })).not.toBeChecked();
     expect(screen.getByText(data.group!.name, { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /entire organization/i })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /entire organization/i })).toBeChecked();
   });
 
   it("lets leaders choose any accessible Circle and defaults to the active one", () => {

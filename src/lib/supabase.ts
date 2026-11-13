@@ -2,8 +2,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_OR_ANON_KEY as string | undefined
+const forceDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
+export const isDemoDeployment = forceDemoMode
 
-export const isSupabaseConfigured = Boolean(url && anonKey)
+export const isSupabaseConfigured = !forceDemoMode && Boolean(url && anonKey)
 
 // This is the app's only Supabase client. If Circles is later mounted inside a
 // host app, replace this export with the host's shared client import.
