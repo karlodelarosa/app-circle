@@ -156,6 +156,17 @@
 
 @media (max-width: 639px) {
   input, select, textarea { font-size: 16px; }
+  .activity-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 5rem);
+    right: .5rem;
+    left: .5rem;
+    display: flex;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 6rem);
+    flex-direction: column;
+    width: auto;
+  }
+  .activity-list { min-height: 0; max-height: none; flex: 1; }
   .content-composer-dialog {
     width: calc(100% - 1rem);
     max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));

@@ -26,6 +26,10 @@ export function ReactionPicker({
   const root = useRef<HTMLDivElement>(null);
   const selected = reactions.find((reaction) => reaction.type === value);
   const SelectedIcon = selected?.icon ?? Heart;
+  const visibleReactions = reactions.filter(({ type }) => (summary?.[type] ?? 0) > 0);
+  const reactionDetails = visibleReactions
+    .map(({ type, label }) => `${summary?.[type] ?? 0} ${label}`)
+    .join(", ");
 
   useEffect(() => {
     if (!open) return;
@@ -46,12 +50,18 @@ export function ReactionPicker({
       <button
         type="button"
         className={`secondary-button border-0 ${value ? "text-olive" : ""}`}
-        aria-label={value ? `${selected?.label}${total ? ` · ${total}` : ""}` : undefined}
+        aria-label={value
+          ? `${selected?.label}${total ? ` · ${total}` : ""}${reactionDetails ? ` (${reactionDetails})` : ""}`
+          : `Choose a reaction${total ? ` · ${total}` : ""}${reactionDetails ? ` (${reactionDetails})` : ""}`}
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
-        <SelectedIcon size={16} fill={value === "amen" ? "currentColor" : "none"} />
+        <span className="inline-flex items-center" aria-hidden="true">
+          {visibleReactions.length ? visibleReactions.map(({ type, icon: Icon }) => (
+            <Icon key={type} className="-ml-1 first:ml-0" size={16} fill={type === "amen" ? "currentColor" : "none"} />
+          )) : <SelectedIcon size={16} fill={value === "amen" ? "currentColor" : "none"} />}
+        </span>
         {selected?.label ?? "React"}{total ? ` · ${total}` : ""}
         {!value && <span className="sr-only">Choose a reaction</span>}
       </button>
