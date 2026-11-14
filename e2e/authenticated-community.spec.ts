@@ -7,6 +7,7 @@ test("members can react, follow prayers, save, search, and open deep links", asy
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Community feed" })).toBeVisible();
+  await page.getByLabel("Share an update").click();
   await expect(page.getByLabel("Post audience")).toHaveValue("organization");
 
   await page.getByRole("button", { name: /choose a reaction/i }).first().click();
@@ -30,6 +31,7 @@ test("members can react, follow prayers, save, search, and open deep links", asy
   await expect(page.getByText(/small acts of kindness can become/)).toBeVisible();
 
   await page.goto("/");
+  await page.getByRole("button", { name: "Open community search" }).click();
   await page.getByRole("searchbox", { name: "Search community" }).fill("answered prayer");
   await expect(page.getByRole("article", { name: /Update: I was reminded/ })).toBeVisible();
   await expect(page.getByRole("article", { name: /Prayer request: Wisdom/ })).toHaveCount(0);
@@ -91,4 +93,39 @@ test("action menus keep icons, labels, and links in compact aligned rows", async
     "display",
     "flex",
   );
+});
+
+test("compact feed keeps posts in view and expands tools on demand", async ({ page }) => {
+  await page.goto("/");
+  const composer = page.getByRole("form", { name: "Create a community post" });
+  const input = page.getByLabel("Share an update");
+  for (const width of [320, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(input).toBeVisible();
+    expect((await composer.boundingBox())!.height).toBeLessThan(90);
+    expect((await page.getByRole("article").first().boundingBox())!.y).toBeLessThan(400);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "/tmp/circles-feed-mobile.png" });
+  await input.fill("A thought to finish later");
+  await page.getByLabel("Post audience").selectOption("demo-group");
+  await composer.getByRole("button", { name: "Collapse" }).click();
+  await expect(page.getByLabel("Post audience")).toHaveCount(0);
+  await input.click();
+  await expect(input).toHaveValue("A thought to finish later");
+  await expect(page.getByLabel("Post audience")).toHaveValue("demo-group");
+  await expect(composer.getByRole("button", { name: "Add photos" })).toBeVisible();
+  await composer.getByRole("button", { name: "Post update" }).click();
+  await expect(page.getByRole("article", { name: /A thought to finish later/ })).toBeVisible();
+  await expect(page.getByLabel("Post audience")).toHaveCount(0);
+  await page.getByRole("button", { name: "Open community search" }).click();
+  await expect(page.getByRole("searchbox", { name: "Search community" })).toBeVisible();
+  await page.getByText("More search filters").click();
+  await expect(page.getByLabel("Activity type")).toBeVisible();
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter((violation) => ["serious", "critical"].includes(violation.impact || ""))).toEqual([]);
+  await page.getByRole("button", { name: "Close community search" }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: "/tmp/circles-feed-desktop.png" });
 });

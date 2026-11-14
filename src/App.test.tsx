@@ -224,6 +224,7 @@ describe("Circles MVP", () => {
     };
     renderWithData("/", data);
     expect(await screen.findByRole("heading", { name: "Community feed" })).toBeInTheDocument();
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
     expect(screen.getByLabelText("Show")).toHaveValue("all");
     expect(screen.getByRole("heading", { name: "Upcoming events" })).toBeInTheDocument();
@@ -1239,6 +1240,7 @@ describe("Circles MVP", () => {
     expect(
       screen.getAllByRole("link", { name: "Community" }).length,
     ).toBeGreaterThan(0);
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
     expect(screen.getByRole("button", { name: "Prayer request" })).toBeInTheDocument();
     expect(

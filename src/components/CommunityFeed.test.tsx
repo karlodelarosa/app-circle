@@ -32,11 +32,39 @@ describe("CommunityFeed", () => {
   it("defaults new updates to the entire organization", () => {
     renderFeed();
     expect(screen.getByRole("heading", { name: "Community feed" })).toBeInTheDocument();
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
+  });
+
+  it("expands the compact composer and preserves a collapsed draft", () => {
+    renderFeed();
+    expect(screen.queryByLabelText("Post audience")).not.toBeInTheDocument();
+    const input = screen.getByLabelText("Share an update");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "An unfinished thought" } });
+    fireEvent.change(screen.getByLabelText("Post audience"), { target: { value: "demo-group" } });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(screen.queryByRole("button", { name: "Post update" })).not.toBeInTheDocument();
+    expect(input).toHaveValue("An unfinished thought");
+    fireEvent.focus(input);
+    expect(screen.getByLabelText("Post audience")).toHaveValue("demo-group");
+  });
+
+  it("keeps search tucked away until requested", () => {
+    renderFeed();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open community search" }));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "kindness" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close community search" }));
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.getByText("Search filters active")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open community search" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("kindness");
   });
 
   it("creates a Circle update in demo mode", async () => {
     renderFeed();
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     fireEvent.change(screen.getByLabelText("Post audience"), { target: { value: "demo-group" } });
     fireEvent.change(screen.getByLabelText("Share an update"), { target: { value: "Dinner was a gift tonight." } });
     fireEvent.click(screen.getByRole("button", { name: "Post update" }));
@@ -148,6 +176,7 @@ describe("CommunityFeed", () => {
 
   it("filters the current feed with familiar search controls", () => {
     renderFeed();
+    fireEvent.click(screen.getByRole("button", { name: "Open community search" }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search community" }), { target: { value: "kindness" } });
     expect(screen.getByRole("article", { name: /small acts of kindness/i })).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: /Wisdom for a new season/ })).not.toBeInTheDocument();
