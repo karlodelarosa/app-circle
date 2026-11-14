@@ -1,4 +1,4 @@
-import { Heart, MessageCircle, Pin, RefreshCw, Search } from "lucide-react";
+import { Heart, MessageCircle, Pin, RefreshCw, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCircles } from "../AppContext";
 import { getErrorMessage } from "../lib/errors";
@@ -18,6 +18,7 @@ export function CommunityFeed() {
   const [items, setItems] = useState<CommunityFeedItem[]>([]);
   const [pinnedItems, setPinnedItems] = useState<CommunityFeedItem[]>([]);
   const [filter, setFilter] = useState("all");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
   const [authorPersonId, setAuthorPersonId] = useState("");
@@ -110,21 +111,24 @@ export function CommunityFeed() {
 
   return (
     <section aria-labelledby="community-feed-title">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="page-kicker">Life together</p>
-          <h1 id="community-feed-title" className="mt-2 font-display text-4xl sm:text-5xl">Community feed</h1>
-          <p className="mt-2 text-sm text-muted">Reflections, prayers, gatherings, and everyday moments from {data.organization.name}.</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h1 id="community-feed-title" className="font-display text-xl sm:text-3xl">Community feed</h1>
+        <div className="flex items-center gap-1">
+          <label>
+            <span className="sr-only">Show</span>
+            <select className="min-h-11 max-w-28 rounded-xl border-0 bg-transparent py-2 pl-2 pr-7 text-sm text-olive focus-visible:outline-olive sm:max-w-48" value={filter} onChange={(event) => setFilter(event.target.value)}>
+              <option value="all">All activity</option>
+              <option value="organization">Entire organization</option>
+              {data.groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
+            </select>
+          </label>
+          <button type="button" aria-label={searchOpen ? "Close community search" : "Open community search"} aria-expanded={searchOpen} aria-controls="community-search" className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl text-olive hover:bg-paper focus-visible:outline-olive" onClick={() => setSearchOpen(!searchOpen)}>
+            {searchOpen ? <X size={18} /> : <Search size={18} />}
+            {hasSearch && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-olive"><span className="sr-only">Search filters active</span></span>}
+          </button>
         </div>
-        <label className="field-label text-xs">
-          Show
-          <select className="field mt-1 min-w-48 bg-paper text-sm" value={filter} onChange={(event) => setFilter(event.target.value)}>
-            <option value="all">All activity</option>
-            <option value="organization">Entire organization</option>
-            {data.groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-          </select>
-        </label>
       </div>
+      <div id="community-search" hidden={!searchOpen}>
       <label className="relative mb-4 block">
         <span className="sr-only">Search community</span>
         <Search size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
@@ -139,6 +143,7 @@ export function CommunityFeed() {
           <label className="field-label text-xs">To date<input className="field mt-1 bg-paper text-sm" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
         </div>
       </details>
+      </div>
       <FeedComposer
         onCreated={(item) => item ? setItems((current) => [item, ...current]) : void load(false)}
         onPrayer={() => setPrayerOpen(true)}

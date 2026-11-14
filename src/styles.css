@@ -99,8 +99,17 @@
   .date-block strong { @apply font-display text-3xl font-medium leading-none; }
   .gathering-card > div:last-child > div:nth-child(2) span { @apply inline-flex items-center gap-1.5; }
   .status-badge { @apply rounded-full bg-[#EAD5CF] px-2.5 py-1 text-[10px] text-[#7B4138]; }
-  .action-menu { @apply absolute right-0 top-10 z-20 min-w-44 overflow-hidden rounded-xl border border-line bg-paper py-1 shadow-quiet; }
-  .action-menu button { @apply block w-full px-4 py-2.5 text-left text-xs hover:bg-parchment; }
+  .action-menu {
+    max-width: calc(100vw - 2rem);
+    max-height: min(24rem, calc(100dvh - 6rem));
+    @apply absolute right-0 top-10 z-20 min-w-52 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-line bg-paper p-1 shadow-quiet;
+  }
+  .action-menu > button,
+  .action-menu > a {
+    @apply flex min-h-10 w-full items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm leading-5 text-ink transition-colors hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-olive disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .action-menu > button > svg,
+  .action-menu > a > svg { @apply shrink-0; }
   .study-row { @apply flex items-center justify-between gap-4 px-1 py-5 transition-colors hover:bg-paper sm:px-4; }
   .study-row h3 { @apply mt-1 font-display text-2xl; }
   .study-row p { @apply mt-1 text-sm text-olive; }
@@ -147,6 +156,17 @@
 
 @media (max-width: 639px) {
   input, select, textarea { font-size: 16px; }
+  .activity-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 5rem);
+    right: .5rem;
+    left: .5rem;
+    display: flex;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 6rem);
+    flex-direction: column;
+    width: auto;
+  }
+  .activity-list { min-height: 0; max-height: none; flex: 1; }
   .content-composer-dialog {
     width: calc(100% - 1rem);
     max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));

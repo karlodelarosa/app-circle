@@ -10,11 +10,13 @@ import { Avatar } from "./Avatar";
 
 export function FeedComposer({ onCreated, onPrayer }: { onCreated: (item?: CommunityFeedItem) => void; onPrayer: () => void }) {
   const { data, demoMode } = useCircles();
+  const [expanded, setExpanded] = useState(false);
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("organization");
   const [photos, setPhotos] = useState<Array<{ file: File; altText: string }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   if (!data) return null;
 
@@ -62,6 +64,7 @@ export function FeedComposer({ onCreated, onPrayer }: { onCreated: (item?: Commu
         onCreated();
       }
       setBody("");
+      setExpanded(false);
       setAudience("organization");
       setPhotos([]);
       if (inputRef.current) inputRef.current.value = "";
@@ -73,13 +76,13 @@ export function FeedComposer({ onCreated, onPrayer }: { onCreated: (item?: Commu
   };
 
   return (
-    <form className="paper-panel p-4 sm:p-5" onSubmit={submit} aria-label="Create a community post">
-      <div className="flex gap-3">
+    <form className="paper-panel p-3 sm:p-4" onSubmit={submit} aria-label="Create a community post">
+      <div className="flex items-start gap-3">
         <Avatar person={data.currentUser} />
         <label className="sr-only" htmlFor="feed-update">Share an update</label>
-        <textarea id="feed-update" className="field mt-0 min-h-24 resize-y" maxLength={5000} value={body} onChange={(event) => setBody(event.target.value)} placeholder={`Share something with ${data.organization.name}…`} />
+        <textarea ref={textareaRef} id="feed-update" rows={expanded ? 3 : 1} onFocus={() => setExpanded(true)} onClick={() => setExpanded(true)} className={`field mt-0 flex-1 min-w-0 ${expanded ? "min-h-24 resize-y" : "h-11 min-h-11 resize-none overflow-hidden py-2.5"}`} maxLength={5000} value={body} onChange={(event) => { setBody(event.target.value); setExpanded(true); }} placeholder="Share something…" />
       </div>
-      {photos.length > 0 && (
+      {expanded && photos.length > 0 && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {photos.map((photo, index) => (
             <div className="relative" key={`${photo.file.name}-${index}`}>
@@ -92,7 +95,7 @@ export function FeedComposer({ onCreated, onPrayer }: { onCreated: (item?: Commu
           ))}
         </div>
       )}
-      <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-end sm:justify-between">
+      {expanded && <div className="mt-3 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div className="flex flex-wrap items-end gap-3">
           <label className="field-label text-xs">
             Audience
@@ -112,7 +115,8 @@ export function FeedComposer({ onCreated, onPrayer }: { onCreated: (item?: Commu
         <button className="primary-button justify-center" disabled={busy || (!body.trim() && !photos.length)}>
           {photos.length ? <MessageSquareText size={16} /> : <Send size={16} />} {busy ? "Sharing…" : "Post update"}
         </button>
-      </div>
+        <button type="button" className="min-h-11 text-sm text-muted hover:text-ink" disabled={busy} onClick={() => { textareaRef.current?.focus(); setExpanded(false); }}>Collapse</button>
+      </div>}
       {error && <p className="form-error mt-3" role="alert">{error}</p>}
     </form>
   );

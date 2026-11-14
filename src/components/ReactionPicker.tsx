@@ -25,7 +25,18 @@ export function ReactionPicker({
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const selected = reactions.find((reaction) => reaction.type === value);
-  const SelectedIcon = selected?.icon ?? Heart;
+  const counts = summary ?? { like: total, amen: 0, celebrate: 0, support: 0 };
+  const rankedReactions = reactions
+    .filter(({ type }) => counts[type] > 0)
+    .sort((left, right) => counts[right.type] - counts[left.type]);
+  const visibleReactions = rankedReactions.slice(0, 3);
+  const reactionDetails = rankedReactions
+    .map(({ type, label }) => `${counts[type]} ${label}`)
+    .join(", ");
+  const reactionText = `${total} ${total === 1 ? "person" : "people"} reacted`;
+  const buttonLabel = total
+    ? `${selected ? `${selected.label}. ` : ""}${reactionText}${reactionDetails ? `. ${reactionDetails}` : ""}. Show reaction counts and choices`
+    : "Choose a reaction";
 
   useEffect(() => {
     if (!open) return;
@@ -46,17 +57,21 @@ export function ReactionPicker({
       <button
         type="button"
         className={`secondary-button border-0 ${value ? "text-olive" : ""}`}
-        aria-label={value ? `${selected?.label}${total ? ` · ${total}` : ""}` : undefined}
+        aria-label={buttonLabel}
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
-        <SelectedIcon size={16} fill={value === "amen" ? "currentColor" : "none"} />
-        {selected?.label ?? "React"}{total ? ` · ${total}` : ""}
-        {!value && <span className="sr-only">Choose a reaction</span>}
+        {total > 0 && <span className="inline-flex items-center gap-1" aria-hidden="true">
+          {visibleReactions.map(({ type, icon: Icon }) => (
+            <Icon key={type} size={16} fill={type === "amen" ? "currentColor" : "none"} />
+          ))}
+        </span>}
+        {total > 0 ? reactionText : "React"}
+        {!total && <span className="sr-only">Choose a reaction</span>}
       </button>
       {open && (
-        <div className="absolute bottom-[calc(100%+.5rem)] left-0 z-30 flex gap-1 rounded-2xl border border-line bg-paper p-2 shadow-quiet" role="menu" aria-label="Reactions">
+        <div className="absolute bottom-[calc(100%+.5rem)] left-0 z-30 grid min-w-48 gap-1 rounded-2xl border border-line bg-paper p-2 shadow-quiet" role="menu" aria-label="Reaction counts and choices">
           {reactions.map(({ type, label, icon: Icon }) => (
             <button
               key={type}
@@ -64,12 +79,13 @@ export function ReactionPicker({
               role="menuitemradio"
               aria-checked={value === type}
               aria-label={label}
-              className={`grid min-h-11 min-w-11 place-items-center rounded-xl hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive ${value === type ? "bg-parchment text-olive" : ""}`}
-              title={`${label}${summary?.[type] ? ` (${summary[type]})` : ""}`}
+              className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-left hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-olive ${value === type ? "bg-parchment text-olive" : ""}`}
+              title={`${label}${counts[type] ? ` (${counts[type]})` : ""}`}
               onClick={() => { onChange(value === type ? undefined : type); setOpen(false); }}
             >
-              <Icon size={18} />
-              <span className="sr-only">{label}</span>
+              <Icon size={18} aria-hidden="true" />
+              <span className="flex-1">{label}</span>
+              {counts[type] > 0 && <span className="text-sm text-muted" aria-hidden="true">{counts[type]}</span>}
             </button>
           ))}
         </div>

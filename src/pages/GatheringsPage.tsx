@@ -1,13 +1,16 @@
 import {
   CalendarDays,
+  CalendarX2,
   ChevronRight,
   Clock3,
   Copy,
   MapPin,
   MoreHorizontal,
+  Pencil,
   Plus,
   QrCode,
   Share2,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useState } from "react";
@@ -152,24 +155,27 @@ export function GatheringsPage() {
           className="icon-button"
           onClick={() => setMenu(menu === meeting.id ? null : meeting.id)}
           aria-label={`Actions for ${meeting.title}`}
+          aria-haspopup="menu"
           aria-expanded={menu === meeting.id}
         >
           <MoreHorizontal size={19} />
         </button>
         {menu === meeting.id && (
-          <div className="action-menu">
+          <div className="action-menu" role="menu">
             {allowEdit && meeting.status !== "cancelled" && (
               <button
+                role="menuitem"
                 onClick={() => {
                   setEditing(meeting);
                   setMenu(null);
                 }}
               >
-                Edit gathering
+                <Pencil size={15} /> Edit gathering
               </button>
             )}
             {allowEdit && meeting.status !== "cancelled" && (
               <button
+                role="menuitem"
                 onClick={() => {
                   if (
                     window.confirm(
@@ -180,17 +186,18 @@ export function GatheringsPage() {
                   setMenu(null);
                 }}
               >
-                Cancel gathering
+                <CalendarX2 size={15} /> Cancel gathering
               </button>
             )}
             <button
+              role="menuitem"
               className="text-red-700"
               onClick={() => {
                 setDeleting(meeting);
                 setMenu(null);
               }}
             >
-              Delete gathering
+              <Trash2 size={15} /> Delete gathering
             </button>
           </div>
         )}

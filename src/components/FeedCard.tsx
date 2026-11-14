@@ -147,7 +147,7 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
   const label = item.type === "reflection" && item.gatheringTitle ? `${labels[item.type]} from ${item.gatheringTitle}` : labels[item.type];
 
   return (
-    <article className="paper-panel overflow-hidden" aria-label={`${label}: ${item.title || item.body || item.authorName}`}>
+    <article className="paper-panel" aria-label={`${label}: ${item.title || item.body || item.authorName}`}>
       <header className="flex items-start gap-3 p-4 sm:p-5">
         <Avatar person={{ id: item.authorPersonId || item.id, fullName: item.authorName, avatarUrl: item.authorAvatarUrl }} />
         <div className="min-w-0 flex-1">
@@ -161,7 +161,7 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
           </p>
         </div>
         <div className="relative">
-            <button className="icon-button" aria-label="Post actions" aria-expanded={menu} onClick={() => setMenu((open) => !open)}><MoreHorizontal size={18} /></button>
+            <button className="icon-button" aria-label="Post actions" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((open) => !open)}><MoreHorizontal size={18} /></button>
             {menu && <div className="action-menu right-0" role="menu">
               {canParticipate && <button role="menuitem" disabled={busy} onClick={() => void saveForLater()}><Bookmark size={14} /> {item.savedByMe ? "Remove from saved" : "Save post"}</button>}
               <button role="menuitem" disabled={busy} onClick={() => void copyLink()}><Copy size={14} /> Copy link</button>
@@ -171,7 +171,7 @@ export function FeedCard({ item, onUpdate, onRemove }: { item: CommunityFeedItem
               {item.type === "post" && (item.canEdit || item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void remove()}><Trash2 size={14} /> Delete update</button>}
               {(item.canEdit || item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void toggleComments()}><MessageCircle size={14} /> {item.commentsEnabled === false ? "Reopen comments" : "Close comments"}</button>}
               {(item.canPin ?? item.canModerate) && <button role="menuitem" disabled={busy} onClick={() => void togglePinned()}><Pin size={14} /> {item.isPinned ? "Unpin post" : "Pin post"}</button>}
-              {item.canModerate && <button role="menuitem" disabled={busy} onClick={() => void hide()}>Hide from feed</button>}
+              {item.canModerate && <button role="menuitem" disabled={busy} onClick={() => void hide()}><EyeOff size={14} /> Hide from feed</button>}
             </div>}
         </div>
       </header>

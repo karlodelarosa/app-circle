@@ -224,6 +224,7 @@ describe("Circles MVP", () => {
     };
     renderWithData("/", data);
     expect(await screen.findByRole("heading", { name: "Community feed" })).toBeInTheDocument();
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
     expect(screen.getByLabelText("Show")).toHaveValue("all");
     expect(screen.getByRole("heading", { name: "Upcoming events" })).toBeInTheDocument();
@@ -629,7 +630,7 @@ describe("Circles MVP", () => {
         name: "Actions for A life of prayer",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Delete gathering" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete gathering" }));
 
     const dialog = screen.getByRole("dialog", {
       name: "Delete A life of prayer?",
@@ -1239,6 +1240,7 @@ describe("Circles MVP", () => {
     expect(
       screen.getAllByRole("link", { name: "Community" }).length,
     ).toBeGreaterThan(0);
+    fireEvent.focus(screen.getByLabelText("Share an update"));
     expect(screen.getByLabelText("Post audience")).toHaveValue("organization");
     expect(screen.getByRole("button", { name: "Prayer request" })).toBeInTheDocument();
     expect(

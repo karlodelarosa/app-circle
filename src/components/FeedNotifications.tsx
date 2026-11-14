@@ -60,9 +60,9 @@ export function FeedNotifications() {
         {unread > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-olive px-1 text-center text-[10px] leading-4 text-paper" aria-hidden="true">{unread > 9 ? "9+" : unread}</span>}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-[calc(100%+.5rem)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-paper shadow-quiet">
+        <div role="menu" className="activity-panel absolute right-0 top-[calc(100%+.5rem)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-paper shadow-quiet">
           <div className="border-b border-line px-4 py-3"><h2 className="font-display text-2xl">Activity</h2></div>
-          {notices.length ? <div className="max-h-96 divide-y divide-line overflow-y-auto">
+          {notices.length ? <div className="activity-list max-h-96 divide-y divide-line overflow-y-auto">
             {notices.map((notice) => <Link key={notice.id} to={noticeHref(notice)} role="menuitem" onClick={() => setOpen(false)} className="flex min-h-14 gap-3 px-4 py-3 hover:bg-parchment focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-olive">
               {notice.kind === "comment" ? <MessageCircle size={16} className="mt-1 shrink-0 text-olive" /> : notice.kind === "prayer_update" ? <Sparkles size={16} className="mt-1 shrink-0 text-olive" /> : notice.kind === "report_resolved" ? <ShieldCheck size={16} className="mt-1 shrink-0 text-olive" /> : <Heart size={16} className="mt-1 shrink-0 text-olive" />}
               <div><p className="text-sm leading-5">{activityLabel(notice)}</p><p className="mt-1 text-xs text-muted">{relativeDate(notice.createdAt)}</p></div>
